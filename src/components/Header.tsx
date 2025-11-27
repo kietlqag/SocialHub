@@ -34,7 +34,6 @@ export function Header({
               <a href="#features" className="text-gray-600 hover:text-primary transition-colors">Features</a>
               <a href="#pricing" className="text-gray-600 hover:text-primary transition-colors">Pricing</a>
               <a href="#testimonials" className="text-gray-600 hover:text-primary transition-colors">Testimonials</a>
-              <button onClick={onChatOpen} className="text-gray-600 hover:text-primary transition-colors">AI Chat</button>
               <a href="#contact" className="text-gray-600 hover:text-primary transition-colors">Contact</a>
             </div>
           </nav>
@@ -42,6 +41,7 @@ export function Header({
           {/* Desktop CTA */}
           <div className="hidden md:block">
             <div className="ml-4 flex items-center md:ml-6 space-x-4">
+              <Button variant="ghost" onClick={onChatOpen}>AI Chat</Button>
               {currentUser ? (
                 <>
                   <div className="flex items-center text-sm text-gray-700">
@@ -81,9 +81,9 @@ export function Header({
             <a href="#features" className="block px-3 py-2 text-gray-600 hover:text-primary">Features</a>
             <a href="#pricing" className="block px-3 py-2 text-gray-600 hover:text-primary">Pricing</a>
             <a href="#testimonials" className="block px-3 py-2 text-gray-600 hover:text-primary">Testimonials</a>
-            <button onClick={onChatOpen} className="block w-full text-left px-3 py-2 text-gray-600 hover:text-primary">AI Chat</button>
             <a href="#contact" className="block px-3 py-2 text-gray-600 hover:text-primary">Contact</a>
             <div className="px-3 py-2 space-y-2">
+              <Button variant="ghost" className="w-full" onClick={onChatOpen}>AI Chat</Button>
               {currentUser ? (
                 <>
                   <div className="flex items-center px-3 py-2 text-sm text-gray-700">

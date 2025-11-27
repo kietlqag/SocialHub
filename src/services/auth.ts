@@ -54,7 +54,7 @@ export async function registerUser(email: string, password: string, fullName?: s
 }
 
 export async function login(email: string, password: string, remember: boolean) {
-  const res = await api.post<AuthResponse>("/auth/login", { email, password });
+  const res = await api.post<AuthResponse>("/login", { email, password });
   persistSession(res, remember);
   return res;
 }

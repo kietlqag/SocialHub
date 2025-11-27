@@ -7,16 +7,57 @@ import { Footer } from "./components/Footer";
 import { Login } from "./components/Login";
 import { SignUp } from "./components/SignUp";
 import { AIConversation } from "./components/AIConversation";
-import { useState } from "react";
-import { AuthUser, getCurrentSession, clearSession, fetchMe, persistSession } from "./services/auth";
-import { useEffect } from "react";
-// PlatformBuilder removed
+import { useCallback, useState, useEffect } from "react";
+import {
+  AuthUser,
+  getCurrentSession,
+  clearSession,
+  fetchMe,
+  persistSession,
+} from "./services/auth";
+
+type View = "home" | "login" | "register" | "chat";
+
+const VIEW_PATH: Record<View, string> = {
+  home: "/home",
+  login: "/login",
+  register: "/register",
+  chat: "/chat",
+};
 
 export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
   const [isAIConversationOpen, setIsAIConversationOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  const setView = useCallback(
+    (view: View, options?: { replace?: boolean }) => {
+      setIsLoginOpen(view === "login");
+      setIsSignUpOpen(view === "register");
+      setIsAIConversationOpen(view === "chat");
+
+      const targetPath = VIEW_PATH[view];
+      if (window.location.pathname !== targetPath) {
+        const method = options?.replace ? "replaceState" : "pushState";
+        window.history[method]({}, "", targetPath);
+      }
+    },
+    []
+  );
+
+  const applyPathToView = useCallback(() => {
+    const path = window.location.pathname;
+    if (path === VIEW_PATH.login) {
+      setView("login", { replace: true });
+    } else if (path === VIEW_PATH.register) {
+      setView("register", { replace: true });
+    } else if (path === VIEW_PATH.chat) {
+      setView("chat", { replace: true });
+    } else {
+      setView("home", { replace: true });
+    }
+  }, [setView]);
 
   useEffect(() => {
     const session = getCurrentSession();
@@ -35,9 +76,7 @@ export default function App() {
         .then((res) => {
           persistSession({ token: tokenFromOAuth, user: res.user }, true);
           setCurrentUser(res.user);
-          setIsLoginOpen(false);
-          setIsSignUpOpen(false);
-          setIsAIConversationOpen(false);
+          setView("home", { replace: true });
         })
         .finally(() => {
           params.delete("token");
@@ -46,55 +85,56 @@ export default function App() {
           window.history.replaceState({}, "", newUrl);
         });
     }
-  }, []);
+  }, [setView]);
+
+  useEffect(() => {
+    applyPathToView();
+    const onPopstate = () => applyPathToView();
+    window.addEventListener("popstate", onPopstate);
+    return () => window.removeEventListener("popstate", onPopstate);
+  }, [applyPathToView]);
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
-    setIsLoginOpen(false);
-    setIsSignUpOpen(false);
-    setIsAIConversationOpen(false);
+    setView("home");
   };
 
   const handleLogout = () => {
     clearSession();
     setCurrentUser(null);
-    setIsAIConversationOpen(false);
+    setView("home");
   };
+
+  const isHomeView = !isLoginOpen && !isSignUpOpen && !isAIConversationOpen;
 
   return (
     <div className="min-h-screen bg-white">
       {isAIConversationOpen ? (
-        <AIConversation onBack={() => setIsAIConversationOpen(false)} />
+        <AIConversation onBack={() => setView("home")} />
       ) : isSignUpOpen ? (
-        <SignUp 
-          onBack={() => setIsSignUpOpen(false)} 
-          onSwitchToLogin={() => {
-            setIsSignUpOpen(false);
-            setIsLoginOpen(true);
-          }}
+        <SignUp
+          onBack={() => setView("home")}
+          onSwitchToLogin={() => setView("login")}
         />
       ) : isLoginOpen ? (
-        <Login 
-          onBack={() => setIsLoginOpen(false)}
-          onSwitchToSignUp={() => {
-            setIsLoginOpen(false);
-            setIsSignUpOpen(true);
-          }}
+        <Login
+          onBack={() => setView("home")}
+          onSwitchToSignUp={() => setView("register")}
           onSuccess={handleLoginSuccess}
         />
-      ) : (
+      ) : isHomeView ? (
         <>
-          <Header 
-            onChatOpen={() => setIsAIConversationOpen(true)}
-            onLoginOpen={() => setIsLoginOpen(true)}
-            onSignUpOpen={() => setIsSignUpOpen(true)}
+          <Header
+            onChatOpen={() => setView("chat")}
+            onLoginOpen={() => setView("login")}
+            onSignUpOpen={() => setView("register")}
             currentUser={currentUser}
             onLogout={handleLogout}
           />
           <main>
-            <Hero 
-              onLoginOpen={() => setIsLoginOpen(true)}
-              onSignUpOpen={() => setIsSignUpOpen(true)}
+            <Hero
+              onLoginOpen={() => setView("login")}
+              onSignUpOpen={() => setView("register")}
               isAuthenticated={!!currentUser}
             />
             <Features />
@@ -103,7 +143,7 @@ export default function App() {
           </main>
           <Footer />
         </>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,8 @@ import aiRoutes from "./routes/aiRoutes.js";
 import orgRoutes from "./routes/orgRoutes.js";
 import { initDb } from "./db.js";
 import { HttpError } from "./utils/httpError.js";
+import { login } from "./controllers/authController.js";
+import { asyncHandler } from "./utils/asyncHandler.js";
 
 dotenv.config();
 
@@ -18,6 +20,9 @@ const PORT = process.env.PORT || 4000;
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+// Direct login endpoint for clarity alongside /auth/login
+app.post("/login", asyncHandler(login));
 
 app.use("/auth", authRoutes);
 app.use("/ai", aiRoutes);
