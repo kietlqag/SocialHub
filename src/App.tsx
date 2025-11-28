@@ -17,7 +17,7 @@ import {
 } from "./services/auth";
 import { ProfileSettings } from "./components/ProfileSettings";
 import { NotificationPage } from "./components/NotificationPage";
-import Profile from "./components/Profile"; // nếu Profile ở /pages thì đổi path cho đúng
+import Profile from "./components/Profile";
 
 type View =
   | "home"
@@ -67,7 +67,6 @@ export default function App() {
 
   const applyPathToView = useCallback(() => {
     const path = window.location.pathname;
-
     if (path === VIEW_PATH.login) setView("login", { replace: true });
     else if (path === VIEW_PATH.register) setView("register", { replace: true });
     else if (path === VIEW_PATH.chat) setView("chat", { replace: true });
@@ -79,7 +78,6 @@ export default function App() {
     else setView("home", { replace: true });
   }, [setView]);
 
-  // Lấy session hiện tại
   useEffect(() => {
     const session = getCurrentSession();
     if (session?.user && session?.token) {
@@ -89,7 +87,6 @@ export default function App() {
     }
   }, []);
 
-  // Xử lý token OAuth nếu có
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromOAuth = params.get("token");
@@ -111,7 +108,6 @@ export default function App() {
     }
   }, [setView]);
 
-  // Đồng bộ URL <-> view
   useEffect(() => {
     applyPathToView();
     const onPopstate = () => applyPathToView();
