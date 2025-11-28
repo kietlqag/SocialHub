@@ -17,8 +17,16 @@ import {
 } from "./services/auth";
 import { ProfileSettings } from "./components/ProfileSettings";
 import { NotificationPage } from "./components/NotificationPage";
+import Profile from "./components/Profile"; // nếu Profile ở /pages thì đổi path cho đúng
 
-type View = "home" | "login" | "register" | "chat" | "settings" | "notifications";
+type View =
+  | "home"
+  | "login"
+  | "register"
+  | "chat"
+  | "settings"
+  | "notifications"
+  | "profile";
 
 const VIEW_PATH: Record<View, string> = {
   home: "/home",
@@ -27,6 +35,7 @@ const VIEW_PATH: Record<View, string> = {
   chat: "/chat",
   settings: "/settings",
   notifications: "/notifications",
+  profile: "/profile",
 };
 
 export default function App() {
@@ -35,6 +44,7 @@ export default function App() {
   const [isAIConversationOpen, setIsAIConversationOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const setView = useCallback(
@@ -44,6 +54,7 @@ export default function App() {
       setIsAIConversationOpen(view === "chat");
       setIsSettingsOpen(view === "settings");
       setIsNotificationsOpen(view === "notifications");
+      setIsProfileOpen(view === "profile");
 
       const targetPath = VIEW_PATH[view];
       if (window.location.pathname !== targetPath) {
@@ -56,21 +67,19 @@ export default function App() {
 
   const applyPathToView = useCallback(() => {
     const path = window.location.pathname;
-    if (path === VIEW_PATH.login) {
-      setView("login", { replace: true });
-    } else if (path === VIEW_PATH.register) {
-      setView("register", { replace: true });
-    } else if (path === VIEW_PATH.chat) {
-      setView("chat", { replace: true });
-    } else if (path === VIEW_PATH.settings) {
-      setView("settings", { replace: true });
-    } else if (path === VIEW_PATH.notifications) {
+
+    if (path === VIEW_PATH.login) setView("login", { replace: true });
+    else if (path === VIEW_PATH.register) setView("register", { replace: true });
+    else if (path === VIEW_PATH.chat) setView("chat", { replace: true });
+    else if (path === VIEW_PATH.settings) setView("settings", { replace: true });
+    else if (path === VIEW_PATH.notifications)
       setView("notifications", { replace: true });
-    } else {
-      setView("home", { replace: true });
-    }
+    else if (path === VIEW_PATH.profile)
+      setView("profile", { replace: true });
+    else setView("home", { replace: true });
   }, [setView]);
 
+  // Lấy session hiện tại
   useEffect(() => {
     const session = getCurrentSession();
     if (session?.user && session?.token) {
@@ -80,6 +89,7 @@ export default function App() {
     }
   }, []);
 
+  // Xử lý token OAuth nếu có
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tokenFromOAuth = params.get("token");
@@ -93,12 +103,15 @@ export default function App() {
         .finally(() => {
           params.delete("token");
           const newQuery = params.toString();
-          const newUrl = `${window.location.pathname}${newQuery ? `?${newQuery}` : ""}${window.location.hash}`;
+          const newUrl = `${window.location.pathname}${
+            newQuery ? `?${newQuery}` : ""
+          }${window.location.hash}`;
           window.history.replaceState({}, "", newUrl);
         });
     }
   }, [setView]);
 
+  // Đồng bộ URL <-> view
   useEffect(() => {
     applyPathToView();
     const onPopstate = () => applyPathToView();
@@ -117,7 +130,13 @@ export default function App() {
     setView("home");
   };
 
-  const isHomeView = !isLoginOpen && !isSignUpOpen && !isAIConversationOpen && !isSettingsOpen && !isNotificationsOpen;
+  const isHomeView =
+    !isLoginOpen &&
+    !isSignUpOpen &&
+    !isAIConversationOpen &&
+    !isSettingsOpen &&
+    !isNotificationsOpen &&
+    !isProfileOpen;
 
   return (
     <div className="min-h-screen bg-white">
@@ -134,6 +153,8 @@ export default function App() {
           onSwitchToSignUp={() => setView("register")}
           onSuccess={handleLoginSuccess}
         />
+      ) : isProfileOpen ? (
+        <Profile />
       ) : isSettingsOpen ? (
         <ProfileSettings onBack={() => setView("home")} onLogout={handleLogout} />
       ) : isNotificationsOpen ? (
@@ -144,9 +165,12 @@ export default function App() {
             onChatOpen={() => setView("chat")}
             onLoginOpen={() => setView("login")}
             onSignUpOpen={() => setView("register")}
+            onProfileOpen={() => setView("profile")}
+            onSettingsOpen={() => setView("settings")}
             currentUser={currentUser}
             onLogout={handleLogout}
           />
+
           <main>
             <Hero
               onLoginOpen={() => setView("login")}
@@ -157,6 +181,7 @@ export default function App() {
             <Testimonials />
             <Pricing />
           </main>
+
           <Footer />
         </>
       ) : null}

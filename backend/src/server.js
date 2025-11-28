@@ -5,6 +5,7 @@ import authRoutes from "./routes/authRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import profileRoutes from "./routes/profileRoutes.js";
 import { initDb } from "./db.js";
 import { initMongo, getSocialhubDb } from "./mongo.js";
 import { HttpError } from "./utils/httpError.js";
@@ -42,6 +43,8 @@ app.use("/ai", aiRoutes);
 app.use(orgRoutes);
 // Notifications now served from Postgres — mount API at /notifications
 app.use("/notifications", notificationRoutes);
+// Profile endpoints
+app.use("/profile", profileRoutes);
 
 // Basic error handler
 // eslint-disable-next-line no-unused-vars

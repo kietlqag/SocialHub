@@ -158,6 +158,11 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
     }
   };
 
+  // Note: use a fixed/responsive width for the dropdown instead of `w-full`.
+  // `w-full` was stretching to the width of the parent (the tiny icon button),
+  // causing the narrow vertical strip seen in the screenshot. Using an explicit
+  // width + a sensible max for small screens makes the popover readable.
+
   return (
     <div className="relative" ref={dropdownRef}>
       <Button variant="ghost" size="icon" className="relative" onClick={() => setIsOpen(!isOpen)}>
@@ -166,7 +171,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       </Button>
 
       {isOpen && (
-        <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-96 max-w-md bg-white rounded-lg shadow-lg border border-gray-200 z-50 h-96 flex flex-col">
+        <div className="absolute right-0 sm:right-4 top-12 w-[22rem] sm:w-[30rem] max-w-[90vw] min-w-[18rem] bg-white rounded-lg shadow-lg border border-gray-200 z-50 h-96 flex flex-col overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -208,7 +213,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
                             <p className="text-sm text-gray-900">{notification.title}</p>
                             {!notification.read && <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${getNotificationColor(notification.type).dot}`} />}
                           </div>
-                          <p className="text-sm text-gray-600 mb-2 line-clamp-2">{notification.message}</p>
+                          <p className="text-sm text-gray-600 mb-2 line-clamp-2 break-words whitespace-normal">{notification.message}</p>
                           <div className="flex items-center justify-between flex-wrap gap-2">
                             <span className="text-xs text-gray-500">{notification.time}</span>
                             <div className="flex items-center gap-1">

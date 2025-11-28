@@ -1,16 +1,20 @@
 import { Button } from "./ui/button";
 import { Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import UserMenu from "./UserMenu";
 import { useState } from "react";
 import { AuthUser } from "../services/auth";
 import { NotificationDropdown } from "./NotificationDropdown";
 
 export function Header({
+  onProfileOpen,
+  onSettingsOpen,
   onChatOpen,
   onLoginOpen,
   onSignUpOpen,
   currentUser,
   onLogout,
 }: {
+  onSettingsOpen?: () => void;
   onChatOpen?: () => void;
   onLoginOpen?: () => void;
   onSignUpOpen?: () => void;
@@ -32,28 +36,28 @@ export function Header({
           {/* Desktop Navigation */}
           <nav className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-8">
-              <a href="#features" className="text-gray-600 hover:text-primary transition-colors">Features</a>
-              <a href="#pricing" className="text-gray-600 hover:text-primary transition-colors">Pricing</a>
-              <a href="#testimonials" className="text-gray-600 hover:text-primary transition-colors">Testimonials</a>
+              <a href="/home" className="text-gray-600 hover:text-primary transition-colors">Home</a>
+              {/* AI Chat moved into the nav between Testimonials and Contact */}
+              <button onClick={onChatOpen} className="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded-md text-sm">AI Chat</button>
               <a href="#contact" className="text-gray-600 hover:text-primary transition-colors">Contact</a>
             </div>
           </nav>
 
           {/* Desktop CTA */}
           <div className="hidden md:block">
-            <div className="ml-4 flex items-center md:ml-6 space-x-4">
-              <Button variant="ghost" onClick={onChatOpen}>AI Chat</Button>
+            {/* Pull right-side controls slightly left so they don't sit flush with the edge */}
+            <div className="ml-4 flex items-center md:ml-6 space-x-4 md:-mr-8">
+              {/* AI Chat button moved to desktop navigation */}
               {currentUser ? (
                 <>
-                <NotificationDropdown />
-                  <div className="flex items-center text-sm text-gray-700">
-                    <UserIcon className="h-4 w-4 mr-1 text-primary" />
-                    {currentUser.fullName || currentUser.email}
-                  </div>
-                  <Button variant="outline" onClick={onLogout}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign out
-                  </Button>
+                  <NotificationDropdown />
+                  <UserMenu
+                    userName={currentUser.fullName || currentUser.email}
+                    avatarUrl={currentUser.avatarUrl || undefined}
+                    onProfile={onProfileOpen}
+                    onSettings={onSettingsOpen}
+                    onSignOut={onLogout}
+                  />
                 </>
               ) : (
                 <>
@@ -80,23 +84,23 @@ export function Header({
       {isMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-100">
-            <a href="#features" className="block px-3 py-2 text-gray-600 hover:text-primary">Features</a>
-            <a href="#pricing" className="block px-3 py-2 text-gray-600 hover:text-primary">Pricing</a>
-            <a href="#testimonials" className="block px-3 py-2 text-gray-600 hover:text-primary">Testimonials</a>
+            <a href="/home" className="block px-3 py-2 text-gray-600 hover:text-primary">Home</a>
             <a href="#contact" className="block px-3 py-2 text-gray-600 hover:text-primary">Contact</a>
-            <div className="px-3 py-2 space-y-2">
+              <div className="px-3 py-2 space-y-2">
               <Button variant="ghost" className="w-full" onClick={onChatOpen}>AI Chat</Button>
-              {currentUser ? (
-                <>
-                  <div className="flex items-center px-3 py-2 text-sm text-gray-700">
-                    <UserIcon className="h-4 w-4 mr-2 text-primary" />
-                    {currentUser.fullName || currentUser.email}
-                  </div>
-                  <Button variant="outline" className="w-full" onClick={onLogout}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign out
-                  </Button>
-                </>
+                {currentUser ? (
+                  <>
+                    <div className="flex items-center px-3 py-2 text-sm text-gray-700">
+                      <UserIcon className="h-4 w-4 mr-2 text-primary" />
+                      {currentUser.fullName || currentUser.email}
+                    </div>
+                    <Button variant="ghost" className="w-full" onClick={() => { onProfileOpen?.(); setIsMenuOpen(false); }}>Profile</Button>
+                    {onSettingsOpen && <Button variant="ghost" className="w-full" onClick={() => { onSettingsOpen?.(); setIsMenuOpen(false); }}>Settings</Button>}
+                    <Button variant="outline" className="w-full" onClick={() => { onLogout?.(); setIsMenuOpen(false); }}>
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign out
+                    </Button>
+                  </>
               ) : (
                 <>
                   <Button variant="ghost" className="w-full" onClick={onLoginOpen}>Sign In</Button>
