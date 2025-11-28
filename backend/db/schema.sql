@@ -175,3 +175,18 @@ CREATE TABLE IF NOT EXISTS ai_message_feedbacks (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_feedback_conversation ON ai_message_feedbacks(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_ai_feedback_user ON ai_message_feedbacks(user_id);
+
+-- Notifications table (moved from Mongo to Postgres)
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    message TEXT,
+    type TEXT NOT NULL DEFAULT 'info',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    is_read BOOLEAN NOT NULL DEFAULT false,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);

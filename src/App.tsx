@@ -15,20 +15,26 @@ import {
   fetchMe,
   persistSession,
 } from "./services/auth";
+import { ProfileSettings } from "./components/ProfileSettings";
+import { NotificationPage } from "./components/NotificationPage";
 
-type View = "home" | "login" | "register" | "chat";
+type View = "home" | "login" | "register" | "chat" | "settings" | "notifications";
 
 const VIEW_PATH: Record<View, string> = {
   home: "/home",
   login: "/login",
   register: "/register",
   chat: "/chat",
+  settings: "/settings",
+  notifications: "/notifications",
 };
 
 export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignUpOpen, setIsSignUpOpen] = useState(false);
   const [isAIConversationOpen, setIsAIConversationOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const setView = useCallback(
@@ -36,6 +42,8 @@ export default function App() {
       setIsLoginOpen(view === "login");
       setIsSignUpOpen(view === "register");
       setIsAIConversationOpen(view === "chat");
+      setIsSettingsOpen(view === "settings");
+      setIsNotificationsOpen(view === "notifications");
 
       const targetPath = VIEW_PATH[view];
       if (window.location.pathname !== targetPath) {
@@ -54,6 +62,10 @@ export default function App() {
       setView("register", { replace: true });
     } else if (path === VIEW_PATH.chat) {
       setView("chat", { replace: true });
+    } else if (path === VIEW_PATH.settings) {
+      setView("settings", { replace: true });
+    } else if (path === VIEW_PATH.notifications) {
+      setView("notifications", { replace: true });
     } else {
       setView("home", { replace: true });
     }
@@ -105,7 +117,7 @@ export default function App() {
     setView("home");
   };
 
-  const isHomeView = !isLoginOpen && !isSignUpOpen && !isAIConversationOpen;
+  const isHomeView = !isLoginOpen && !isSignUpOpen && !isAIConversationOpen && !isSettingsOpen && !isNotificationsOpen;
 
   return (
     <div className="min-h-screen bg-white">
@@ -122,6 +134,10 @@ export default function App() {
           onSwitchToSignUp={() => setView("register")}
           onSuccess={handleLoginSuccess}
         />
+      ) : isSettingsOpen ? (
+        <ProfileSettings onBack={() => setView("home")} onLogout={handleLogout} />
+      ) : isNotificationsOpen ? (
+        <NotificationPage onBack={() => setView("home")} />
       ) : isHomeView ? (
         <>
           <Header

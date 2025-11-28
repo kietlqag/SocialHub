@@ -4,7 +4,9 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import orgRoutes from "./routes/orgRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 import { initDb } from "./db.js";
+import { initMongo, getSocialhubDb } from "./mongo.js";
 import { HttpError } from "./utils/httpError.js";
 import { login } from "./controllers/authController.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
@@ -21,12 +23,25 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// quick endpoint to confirm MongoDB socialhub connection
+app.get("/mongo-health", async (req, res) => {
+  try {
+    const db = getSocialhubDb();
+    const collections = await db.listCollections().toArray();
+    res.json({ ok: true, collections: collections.map((c) => c.name) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Direct login endpoint for clarity alongside /auth/login
 app.post("/login", asyncHandler(login));
 
 app.use("/auth", authRoutes);
 app.use("/ai", aiRoutes);
 app.use(orgRoutes);
+// Notifications now served from Postgres — mount API at /notifications
+app.use("/notifications", notificationRoutes);
 
 // Basic error handler
 // eslint-disable-next-line no-unused-vars

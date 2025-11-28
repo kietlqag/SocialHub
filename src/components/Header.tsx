@@ -2,6 +2,7 @@ import { Button } from "./ui/button";
 import { Menu, X, LogOut, User as UserIcon } from "lucide-react";
 import { useState } from "react";
 import { AuthUser } from "../services/auth";
+import { NotificationDropdown } from "./NotificationDropdown";
 
 export function Header({
   onChatOpen,
@@ -44,6 +45,7 @@ export function Header({
               <Button variant="ghost" onClick={onChatOpen}>AI Chat</Button>
               {currentUser ? (
                 <>
+                <NotificationDropdown />
                   <div className="flex items-center text-sm text-gray-700">
                     <UserIcon className="h-4 w-4 mr-1 text-primary" />
                     {currentUser.fullName || currentUser.email}
