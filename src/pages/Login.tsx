@@ -1,8 +1,8 @@
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Separator } from "./ui/separator";
-import { Checkbox } from "./ui/checkbox";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Separator } from "../components/ui/separator";
+import { Checkbox } from "../components/ui/checkbox";
 import { Mail, Lock, ArrowLeft, Sparkles, Loader2, KeyRound } from "lucide-react";
 import { useState } from "react";
 import { AuthUser, login, requestPasswordReset, resetPassword } from "../services/auth";
@@ -38,8 +38,7 @@ export function Login({
       toast.success("Signed in successfully!");
       onSuccess?.(res.user);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Sign in failed. Please try again.";
+      const message = err instanceof Error ? err.message : "Sign in failed. Please try again.";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -64,8 +63,7 @@ export function Login({
       setConfirmNewPassword("");
       setResetRequested(true);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Khong the khoi tao reset password.";
+      const message = err instanceof Error ? err.message : "Khong the khoi tao reset password.";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -312,30 +310,30 @@ export function Login({
                 GitHub
               </Button>
             </div>
+
+            {/* Sign Up Link */}
+            <p className="mt-6 text-center text-gray-600">
+              Don't have an account?{" "}
+              <button 
+                onClick={onSwitchToSignUp}
+                className="text-primary hover:text-primary/80 transition-colors"
+              >
+                Start your free trial
+              </button>
+            </p>
+
+            {/* Terms */}
+            <p className="mt-4 text-center text-xs text-gray-500">
+              By signing in, you agree to our{" "}
+              <a href="#" className="text-primary hover:underline">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="#" className="text-primary hover:underline">
+                Privacy Policy
+              </a>
+            </p>
           </div>
-
-          {/* Sign Up Link */}
-          <p className="mt-6 text-center text-gray-600">
-            Don't have an account?{" "}
-            <button 
-              onClick={onSwitchToSignUp}
-              className="text-primary hover:text-primary/80 transition-colors"
-            >
-              Start your free trial
-            </button>
-          </p>
-
-          {/* Terms */}
-          <p className="mt-4 text-center text-xs text-gray-500">
-            By signing in, you agree to our{" "}
-            <a href="#" className="text-primary hover:underline">
-              Terms of Service
-            </a>{" "}
-            and{" "}
-            <a href="#" className="text-primary hover:underline">
-              Privacy Policy
-            </a>
-          </p>
         </div>
       </div>
     </div>

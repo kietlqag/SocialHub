@@ -4,9 +4,9 @@ import { Features } from "./components/Features";
 import { Testimonials } from "./components/Testimonials";
 import { Pricing } from "./components/Pricing";
 import { Footer } from "./components/Footer";
-import { Login } from "./components/Login";
-import { SignUp } from "./components/SignUp";
-import { AIConversation } from "./components/AIConversation";
+import { Login } from "./pages/Login";
+import { SignUp } from "./pages/SignUp";
+import { AIConversation } from "./pages/AIConversation";
 import { useCallback, useState, useEffect } from "react";
 import {
   AuthUser,
@@ -15,9 +15,9 @@ import {
   fetchMe,
   persistSession,
 } from "./services/auth";
-import { ProfileSettings } from "./components/ProfileSettings";
-import { NotificationPage } from "./components/NotificationPage";
-import Profile from "./components/Profile";
+import { ProfileSettings } from "./pages/ProfileSettings";
+import { NotificationPage } from "./pages/NotificationPage";
+import Profile from "./pages/Profile";
 
 type View =
   | "home"

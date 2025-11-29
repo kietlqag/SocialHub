@@ -1,8 +1,8 @@
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Separator } from "./ui/separator";
-import { Checkbox } from "./ui/checkbox";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Separator } from "../components/ui/separator";
+import { Checkbox } from "../components/ui/checkbox";
 import {
   Mail,
   Lock,
@@ -69,8 +69,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
         onSwitchToLogin?.();
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Sign up failed. Please try again.";
+      const message = err instanceof Error ? err.message : "Sign up failed. Please try again.";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -259,13 +258,9 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                 />
                 <label htmlFor="terms" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
                   I agree to the{" "}
-                  <a href="#" className="text-primary hover:underline">
-                    Terms of Service
-                  </a>{" "}
+                  <a href="#" className="text-primary hover:underline">Terms of Service</a>{" "}
                   and{" "}
-                  <a href="#" className="text-primary hover:underline">
-                    Privacy Policy
-                  </a>
+                  <a href="#" className="text-primary hover:underline">Privacy Policy</a>
                 </label>
               </div>
 
@@ -288,8 +283,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                   Verify your email
                 </div>
                 <p className="text-sm text-gray-700">
-                  We sent a verification code to <span className="font-medium">{pendingEmail}</span>. Enter the code below
-                  to activate your account.
+                  We sent a verification code to <span className="font-medium">{pendingEmail}</span>. Enter the code below to activate your account.
                 </p>
                 <Input
                   placeholder="Enter 6-digit code"
@@ -313,9 +307,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
 
           <p className="mt-6 text-center text-gray-600">
             Already have an account?{" "}
-            <button onClick={onSwitchToLogin} className="text-primary hover:text-primary/80 transition-colors">
-              Sign in
-            </button>
+            <button onClick={onSwitchToLogin} className="text-primary hover:text-primary/80 transition-colors">Sign in</button>
           </p>
 
           <div className="mt-6 p-4 bg-primary/5 rounded-lg border border-primary/10">

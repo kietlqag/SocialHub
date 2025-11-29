@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { ScrollArea } from "./ui/scroll-area";
-import { Avatar } from "./ui/avatar";
-import { Separator } from "./ui/separator";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { ScrollArea } from "../components/ui/scroll-area";
+import { Avatar } from "../components/ui/avatar";
+import { Separator } from "../components/ui/separator";
 import {
   ArrowLeft,
   Send,
@@ -24,7 +24,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+} from "../components/ui/dropdown-menu";
 import {
   aiConversationApi,
   AiMessage,
