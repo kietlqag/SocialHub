@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -37,7 +37,7 @@ export function CreatedDashboardView({ isOpen, onClose, dashboard, onSave }: Cre
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden">
         <div className="p-6 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-3">

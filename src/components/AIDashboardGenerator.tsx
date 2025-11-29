@@ -23,6 +23,7 @@ import {
   Info,
   Database,
 } from "lucide-react";
+import { cn } from "./ui/utils";
 
 interface DashboardField {
   id: string;
@@ -175,9 +176,13 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
 
   const handleBack = () => setStep("describe");
 
+  const contentSizeClass = step === "describe"
+    ? "w-full sm:w-auto max-w-[92vw] sm:max-w-lg lg:max-w-xl max-h-[80vh]"
+    : "w-full max-w-[min(1180px,95vw)] min-w-[min(920px,95vw)] h-[90vh] max-h-[90vh]";
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden p-0">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <DialogContent className={cn("w-full overflow-hidden p-0", contentSizeClass)}>
         {step === "describe" ? (
           <div className="p-8">
             <DialogHeader className="mb-6">
@@ -250,7 +255,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
             </div>
           </div>
         ) : (
-          <div className="flex flex-col h-[90vh]">
+          <div className="flex flex-col h-full">
             <div className="p-6 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

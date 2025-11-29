@@ -1,4 +1,4 @@
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+﻿export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 type HttpMethod = "GET" | "POST" | "DELETE" | "PATCH";
 
@@ -25,3 +25,7 @@ export const api = {
   patch: <T>(path: string, body?: any, token?: string) => request<T>(path, { method: "PATCH", body, token }),
   delete: <T>(path: string, token?: string) => request<T>(path, { method: "DELETE", token }),
 };
+
+
+
+

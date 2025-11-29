@@ -1,4 +1,4 @@
-import { api } from "./api";
+﻿import { api } from "./api";
 import { AuthResponse } from "./auth";
 
 export type Organization = {
@@ -140,3 +140,7 @@ export const platformApi = {
     return res.recommendations;
   },
 };
+
+
+
+

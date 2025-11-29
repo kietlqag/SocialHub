@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -66,7 +66,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) {
-        toast.error("Bạn cần đăng nhập để lưu thay đổi");
+        toast.error("Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ lÆ°u thay Ä‘á»•i");
         setIsSaving(false);
         return;
       }
@@ -74,10 +74,10 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
       const payload: any = { preferences: { notifications, appearance } };
 
       await api.patch("/profile", payload, token);
-      toast.success("Cập nhật cài đặt thành công");
+      toast.success("Cáº­p nháº­t cÃ i Ä‘áº·t thÃ nh cÃ´ng");
     } catch (err) {
       console.error(err);
-      toast.error("Không thể lưu thay đổi");
+      toast.error("KhÃ´ng thá»ƒ lÆ°u thay Ä‘á»•i");
     } finally {
       setIsSaving(false);
     }
@@ -282,7 +282,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <div>
                         <p className="text-sm text-gray-900">MacBook Pro - San Francisco, CA</p>
-                        <p className="text-xs text-gray-600">Current session • Last active: Now</p>
+                        <p className="text-xs text-gray-600">Current session â€¢ Last active: Now</p>
                       </div>
                       <Badge className="bg-green-100 text-green-800">Active</Badge>
                     </div>
@@ -313,7 +313,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                       <span className="text-3xl text-gray-900">$29</span>
                       <span className="text-gray-600">/month</span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-4">Billed monthly • Next billing date: Dec 24, 2024</p>
+                    <p className="text-sm text-gray-600 mb-4">Billed monthly â€¢ Next billing date: Dec 24, 2024</p>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm text-gray-700"><Check className="w-4 h-4 text-green-600" />Unlimited dashboards</div>
                       <div className="flex items-center gap-2 text-sm text-gray-700"><Check className="w-4 h-4 text-green-600" />Advanced analytics</div>
@@ -335,7 +335,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                         <CreditCard className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <p className="text-sm text-gray-900">•••• •••• •••• 4242</p>
+                        <p className="text-sm text-gray-900">â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 4242</p>
                         <p className="text-xs text-gray-600">Expires 12/2025</p>
                       </div>
                     </div>
@@ -383,3 +383,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
     </div>
   );
 }
+
+
+
+

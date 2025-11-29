@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { AIDashboardGenerator } from "../components/AIDashboardGenerator";
 import { CreatedDashboardView } from "../components/CreatedDashboardView";
 import { Button } from "../components/ui/button";
@@ -61,7 +61,9 @@ export default function ManageDash() {
           <p className="text-sm text-gray-600">Create, view, and manage dashboards generated with AI</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setGeneratorOpen(true)} className="gap-2"><Plus className="w-4 h-4" /> Create from AI</Button>
+          <Button onClick={() => setGeneratorOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Create from AI
+          </Button>
         </div>
       </div>
 
@@ -77,10 +79,10 @@ export default function ManageDash() {
           <Card key={s.id} className="p-4 flex flex-col justify-between">
             <div>
               <div className="text-lg font-medium">{s.name}</div>
-              <div className="text-xs text-gray-500 mt-1">{s.fields?.length || 0} fields • {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "—"}</div>
+              <div className="text-xs text-gray-500 mt-1">{s.fields?.length || 0} fields â€¢ {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "â€”"}</div>
               <div className="mt-3 text-sm text-gray-700">
                 {s.fields.slice(0, 6).map((f: any) => (
-                  <div key={f.id} className="text-xs text-gray-600">{f.fieldName} • {f.fieldType}</div>
+                  <div key={f.id} className="text-xs text-gray-600">{f.fieldName} â€¢ {f.fieldType}</div>
                 ))}
               </div>
             </div>
@@ -106,3 +108,7 @@ export default function ManageDash() {
     </div>
   );
 }
+
+
+
+

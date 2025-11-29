@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -52,7 +52,7 @@ export default function Profile() {
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) {
-        toast.error("Bạn cần đăng nhập để lưu thay đổi");
+        toast.error("Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ lÆ°u thay Ä‘á»•i");
         setIsSaving(false);
         return;
       }
@@ -134,7 +134,7 @@ export default function Profile() {
 
               <div className="space-y-1">
                 <h2 className="text-lg font-semibold text-slate-900">{profile.fullName || "Your name"}</h2>
-                <p className="text-sm text-slate-500">{profile.job_title || "Your role"}{profile.company ? ` • ${profile.company}` : ""}</p>
+                <p className="text-sm text-slate-500">{profile.job_title || "Your role"}{profile.company ? ` â€¢ ${profile.company}` : ""}</p>
                 {profile.location && <p className="text-xs text-slate-400 flex items-center justify-center gap-1"><MapPin className="h-3 w-3" />{profile.location}</p>}
               </div>
 
@@ -150,7 +150,7 @@ export default function Profile() {
             <div className="flex items-center justify-between gap-2 mb-5">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">Personal Information</h3>
-                <p className="text-xs text-slate-500 mt-1">Thành phần hiển thị cho người dùng khác trong hệ thống.</p>
+                <p className="text-xs text-slate-500 mt-1">ThÃ nh pháº§n hiá»ƒn thá»‹ cho ngÆ°á»i dÃ¹ng khÃ¡c trong há»‡ thá»‘ng.</p>
               </div>
               <Button onClick={handleSave} disabled={isSaving} className="hidden sm:inline-flex gap-2">
                 {isSaving ? "Saving..." : <><Save className="w-4 h-4" />Save</>}
@@ -160,7 +160,7 @@ export default function Profile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               <div className="space-y-2">
                 <Label className="text-xs font-medium text-slate-600">Full Name</Label>
-                <Input value={profile.fullName || ""} onChange={(e) => setProfile({ ...profile, fullName: (e.target as HTMLInputElement).value })} placeholder="Nguyễn Văn A" />
+                <Input value={profile.fullName || ""} onChange={(e) => setProfile({ ...profile, fullName: (e.target as HTMLInputElement).value })} placeholder="Nguyá»…n VÄƒn A" />
               </div>
 
               <div className="space-y-2">
@@ -183,13 +183,13 @@ export default function Profile() {
                 <Label className="text-xs font-medium text-slate-600">Company</Label>
                 <div className="relative">
                   <Building className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input className="pl-10" value={profile.company || ""} onChange={(e) => setProfile({ ...profile, company: (e.target as HTMLInputElement).value })} placeholder="Công ty của bạn" />
+                  <Input className="pl-10" value={profile.company || ""} onChange={(e) => setProfile({ ...profile, company: (e.target as HTMLInputElement).value })} placeholder="CÃ´ng ty cá»§a báº¡n" />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs font-medium text-slate-600">Job Title</Label>
-                <Input value={profile.job_title || ""} onChange={(e) => setProfile({ ...profile, job_title: (e.target as HTMLInputElement).value })} placeholder="Chức vụ" />
+                <Input value={profile.job_title || ""} onChange={(e) => setProfile({ ...profile, job_title: (e.target as HTMLInputElement).value })} placeholder="Chá»©c vá»¥" />
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -204,3 +204,7 @@ export default function Profile() {
     </div>
   );
 }
+
+
+
+

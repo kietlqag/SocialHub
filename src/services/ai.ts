@@ -1,4 +1,4 @@
-import { api, API_URL } from "./api";
+﻿import { api, API_URL } from "./api";
 import { getCurrentSession } from "./auth";
 
 export type AiChatResponse = {
@@ -41,3 +41,7 @@ export const aiApi = {
     return res.suggestion;
   },
 };
+
+
+
+

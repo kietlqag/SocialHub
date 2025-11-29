@@ -18,6 +18,7 @@ import {
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { NotificationPage } from "./pages/NotificationPage";
 import Profile from "./pages/Profile";
+import ManageDash from "./pages/ManageDash";
 
 type View =
   | "home"
@@ -26,7 +27,8 @@ type View =
   | "chat"
   | "settings"
   | "notifications"
-  | "profile";
+  | "profile"
+  | "managedash";
 
 const VIEW_PATH: Record<View, string> = {
   home: "/home",
@@ -36,6 +38,7 @@ const VIEW_PATH: Record<View, string> = {
   settings: "/settings",
   notifications: "/notifications",
   profile: "/profile",
+  managedash: "/managedash",
 };
 
 export default function App() {
@@ -45,6 +48,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isManageDashOpen, setIsManageDashOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const setView = useCallback(
@@ -55,6 +59,7 @@ export default function App() {
       setIsSettingsOpen(view === "settings");
       setIsNotificationsOpen(view === "notifications");
       setIsProfileOpen(view === "profile");
+      setIsManageDashOpen(view === "managedash");
 
       const targetPath = VIEW_PATH[view];
       if (window.location.pathname !== targetPath) {
@@ -75,6 +80,8 @@ export default function App() {
       setView("notifications", { replace: true });
     else if (path === VIEW_PATH.profile)
       setView("profile", { replace: true });
+    else if (path === VIEW_PATH.managedash)
+      setView("managedash", { replace: true });
     else setView("home", { replace: true });
   }, [setView]);
 
@@ -132,7 +139,8 @@ export default function App() {
     !isAIConversationOpen &&
     !isSettingsOpen &&
     !isNotificationsOpen &&
-    !isProfileOpen;
+    !isProfileOpen &&
+    !isManageDashOpen;
 
   return (
     <div className="min-h-screen bg-white">
@@ -155,6 +163,27 @@ export default function App() {
         <ProfileSettings onBack={() => setView("home")} onLogout={handleLogout} />
       ) : isNotificationsOpen ? (
         <NotificationPage onBack={() => setView("home")} />
+      ) : isManageDashOpen ? (
+        <>
+          <Header
+            onChatOpen={() => setView("chat")}
+            onLoginOpen={() => setView("login")}
+            onSignUpOpen={() => setView("register")}
+            onProfileOpen={() => setView("profile")}
+            onSettingsOpen={() => setView("settings")}
+            onManageDash={() => setView("managedash")}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+          />
+
+          <main>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+              <ManageDash />
+            </div>
+          </main>
+
+          <Footer />
+        </>
       ) : isHomeView ? (
         <>
           <Header
@@ -163,6 +192,7 @@ export default function App() {
             onSignUpOpen={() => setView("register")}
             onProfileOpen={() => setView("profile")}
             onSettingsOpen={() => setView("settings")}
+            onManageDash={() => setView("managedash")}
             currentUser={currentUser}
             onLogout={handleLogout}
           />

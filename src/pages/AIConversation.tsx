@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { ScrollArea } from "../components/ui/scroll-area";
@@ -923,3 +923,6 @@ export function AIConversation({ onBack }: { onBack?: () => void }) {
     </>
   );
 }
+
+
+

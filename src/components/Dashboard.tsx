@@ -1,4 +1,4 @@
-import { Card } from "./ui/card";
+﻿import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
@@ -416,7 +416,7 @@ export function Dashboard({ onLogout, onSettingsOpen }: DashboardProps) {
                 <div key={p.name} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-100 hover:shadow-sm transition-all">
                   <div>
                     <p className="text-sm text-gray-900">{p.name}</p>
-                    <p className="text-xs text-gray-500">{p.sales} sales • {p.revenue}</p>
+                    <p className="text-xs text-gray-500">{p.sales} sales â€¢ {p.revenue}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className={`text-sm ${p.trend >= 0 ? "text-green-600" : "text-red-600"}`}>{p.trend >= 0 ? `+${p.trend}%` : `${p.trend}%`}</div>
@@ -449,3 +449,7 @@ export function Dashboard({ onLogout, onSettingsOpen }: DashboardProps) {
     </div>
   );
 }
+
+
+
+
