@@ -4,6 +4,7 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Check, Save, ArrowLeft } from "lucide-react";
 import { Badge } from "./ui/badge";
+import { type DashboardWidget } from "../services/dashboards";
 
 interface Field {
   id: string;
@@ -13,26 +14,50 @@ interface Field {
   sampleData?: string;
 }
 
+interface CreatedDashboard {
+  name: string;
+  description?: string;
+  fields: Field[];
+  widgets?: DashboardWidget[];
+  componentCode?: string;
+}
+
 interface CreatedDashboardViewProps {
   isOpen: boolean;
   onClose: () => void;
-  dashboard: { name: string; fields: Field[] } | null;
-  onSave?: (dashboard: { name: string; fields: Field[] }) => void;
+  dashboard: CreatedDashboard | null;
+  onSave?: (dashboard: CreatedDashboard) => Promise<void> | void;
 }
 
 export function CreatedDashboardView({ isOpen, onClose, dashboard, onSave }: CreatedDashboardViewProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   if (!dashboard) return null;
 
   const handleSave = async () => {
+    if (!dashboard || !onSave) return onClose();
+    setError(null);
     setIsSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 400));
-      onSave?.(dashboard);
+      await onSave(dashboard);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save dashboard");
     } finally {
       setIsSaving(false);
-      onClose();
+    }
+  };
+
+  const handleCopyCode = async () => {
+    if (!dashboard?.componentCode) return;
+    try {
+      await navigator.clipboard.writeText(dashboard.componentCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
     }
   };
 
@@ -46,7 +71,9 @@ export function CreatedDashboardView({ isOpen, onClose, dashboard, onSave }: Cre
             </Button>
             <div>
               <DialogTitle className="text-lg">{dashboard.name || "New Dashboard"}</DialogTitle>
-              <DialogDescription className="text-sm text-gray-600">Review the generated dashboard fields and save it to your collection.</DialogDescription>
+              <DialogDescription className="text-sm text-gray-600">
+                {dashboard.description || "Review the generated dashboard fields and save it to your collection."}
+              </DialogDescription>
             </div>
           </div>
 
@@ -58,7 +85,7 @@ export function CreatedDashboardView({ isOpen, onClose, dashboard, onSave }: Cre
           </div>
         </div>
 
-        <div className="p-6 overflow-auto bg-gray-50 h-[62vh]">
+        <div className="p-6 overflow-auto bg-gray-50 h-[62vh] space-y-6">
           <Card className="p-4">
             <div className="grid grid-cols-2 gap-4">
               {dashboard.fields.map((f) => (
@@ -76,7 +103,26 @@ export function CreatedDashboardView({ isOpen, onClose, dashboard, onSave }: Cre
               ))}
             </div>
           </Card>
+
+          <Card className="overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-gray-800">Generated widget code</div>
+                <div className="text-xs text-gray-500">Use this React snippet to render the fields as dashboard widgets.</div>
+              </div>
+              <Button size="sm" variant="outline" disabled={!dashboard.componentCode} onClick={handleCopyCode}>
+                {copied ? "Copied" : "Copy code"}
+              </Button>
+            </div>
+            <pre className="bg-slate-950 text-slate-100 text-xs overflow-auto p-4 max-h-[240px]">
+              {dashboard.componentCode || "// No widget code generated"}
+            </pre>
+          </Card>
         </div>
+
+        {error && (
+          <div className="px-6 text-sm text-red-600">{error}</div>
+        )}
       </DialogContent>
     </Dialog>
   );

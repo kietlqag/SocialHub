@@ -1,56 +1,88 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { AIDashboardGenerator } from "../components/AIDashboardGenerator";
 import { CreatedDashboardView } from "../components/CreatedDashboardView";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
+import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
 
-interface SavedDashboard {
-  id: string;
+const DASHBOARD_SESSION_KEY = "socialhub:dashboards_session";
+
+const getSessionId = () => {
+  if (typeof window === "undefined") return "";
+  const existing = localStorage.getItem(DASHBOARD_SESSION_KEY);
+  if (existing) return existing;
+  const generated = (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi, "");
+  localStorage.setItem(DASHBOARD_SESSION_KEY, generated);
+  return generated;
+};
+
+type DraftDashboard = {
   name: string;
-  fields: any[];
-  createdAt?: number;
-}
-
-const STORAGE_KEY = "socialhub:saved_dashboards";
+  description: string;
+  fields: DashboardField[];
+  widgets?: Dashboard["widgets"];
+  componentCode?: string;
+};
 
 export default function ManageDash() {
-  const [saved, setSaved] = useState<SavedDashboard[]>([]);
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [generatorOpen, setGeneratorOpen] = useState(false);
-  const [selected, setSelected] = useState<{ name: string; fields: any[] } | null>(null);
+  const [selected, setSelected] = useState<DraftDashboard | null>(null);
   const [createdOpen, setCreatedOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const sessionId = useMemo(getSessionId, []);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      setSaved(JSON.parse(raw));
-    } catch (e) {
-      setSaved([]);
-    }
-  }, []);
+    if (!sessionId) return;
+    let active = true;
+    setLoading(true);
+    dashboardApi
+      .list(sessionId)
+      .then((res) => {
+        if (!active) return;
+        setDashboards(res.dashboards || []);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : "Failed to load dashboards");
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [sessionId]);
 
-  const handleCreateDashboard = (data: { name: string; fields: any[] }) => {
+  const handleCreateDashboard = (data: DraftDashboard) => {
     setSelected(data);
     setCreatedOpen(true);
   };
 
-  const handleSaveDashboard = (dash: { name: string; fields: any[] }) => {
-    const newItem: SavedDashboard = {
-      id: Date.now().toString(),
-      name: dash.name || "Untitled dashboard",
-      fields: dash.fields || [],
-      createdAt: Date.now(),
-    };
-    const updated = [newItem, ...saved];
-    setSaved(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  const handleSaveDashboard = async (dash: DraftDashboard) => {
+    if (!sessionId) throw new Error("Missing session");
+    const res = await dashboardApi.create({
+      name: dash.name,
+      description: dash.description,
+      fields: dash.fields,
+      widgets: dash.widgets,
+      componentCode: dash.componentCode,
+      sessionId,
+    });
+    setDashboards((prev) => [res.dashboard, ...prev]);
   };
 
-  const handleDelete = (id: string) => {
-    const updated = saved.filter((s) => s.id !== id);
-    setSaved(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  const handleDelete = async (id: string) => {
+    if (!sessionId) return;
+    try {
+      await dashboardApi.delete(id, sessionId);
+      setDashboards((prev) => prev.filter((d) => d.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete dashboard");
+    }
   };
 
   return (
@@ -68,21 +100,23 @@ export default function ManageDash() {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        {saved.length === 0 && (
+        {!loading && dashboards.length === 0 && (
           <div className="col-span-3 text-center text-gray-500 py-10">
             <div className="text-lg mb-2">No saved dashboards yet</div>
             <div className="text-sm">Use the generator to create a new dashboard or import one.</div>
           </div>
         )}
 
-        {saved.map((s) => (
+        {dashboards.map((s) => (
           <Card key={s.id} className="p-4 flex flex-col justify-between">
             <div>
               <div className="text-lg font-medium">{s.name}</div>
-              <div className="text-xs text-gray-500 mt-1">{s.fields?.length || 0} fields â€¢ {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "â€”"}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {s.fields?.length || 0} fields - {s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "-"}
+              </div>
               <div className="mt-3 text-sm text-gray-700">
-                {s.fields.slice(0, 6).map((f: any) => (
-                  <div key={f.id} className="text-xs text-gray-600">{f.fieldName} â€¢ {f.fieldType}</div>
+                {s.fields.slice(0, 6).map((f) => (
+                  <div key={f.id} className="text-xs text-gray-600">{f.fieldName} - {f.fieldType}</div>
                 ))}
               </div>
             </div>
@@ -90,7 +124,20 @@ export default function ManageDash() {
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-gray-600">Preview</div>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={() => { setSelected({ name: s.name, fields: s.fields }); setCreatedOpen(true); }}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSelected({
+                      name: s.name,
+                      description: s.description || "",
+                      fields: s.fields,
+                      widgets: s.widgets,
+                      componentCode: s.componentCode,
+                    });
+                    setCreatedOpen(true);
+                  }}
+                >
                   View
                 </Button>
                 <Button variant="destructive" size="icon" onClick={() => handleDelete(s.id)}>
@@ -102,9 +149,20 @@ export default function ManageDash() {
         ))}
       </div>
 
-      <AIDashboardGenerator isOpen={generatorOpen} onClose={() => setGeneratorOpen(false)} onCreateDashboard={handleCreateDashboard} />
+      {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
-      <CreatedDashboardView isOpen={createdOpen} onClose={() => setCreatedOpen(false)} dashboard={selected} onSave={handleSaveDashboard} />
+      <AIDashboardGenerator
+        isOpen={generatorOpen}
+        onClose={() => setGeneratorOpen(false)}
+        onCreateDashboard={handleCreateDashboard}
+      />
+
+      <CreatedDashboardView
+        isOpen={createdOpen}
+        onClose={() => setCreatedOpen(false)}
+        dashboard={selected}
+        onSave={handleSaveDashboard}
+      />
     </div>
   );
 }

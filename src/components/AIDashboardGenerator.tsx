@@ -24,20 +24,18 @@ import {
   Database,
 } from "lucide-react";
 import { cn } from "./ui/utils";
-
-interface DashboardField {
-  id: string;
-  fieldName: string;
-  fieldType: string;
-  description: string;
-  sampleData: string;
-  required: boolean;
-}
+import { dashboardApi, type DashboardField, type DashboardWidget } from "../services/dashboards";
 
 interface AIDashboardGeneratorProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateDashboard?: (data: { name: string; fields: DashboardField[] }) => void;
+  onCreateDashboard?: (data: {
+    name: string;
+    description: string;
+    fields: DashboardField[];
+    widgets?: DashboardWidget[];
+    componentCode?: string;
+  }) => void;
 }
 
 export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AIDashboardGeneratorProps) {
@@ -46,6 +44,10 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
   const [dashboardName, setDashboardName] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedFields, setGeneratedFields] = useState<DashboardField[]>([]);
+  const [generatedWidgets, setGeneratedWidgets] = useState<DashboardWidget[]>([]);
+  const [componentCode, setComponentCode] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fieldTypes = [
     "Text",
@@ -61,81 +63,19 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
   ];
 
   const handleGenerate = async () => {
+    setError(null);
     setIsGenerating(true);
-    // Simulate AI generation with a delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Generate mock fields based on description
-    const mockFields: DashboardField[] = [
-      {
-        id: "1",
-        fieldName: "Customer Name",
-        fieldType: "Text",
-        description: "Full name of the customer",
-        sampleData: "John Smith",
-        required: true,
-      },
-      {
-        id: "2",
-        fieldName: "Email",
-        fieldType: "Email",
-        description: "Customer email address",
-        sampleData: "john.smith@example.com",
-        required: true,
-      },
-      {
-        id: "3",
-        fieldName: "Purchase Amount",
-        fieldType: "Currency",
-        description: "Total purchase amount",
-        sampleData: "$1,234.56",
-        required: true,
-      },
-      {
-        id: "4",
-        fieldName: "Purchase Date",
-        fieldType: "Date",
-        description: "Date of purchase",
-        sampleData: "2024-11-24",
-        required: true,
-      },
-      {
-        id: "5",
-        fieldName: "Status",
-        fieldType: "Dropdown",
-        description: "Order status",
-        sampleData: "Completed",
-        required: true,
-      },
-      {
-        id: "6",
-        fieldName: "Customer Lifetime Value",
-        fieldType: "Currency",
-        description: "Total value of all customer purchases",
-        sampleData: "$5,678.90",
-        required: false,
-      },
-      {
-        id: "7",
-        fieldName: "Subscription Active",
-        fieldType: "Boolean",
-        description: "Whether customer has active subscription",
-        sampleData: "Yes",
-        required: false,
-      },
-      {
-        id: "8",
-        fieldName: "Referral Source",
-        fieldType: "Dropdown",
-        description: "How customer found us",
-        sampleData: "Google Ads",
-        required: false,
-      },
-    ];
-
-    setGeneratedFields(mockFields);
-    setIsGenerating(false);
-    setStep("review");
+    try {
+      const res = await dashboardApi.generate({ name: dashboardName, description });
+      setGeneratedFields(res.fields);
+      setGeneratedWidgets(res.widgets || []);
+      setComponentCode(res.componentCode || "");
+      setStep("review");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate dashboard");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleAddField = () => {
@@ -161,7 +101,13 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
   };
 
   const handleCreateDashboard = () => {
-    onCreateDashboard?.({ name: dashboardName, fields: generatedFields });
+    onCreateDashboard?.({
+      name: dashboardName,
+      description,
+      fields: generatedFields,
+      widgets: generatedWidgets,
+      componentCode,
+    });
     handleClose();
   };
 
@@ -170,11 +116,26 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
     setDescription("");
     setDashboardName("");
     setGeneratedFields([]);
+    setGeneratedWidgets([]);
+    setComponentCode("");
+    setCopied(false);
     setIsGenerating(false);
+    setError(null);
     onClose();
   };
 
   const handleBack = () => setStep("describe");
+
+  const handleCopyCode = async () => {
+    if (!componentCode) return;
+    try {
+      await navigator.clipboard.writeText(componentCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const contentSizeClass = step === "describe"
     ? "w-full sm:w-auto max-w-[92vw] sm:max-w-lg lg:max-w-xl max-h-[80vh]"
@@ -252,10 +213,11 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
                   )}
                 </Button>
               </div>
+              {error && <p className="text-sm text-red-600">{error}</p>}
             </div>
           </div>
         ) : (
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col flex-1 min-h-0">
             <div className="p-6 border-b border-gray-200 bg-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -276,66 +238,83 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-6 bg-gray-50">
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[200px]">Field Name</th>
-                        <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[160px]">Field Type</th>
-                        <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[280px]">Description</th>
-                        <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[200px]">Sample Data</th>
-                        <th className="text-center px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[100px]">Required</th>
-                        <th className="text-center px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[80px]">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {generatedFields.map((field, index) => (
-                        <tr key={field.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3">
-                            <Input value={field.fieldName} onChange={(e) => handleFieldUpdate(field.id, "fieldName", (e.target as HTMLInputElement).value)} className="h-9 border-gray-200" />
-                          </td>
-                          <td className="px-4 py-3">
-                            <Select value={field.fieldType} onValueChange={(value) => handleFieldUpdate(field.id, "fieldType", value)}>
-                              <SelectTrigger className="h-9 border-gray-200">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {fieldTypes.map((type) => (
-                                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Input value={field.description} onChange={(e) => handleFieldUpdate(field.id, "description", (e.target as HTMLInputElement).value)} className="h-9 border-gray-200" placeholder="Enter description..." />
-                          </td>
-                          <td className="px-4 py-3">
-                            <Input value={field.sampleData} onChange={(e) => handleFieldUpdate(field.id, "sampleData", (e.target as HTMLInputElement).value)} className="h-9 border-gray-200" placeholder="Example data..." />
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex justify-center">
-                              <Checkbox checked={field.required} onCheckedChange={(c) => handleFieldUpdate(field.id, "required", c as boolean)} />
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex justify-center">
-                              <Button variant="ghost" size="icon" onClick={() => handleRemoveField(field.id)} className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50">
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
+            <div className="flex-1 min-h-0 overflow-hidden p-6 bg-gray-50">
+              <div className="flex flex-col gap-6 h-full">
+                <Card className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[200px]">Field Name</th>
+                          <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[160px]">Field Type</th>
+                          <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[280px]">Description</th>
+                          <th className="text-left px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[200px]">Sample Data</th>
+                          <th className="text-center px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[100px]">Required</th>
+                          <th className="text-center px-4 py-3 text-xs text-gray-600 font-medium uppercase tracking-wider w-[80px]">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {generatedFields.map((field) => (
+                          <tr key={field.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <Input value={field.fieldName} onChange={(e) => handleFieldUpdate(field.id, "fieldName", (e.target as HTMLInputElement).value)} className="h-9 border-gray-200" />
+                            </td>
+                            <td className="px-4 py-3">
+                              <Select value={field.fieldType} onValueChange={(value) => handleFieldUpdate(field.id, "fieldType", value)}>
+                                <SelectTrigger className="h-9 border-gray-200">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {fieldTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Input value={field.description} onChange={(e) => handleFieldUpdate(field.id, "description", (e.target as HTMLInputElement).value)} className="h-9 border-gray-200" placeholder="Enter description..." />
+                            </td>
+                            <td className="px-4 py-3">
+                              <Input value={field.sampleData} onChange={(e) => handleFieldUpdate(field.id, "sampleData", (e.target as HTMLInputElement).value)} className="h-9 border-gray-200" placeholder="Example data..." />
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-center">
+                                <Checkbox checked={field.required} onCheckedChange={(c) => handleFieldUpdate(field.id, "required", c as boolean)} />
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-center">
+                                <Button variant="ghost" size="icon" onClick={() => handleRemoveField(field.id)} className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                <div className="border-t border-gray-200 p-4 bg-gray-50">
-                  <Button variant="outline" size="sm" onClick={handleAddField} className="gap-2"><Plus className="w-4 h-4" />Add Field</Button>
-                </div>
-              </Card>
+                  <div className="border-t border-gray-200 p-4 bg-gray-50">
+                    <Button variant="outline" size="sm" onClick={handleAddField} className="gap-2"><Plus className="w-4 h-4" />Add Field</Button>
+                  </div>
+                </Card>
+
+                <Card className="overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-800">Generated widget code</div>
+                      <div className="text-xs text-gray-500">Copy this snippet to render the dashboard widgets.</div>
+                    </div>
+                    <Button size="sm" variant="outline" disabled={!componentCode} onClick={handleCopyCode}>
+                      {copied ? "Copied" : "Copy code"}
+                    </Button>
+                  </div>
+                  <pre className="bg-slate-950 text-slate-100 text-xs overflow-auto p-4 max-h-[220px]">
+                    {componentCode || "// Generate to preview widget code"}
+                  </pre>
+                </Card>
+              </div>
             </div>
 
             <div className="p-6 border-t border-gray-200 bg-white">

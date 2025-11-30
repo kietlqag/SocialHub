@@ -39,12 +39,14 @@ export function Header({
           <nav className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-8">
               <a href="/home" className="text-gray-600 hover:text-primary transition-colors">Home</a>
-              <button
-                onClick={onManageDash}
-                className="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded-md text-sm"
-              >
-                Dashboard
-              </button>
+              {currentUser && (
+                <button
+                  onClick={onManageDash}
+                  className="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded-md text-sm"
+                >
+                  Dashboard
+                </button>
+              )}
               {/* AI Chat moved into the nav between Testimonials and Contact */}
               <button onClick={onChatOpen} className="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded-md text-sm">AI Chat</button>
               <a href="#contact" className="text-gray-600 hover:text-primary transition-colors">Contact</a>
@@ -93,16 +95,18 @@ export function Header({
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-100">
             <a href="/home" className="block px-3 py-2 text-gray-600 hover:text-primary">Home</a>
-            <Button
-              variant="ghost"
-              className="w-full text-left px-3 py-2"
-              onClick={() => {
-                onManageDash?.();
-                setIsMenuOpen(false);
-              }}
-            >
-              Dashboard
-            </Button>
+            {currentUser && (
+              <Button
+                variant="ghost"
+                className="w-full text-left px-3 py-2"
+                onClick={() => {
+                  onManageDash?.();
+                  setIsMenuOpen(false);
+                }}
+              >
+                Dashboard
+              </Button>
+            )}
             <a href="#contact" className="block px-3 py-2 text-gray-600 hover:text-primary">Contact</a>
               <div className="px-3 py-2 space-y-2">
               <Button variant="ghost" className="w-full" onClick={onChatOpen}>AI Chat</Button>
