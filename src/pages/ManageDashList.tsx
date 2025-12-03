@@ -5,8 +5,8 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { NotificationDropdown } from "../components/NotificationDropdown";
+import { Header } from "../components/Header";
+import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
   LayoutDashboard,
   Search,
@@ -72,8 +72,22 @@ export default function ManageDashList() {
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (session?.user) setCurrentUser(session.user);
+    if (session?.token) {
+      fetchMe(session.token)
+        .then((res) => setCurrentUser(res.user))
+        .catch(() => {
+          clearSession();
+          setCurrentUser(null);
+        });
+    }
+  }, []);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -151,31 +165,31 @@ export default function ManageDashList() {
   const recentlyViewed = derivedDashboards.slice(0, 3);
   const favoriteDashboards = derivedDashboards.slice(0, 3);
 
-  const initials = useMemo(() => {
-    if (!sessionId) return "SH";
-    return sessionId.slice(0, 2).toUpperCase();
-  }, [sessionId]);
-
   return (
     <div className="manage-dash-wrapper min-h-screen overflow-y-auto bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="px-6 py-4 max-w-4xl mx-auto w-full">
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input placeholder="Search dashboards..." className="pl-10 pr-4" />
-            </div>
-            <div className="flex items-center gap-4">
-              <NotificationDropdown />
-              <Avatar>
-                <AvatarFallback>{initials}</AvatarFallback>
-              </Avatar>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header
+        onManageDash={() => navigate("/managedash")}
+        onChatOpen={() => navigate("/chat")}
+        onLoginOpen={() => navigate("/login")}
+        onSignUpOpen={() => navigate("/register")}
+        onProfileOpen={() => navigate("/profile")}
+        onSettingsOpen={() => navigate("/settings")}
+        currentUser={currentUser}
+        onLogout={() => {
+          clearSession();
+          setCurrentUser(null);
+          navigate("/login");
+        }}
+      />
 
       <main className="max-w-7xl mx-auto p-6 space-y-10">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div className="relative max-w-2xl mx-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input placeholder="Search dashboards..." className="pl-10 pr-4" />
+          </div>
+        </div>
+
         <section className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-2xl p-8 border border-indigo-100">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="flex-1">

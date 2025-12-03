@@ -31,9 +31,18 @@ export function Hero({ onLoginOpen, onSignUpOpen, isAuthenticated }: HeroProps) 
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 )}
-                <Button variant="outline" size="lg" className="flex items-center justify-center">
-                  <Play className="mr-2 h-4 w-4" />
-                  Watch Demo
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="flex items-center justify-center"
+                >
+                  <a href="https://youtu.be/D-HFZIXw930?si=sJ8AsolEGRUC8b54" target="_blank" rel="noopener noreferrer">
+                    <span className="flex items-center">
+                      <Play className="mr-2 h-4 w-4" />
+                      Watch Demo
+                    </span>
+                  </a>
                 </Button>
               </div>
               <div className="mt-6">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -54,6 +54,12 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
   const [componentCode, setComponentCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dataFile, setDataFile] = useState<File | null>(null);
+  const [parsedSchema, setParsedSchema] = useState<{
+    fields: DashboardField[];
+    exampleRows: Record<string, any>[];
+    detectedMetrics: string[];
+  } | null>(null);
 
   const fieldTypes = [
     "Text",
@@ -68,11 +74,101 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
     "Percentage",
   ];
 
+  const fileInfo = useMemo(() => {
+    if (!dataFile) return "";
+    return `${dataFile.name} • ${(dataFile.size / 1024).toFixed(1)} KB`;
+  }, [dataFile]);
+
+  const inferType = (value: string): string => {
+    if (!value) return "Text";
+    const lower = value.toLowerCase();
+    if (!Number.isNaN(Number(value)) && value.trim() !== "") return "Number";
+    if (!Number.isNaN(Date.parse(value))) return "Date";
+    if (["true", "false", "yes", "no"].includes(lower)) return "Boolean";
+    if (lower.includes("@")) return "Email";
+    if (lower.startsWith("http")) return "URL";
+    return "Text";
+  };
+
+  const parseCSV = (text: string) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (!lines.length) throw new Error("File is empty");
+    const headers = lines[0].split(",").map((h) => h.trim());
+    const rows = lines.slice(1).map((line) => line.split(","));
+    const sampleRows = rows.slice(0, 5).map((cols) => Object.fromEntries(headers.map((h, idx) => [h, cols[idx] ?? ""])));
+    const fields: DashboardField[] = headers.map((h, idx) => {
+      const sample = rows.map((r) => r[idx]).filter(Boolean);
+      const sampleValue = sample[0] || "";
+      return {
+        id: h || `col-${idx}`,
+        fieldName: h || `Column ${idx + 1}`,
+        fieldType: inferType(sampleValue),
+        description: "",
+        sampleData: sampleValue,
+        required: false,
+      };
+    });
+    const detectedMetrics = fields.filter((f) => ["Number", "Currency", "Percentage"].includes(f.fieldType)).map((f) => f.fieldName);
+    return { fields, sampleRows, detectedMetrics };
+  };
+
+  const handleFileSelect = async (file: File | null) => {
+    if (!file) {
+      setDataFile(null);
+      setParsedSchema(null);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File too large. Please upload a file under 10MB.");
+      return;
+    }
+    const ext = file.name.toLowerCase();
+    setError(null);
+    setDataFile(file);
+    try {
+      if (ext.endsWith(".csv")) {
+        const text = await file.text();
+        const { fields, sampleRows, detectedMetrics } = parseCSV(text);
+        setParsedSchema({ fields, exampleRows: sampleRows, detectedMetrics });
+      } else if (ext.endsWith(".xls") || ext.endsWith(".xlsx")) {
+        setError("Excel parsing not available in this build. Please upload CSV.");
+        setParsedSchema(null);
+      } else {
+        setError("Unsupported file type. Upload CSV or Excel.");
+        setParsedSchema(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to read this file. Please upload a valid CSV or Excel dataset.");
+      setParsedSchema(null);
+    }
+  };
+
   const handleGenerate = async () => {
     setError(null);
     setIsGenerating(true);
     try {
-      const res = await dashboardApi.generate({ name: dashboardName, description });
+      const res = await dashboardApi.generate({
+        name: dashboardName,
+        description,
+        fileProvided: Boolean(parsedSchema),
+        inferredSchema: parsedSchema
+          ? {
+              tables: [
+                {
+                  id: "uploaded-table",
+                  name: dataFile?.name.replace(/\.[^/.]+$/, "") || "Uploaded data",
+                  description: "Schema inferred from uploaded file",
+                  fields: parsedSchema.fields,
+                  actions: ["Add record", "Import data", "Export"],
+                  kpis: [],
+                },
+              ],
+              fields: parsedSchema.fields,
+              detectedMetrics: parsedSchema.detectedMetrics,
+              exampleRows: parsedSchema.exampleRows,
+            }
+          : undefined,
+      });
       onCreateDashboard?.({
         name: dashboardName.trim(),
         description: description.trim(),
@@ -135,6 +231,8 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
     setCopied(false);
     setIsGenerating(false);
     setError(null);
+    setDataFile(null);
+    setParsedSchema(null);
     onClose();
   };
 
@@ -174,33 +272,51 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
             </DialogHeader>
 
             <div className="space-y-6">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <div className="flex items-start gap-2 mb-3">
-                  <Info className="w-4 h-4 text-gray-600 mt-0.5" />
-                  <p className="text-sm text-gray-700">Example prompts to get you started:</p>
+            <div className="space-y-3">
+              <label className="text-sm text-gray-700">Dashboard Name</label>
+              <Input
+                placeholder="e.g., Customer Management, Sales Tracking, Inventory Dashboard"
+                value={dashboardName}
+                onChange={(e) => setDashboardName((e.target as HTMLInputElement).value)}
+                className="text-base"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-gray-700 flex items-center justify-between">
+                <span>Upload sample data (optional)</span>
+                <span className="text-xs text-gray-500">CSV, XLS, XLSX • Max 10MB</span>
+              </label>
+              <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm text-gray-600">
+                    {fileInfo ? <span>{fileInfo}</span> : <span>Drop a CSV/Excel file or click to browse.</span>}
+                  </div>
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept=".csv,.xls,.xlsx"
+                      className="hidden"
+                      onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                    />
+                    <Button variant="outline" size="sm">Choose file</Button>
+                  </label>
                 </div>
-                <ul className="text-sm text-gray-600 space-y-2 ml-6">
-                  <li className="list-disc">"Create a sales tracking dashboard with customer name, purchase amount, date, product category, and order status"</li>
-                  <li className="list-disc">"Build an employee management dashboard to track name, position, department, salary, hire date, and performance rating"</li>
-                  <li className="list-disc">"Design a project management dashboard with project name, client, budget, deadline, status, and team members"</li>
-                </ul>
+                {parsedSchema && (
+                  <div className="mt-3 text-xs text-gray-600 space-y-1">
+                    <div>Detected columns: {parsedSchema.fields.length}</div>
+                    <div>Numeric fields: {parsedSchema.detectedMetrics.slice(0, 5).join(", ")}{parsedSchema.detectedMetrics.length > 5 ? "..." : ""}</div>
+                    <div>Sample rows: {parsedSchema.exampleRows.length}</div>
+                  </div>
+                )}
               </div>
+            </div>
 
-              <div className="space-y-3">
-                <label className="text-sm text-gray-700">Dashboard Name</label>
-                <Input
-                  placeholder="e.g., Customer Management, Sales Tracking, Inventory Dashboard"
-                  value={dashboardName}
-                  onChange={(e) => setDashboardName((e.target as HTMLInputElement).value)}
-                  className="text-base"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-sm text-gray-700">Describe your dashboard</label>
-                <Textarea
-                  placeholder="Example: I need a customer relationship management dashboard that tracks customer information including their name, email, phone number, company, deal value, last contact date, and current status in the sales pipeline..."
-                  value={description}
+            <div className="space-y-3">
+              <label className="text-sm text-gray-700">Describe your dashboard</label>
+              <Textarea
+                placeholder="Example: I need a customer relationship management dashboard that tracks customer information including their name, email, phone number, company, deal value, last contact date, and current status in the sales pipeline..."
+                value={description}
                   onChange={(e) => setDescription((e.target as HTMLTextAreaElement).value)}
                   className="min-h-[200px] text-base resize-none"
                 />

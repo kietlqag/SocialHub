@@ -8,6 +8,8 @@ import { dashboardApi, type Dashboard, type DashboardTable } from "../services/d
 import { DashboardOverview } from "../dashboard/DashboardOverview";
 import { TablePreviewCard } from "./components/TablePreviewCard";
 import { buildDomainModel, generateInsightChartsFromDomain, type InsightChartConfig } from "../dashboard/insightGenerator";
+import { useDynamicDashboardMetrics } from "../dashboard/useDynamicDashboardMetrics";
+import { useMemo } from "react";
 
 type ChartPoint = { label: string; value: number };
 type TimeRange = "7d" | "30d" | "12m";
@@ -41,6 +43,20 @@ export default function ManageDashDetail() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>("30d");
+  const [overviewKpis, setOverviewKpis] = useState<
+    { id: string; title: string; description?: string; value: number | string; icon?: React.ReactNode }[]
+  >([]);
+  const [chartConfigs, setChartConfigs] = useState<InsightChartConfig[]>([]);
+  const [tableConfigs, setTableConfigs] = useState<
+    {
+      id: string;
+      title: string;
+      description?: string;
+      actions: string[];
+      columns: string[];
+      sourceTable: string;
+    }[]
+  >([]);
 
   useEffect(() => {
     if (!dashId || !sessionId) return;
@@ -66,6 +82,61 @@ export default function ManageDashDetail() {
       active = false;
     };
   }, [dashId, sessionId]);
+
+  const safeDashboard = dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] };
+  const tables = safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : [];
+  const mergedTables = tables;
+
+  const totalTables = mergedTables.length;
+  const totalFields = mergedTables.reduce((sum, table) => sum + table.fields.length, 0);
+
+  const hasTables = mergedTables.length > 0;
+  const domainModel = useMemo(() => buildDomainModel(safeDashboard, mergedTables as DashboardTable[]), [safeDashboard, mergedTables]);
+  const defaultInsights = useMemo(() => generateInsightChartsFromDomain(domainModel), [domainModel]);
+  const selectedTables = useMemo(() => mergedTables.map((t) => t.name || t.id || "").filter(Boolean), [mergedTables]);
+  const projectType = useMemo(() => {
+    const normalized = `${safeDashboard.name || ""} ${safeDashboard.description || ""}`.toLowerCase();
+    if (normalized.includes("hospital") || normalized.includes("clinic")) return "hospital";
+    if (normalized.includes("school") || normalized.includes("education") || normalized.includes("class")) return "school";
+    if (normalized.includes("store") || normalized.includes("retail") || normalized.includes("shop") || normalized.includes("sales")) return "store";
+    if (normalized.includes("hr") || normalized.includes("human resource") || normalized.includes("employee")) return "hr";
+    if (normalized.includes("crm") || normalized.includes("deal") || normalized.includes("pipeline")) return "crm";
+    return "crm";
+  }, [safeDashboard.description, safeDashboard.name]);
+  const { metrics } = useDynamicDashboardMetrics({ projectType, selectedTables, description: safeDashboard.description });
+  useEffect(() => {
+    // initialize KPI configs from AI metrics
+    if (metrics && metrics.length) {
+      setOverviewKpis(
+        metrics.map((m) => ({
+          id: m.key,
+          title: m.label,
+          description: m.description,
+          value: m.value,
+          icon: m.icon,
+        }))
+      );
+    }
+  }, [metrics]);
+
+  useEffect(() => {
+    // initialize chart configs
+    setChartConfigs(defaultInsights);
+  }, [defaultInsights]);
+
+  useEffect(() => {
+    // initialize table preview configs from current tables
+    setTableConfigs(
+      mergedTables.map((table) => ({
+        id: table.id,
+        title: table.name,
+        description: table.description || table.purpose,
+        actions: (table.actions || []).slice(0, 3),
+        columns: table.fields.slice(0, 4).map((f) => f.fieldName || f.id),
+        sourceTable: table.id,
+      }))
+    );
+  }, [mergedTables]);
 
   if (!dashId)
     return (
@@ -96,28 +167,6 @@ export default function ManageDashDetail() {
         <div className="text-gray-500">{error || "Dashboard not found."}</div>
       </div>
     );
-
-  const safeDashboard = dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] };
-  const tables = safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : [];
-  const mergedTables = tables;
-
-  const totalTables = mergedTables.length;
-  const totalFields = mergedTables.reduce((sum, table) => sum + table.fields.length, 0);
-
-  const hasTables = mergedTables.length > 0;
-  const domainModel = buildDomainModel(safeDashboard, mergedTables as DashboardTable[]);
-  const insightConfigs = generateInsightChartsFromDomain(domainModel);
-
-  const selectedTables = mergedTables.map((t) => t.name || t.id || "").filter(Boolean);
-  const projectType = (() => {
-    const normalized = `${safeDashboard.name || ""} ${safeDashboard.description || ""}`.toLowerCase();
-    if (normalized.includes("hospital") || normalized.includes("clinic")) return "hospital";
-    if (normalized.includes("school") || normalized.includes("education") || normalized.includes("class")) return "school";
-    if (normalized.includes("store") || normalized.includes("retail") || normalized.includes("shop") || normalized.includes("sales")) return "store";
-    if (normalized.includes("hr") || normalized.includes("human resource") || normalized.includes("employee")) return "hr";
-    if (normalized.includes("crm") || normalized.includes("deal") || normalized.includes("pipeline")) return "crm";
-    return "crm";
-  })();
 
   const handleCopyCode = async () => {
     if (!safeDashboard?.componentCode) return;
@@ -171,11 +220,11 @@ export default function ManageDashDetail() {
 
         <div className="min-h-full py-6 space-y-6">
           <Card className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex-1 min-w-[220px] relative">
+            <div className="w-full max-w-2xl relative mx-auto sm:mx-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input placeholder="Search dashboards, tables, data..." className="pl-10" />
             </div>
-            <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-center sm:justify-end">
               <Button variant="outline" className="gap-2">
                 <Download className="w-4 h-4" /> Export layout
               </Button>
@@ -188,7 +237,42 @@ export default function ManageDashDetail() {
             </div>
           </Card>
 
-          <DashboardOverview projectType={projectType} selectedTables={selectedTables} description={safeDashboard.description} />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { label: "Overview", value: overviewKpis.length },
+              { label: "Insights", value: chartConfigs.length },
+              { label: "Tables", value: tableConfigs.length },
+            ].map((item) => (
+              <Card key={item.label} className="p-4 rounded-2xl flex flex-col gap-1">
+                <span className="text-2xl font-semibold text-gray-900">{item.value}</span>
+                <span className="text-sm text-gray-600">{item.label}</span>
+              </Card>
+            ))}
+          </div>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Overview</h3>
+                <p className="text-sm text-gray-500">Business KPIs generated from your description</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setOverviewKpis((prev) => [...prev, { id: `kpi-${prev.length + 1}`, title: "New KPI", value: 0 }])}>
+                + Add KPI
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {overviewKpis.map((kpi) => (
+                <Card key={kpi.id} className="p-4 flex flex-col gap-2 rounded-2xl">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    {kpi.icon}
+                    <span className="truncate">{kpi.title}</span>
+                  </div>
+                  {kpi.description && <p className="text-xs text-gray-500 line-clamp-2">{kpi.description}</p>}
+                  <div className="text-2xl font-semibold text-gray-900">{kpi.value}</div>
+                </Card>
+              ))}
+            </div>
+          </section>
 
           <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -196,7 +280,19 @@ export default function ManageDashDetail() {
                 <h3 className="text-lg font-semibold text-gray-900">Insights</h3>
                 <p className="text-sm text-gray-500">Charts that highlight key metrics across tables</p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setChartConfigs((prev) => [
+                      ...prev,
+                      { id: `chart-${prev.length + 1}`, title: "New chart", type: "breakdown", source: "custom", timeRangeMode: timeRange },
+                    ])
+                  }
+                >
+                  + Add chart
+                </Button>
                 {timeRangeOptions.map((range) => (
                   <Button key={range} size="sm" variant={timeRange === range ? "default" : "outline"} onClick={() => setTimeRange(range)}>
                     {timeRangeLabels[range]}
@@ -205,7 +301,7 @@ export default function ManageDashDetail() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {insightConfigs.map((chart) => {
+              {chartConfigs.map((chart) => {
                 const data = buildChartData(chart, timeRange);
                 return (
                   <Card
@@ -235,11 +331,46 @@ export default function ManageDashDetail() {
                 <p className="text-sm text-gray-500">Quick preview of each dataset. Open full table to edit.</p>
               </div>
             </div>
+            <div className="flex items-center justify-between">
+              <div />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setTableConfigs((prev) => [
+                    ...prev,
+                    {
+                      id: `table-${prev.length + 1}`,
+                      title: "New preview",
+                      description: "Custom preview",
+                      actions: [],
+                      columns: [],
+                      sourceTable: mergedTables[0]?.id || "",
+                    },
+                  ])
+                }
+                disabled={!mergedTables.length}
+              >
+                + Add table
+              </Button>
+            </div>
             {hasTables ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {mergedTables.map((table) => (
-                  <TablePreviewCard key={table.id} table={table as DashboardTable} dashboardId={dashId} />
-                ))}
+                {tableConfigs.map((cfg) => {
+                  const table = mergedTables.find((t) => t.id === cfg.sourceTable) || mergedTables[0];
+                  if (!table) return null;
+                  return (
+                    <TablePreviewCard
+                      key={cfg.id}
+                      table={table as DashboardTable}
+                      dashboardId={dashId}
+                      title={cfg.title}
+                      description={cfg.description}
+                      actionsOverride={cfg.actions}
+                      previewColumns={cfg.columns}
+                    />
+                  );
+                })}
               </div>
             ) : (
               <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">No tables were generated for this dashboard.</Card>

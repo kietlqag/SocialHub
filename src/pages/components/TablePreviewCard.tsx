@@ -10,6 +10,10 @@ import { useNavigate } from "react-router-dom";
 type Props = {
   table: DashboardTable;
   dashboardId?: string;
+  title?: string;
+  description?: string;
+  actionsOverride?: string[];
+  previewColumns?: string[];
 };
 
 const SAMPLE_ROWS = 5;
@@ -34,9 +38,18 @@ const buildSampleValue = (field: DashboardField, index: number) => {
   return fallback;
 };
 
-export function TablePreviewCard({ table, dashboardId }: Props) {
+export function TablePreviewCard({ table, dashboardId, title, description, actionsOverride, previewColumns }: Props) {
   const navigate = useNavigate();
-  const fields = table.fields.slice(0, 4); // keep compact columns for narrow cards
+  const fields = useMemo(() => {
+    if (previewColumns && previewColumns.length) {
+      const normalized = previewColumns.map((c) => c.toLowerCase());
+      const selected = table.fields.filter(
+        (f) => normalized.includes((f.id || "").toLowerCase()) || normalized.includes((f.fieldName || "").toLowerCase())
+      );
+      if (selected.length) return selected.slice(0, 4);
+    }
+    return table.fields.slice(0, 4);
+  }, [previewColumns, table.fields]);
 
   const sampleRows = useMemo(
     () =>
@@ -50,8 +63,8 @@ export function TablePreviewCard({ table, dashboardId }: Props) {
     <Card className="p-5 space-y-4 h-full flex flex-col">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="text-base font-semibold text-gray-900 truncate">{table.name}</h4>
-          <p className="text-sm text-gray-500 truncate">{table.description || table.purpose}</p>
+          <h4 className="text-base font-semibold text-gray-900 truncate">{title || table.name}</h4>
+          <p className="text-sm text-gray-500 truncate">{description || table.description || table.purpose}</p>
         </div>
         <Button
           variant="ghost"
@@ -64,7 +77,7 @@ export function TablePreviewCard({ table, dashboardId }: Props) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(table.actions || []).slice(0, 3).map((action) => (
+        {(actionsOverride || table.actions || []).slice(0, 3).map((action) => (
           <Button key={action} variant="outline" size="sm">
             {action}
           </Button>
