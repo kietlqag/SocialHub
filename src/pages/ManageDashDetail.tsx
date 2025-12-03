@@ -2,36 +2,17 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
-import { Checkbox } from "../components/ui/checkbox";
-import {
-  Save,
-  ArrowLeft,
-  LayoutDashboard,
-  CheckCircle2,
-  Download,
-  Upload,
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-  Database,
-  ListChecks,
-  BarChart3,
-  LineChart,
-  PieChart,
-  Activity,
-  PlusSquare,
-} from "lucide-react";
-import { dashboardApi, type Dashboard, type DashboardField, type DashboardTable } from "../services/dashboards";
+import { Save, ArrowLeft, LayoutDashboard, CheckCircle2, Download, Upload, Plus, Search } from "lucide-react";
+import { dashboardApi, type Dashboard, type DashboardTable } from "../services/dashboards";
+import { DashboardOverview } from "../dashboard/DashboardOverview";
+import { TablePreviewCard } from "./components/TablePreviewCard";
+import { buildDomainModel, generateInsightChartsFromDomain, type InsightChartConfig } from "../dashboard/insightGenerator";
 
 type ChartPoint = { label: string; value: number };
-type SampleRecord = { id: string; values: Record<string, string>; tableId?: string };
 type TimeRange = "7d" | "30d" | "12m";
 const timeRangeOptions: TimeRange[] = ["7d", "30d", "12m"];
 
-const SAMPLE_RECORD_COUNT = 10;
 const chartColors = ["#6366F1", "#A855F7", "#14B8A6", "#F97316"];
 const timeRangeLabels: Record<TimeRange, string> = { "7d": "Last 7 days", "30d": "Last 30 days", "12m": "Last 12 months" };
 
@@ -50,33 +31,6 @@ const getTimelineLabels = (range: TimeRange) => {
   if (range === "30d") return ["Week 1", "Week 2", "Week 3", "Week 4"];
   return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 };
-
-const buildSampleValue = (field: DashboardField, index: number) => {
-  if (field.sampleData) return field.sampleData.replace(/\{\{\s*index\s*\}\}/gi, String(index + 1));
-  const fallback = `${field.fieldName || "Field"} ${index + 1}`;
-  const type = field.fieldType?.toLowerCase?.() || "";
-  if (type.includes("date")) {
-    const date = new Date();
-    date.setDate(date.getDate() - index);
-    return date.toLocaleDateString();
-  }
-  if (type.includes("currency") || type.includes("number")) {
-    return Intl.NumberFormat("en-US", { style: type.includes("currency") ? "currency" : "decimal", currency: "USD" }).format(1000 + index * 42);
-  }
-  if (type.includes("email")) {
-    const slug = field.fieldName?.toLowerCase().replace(/[^a-z0-9]/g, "") || "user";
-    return `${slug}${index + 1}@example.com`;
-  }
-  if (type.includes("boolean")) return index % 2 === 0 ? "Yes" : "No";
-  return fallback;
-};
-
-const generateSampleRecords = (fields: DashboardField[], prefix?: string): SampleRecord[] =>
-  Array.from({ length: fields.length ? SAMPLE_RECORD_COUNT : 0 }).map((_, idx) => ({
-    id: `${prefix || "sample"}-${idx + 1}`,
-    tableId: prefix,
-    values: Object.fromEntries(fields.map((field) => [field.id, buildSampleValue(field, idx)])),
-  }));
 
 export default function ManageDashDetail() {
   const { dashId } = useParams();
@@ -144,60 +98,26 @@ export default function ManageDashDetail() {
     );
 
   const safeDashboard = dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] };
-  const fallbackTable: DashboardTable = {
-    id: "ai-preview",
-    name: safeDashboard.name || "Primary dataset",
-    description: safeDashboard.description,
-    purpose: "AI-recommended data collection",
-    actions: ["Add record", "Import data", "Export CSV"],
-    kpis: [{ label: "Preview rows", value: `${SAMPLE_RECORD_COUNT}`, trend: "+4 vs sample" }],
-    recommendedWidgets: ["Operational KPI", "Record freshness"],
-    fields: safeDashboard.fields,
-  };
   const tables = safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : [];
-  const mergedTables = tables.length ? tables : fallbackTable.fields.length ? [fallbackTable] : [];
+  const mergedTables = tables;
 
   const totalTables = mergedTables.length;
   const totalFields = mergedTables.reduce((sum, table) => sum + table.fields.length, 0);
-  const totalActions = mergedTables.reduce((sum, table) => sum + (table.actions?.length || 0), 0);
-  const summaryCards = [
-    { label: "Tables", value: totalTables, icon: LayoutDashboard },
-    { label: "Fields", value: totalFields, icon: Database },
-    { label: "Actions", value: totalActions, icon: ListChecks },
-    { label: "Widgets", value: safeDashboard.widgets?.length || 0, icon: Activity },
-  ];
 
-  const tableKpis = mergedTables.flatMap((table) => (table.kpis || []).map((kpi) => ({ ...kpi, source: table.name })));
-  const fallbackKpis = [
-    { label: "Tables", value: `${totalTables}`, trend: "+2 vs last view", source: "Structure" },
-    { label: "Avg. fields", value: `${totalTables ? Math.round(totalFields / totalTables) : 0}`, trend: "+1 MoM", source: "Schema" },
-  ];
-  const overviewKpis = [...tableKpis, ...fallbackKpis].slice(0, 4);
-
-  const timelineLabels = getTimelineLabels(timeRange);
-  const base = Math.max(40, totalFields * 10 + totalTables * 24);
-  const multiplier = timeRange === "7d" ? 1 : timeRange === "30d" ? 1.25 : 1.8;
-  const lineData: ChartPoint[] = timelineLabels.map((label, index) => ({
-    label,
-    value: Math.round((base * multiplier * (index + 1)) / timelineLabels.length),
-  }));
-
-  const donutData: ChartPoint[] = (() => {
-    const slice = mergedTables.slice(0, 4);
-    if (!slice.length) return [{ label: "Portfolio", value: 1 }];
-    return slice.map((table, index) => ({
-      label: table.name,
-      value: Math.max(1, table.fields.length * 14 + (table.kpis?.length || 0) * 7 + index * 5),
-    }));
-  })();
-
-  const barData: ChartPoint[] = ["New", "In progress", "At risk", "Completed"].map((label, index) => ({
-    label,
-    value: Math.max(12, (index + 1) * 20 + totalFields * 0.7 + totalTables * 2),
-  }));
-
-  const actionTables = mergedTables.slice(0, 3);
   const hasTables = mergedTables.length > 0;
+  const domainModel = buildDomainModel(safeDashboard, mergedTables as DashboardTable[]);
+  const insightConfigs = generateInsightChartsFromDomain(domainModel);
+
+  const selectedTables = mergedTables.map((t) => t.name || t.id || "").filter(Boolean);
+  const projectType = (() => {
+    const normalized = `${safeDashboard.name || ""} ${safeDashboard.description || ""}`.toLowerCase();
+    if (normalized.includes("hospital") || normalized.includes("clinic")) return "hospital";
+    if (normalized.includes("school") || normalized.includes("education") || normalized.includes("class")) return "school";
+    if (normalized.includes("store") || normalized.includes("retail") || normalized.includes("shop") || normalized.includes("sales")) return "store";
+    if (normalized.includes("hr") || normalized.includes("human resource") || normalized.includes("employee")) return "hr";
+    if (normalized.includes("crm") || normalized.includes("deal") || normalized.includes("pipeline")) return "crm";
+    return "crm";
+  })();
 
   const handleCopyCode = async () => {
     if (!safeDashboard?.componentCode) return;
@@ -235,7 +155,6 @@ export default function ManageDashDetail() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge className="bg-primary/10 text-primary">{totalTables} tables</Badge>
                 <Button variant="outline" onClick={handleCopyCode} disabled={!safeDashboard.componentCode}>
                   {copied ? "Code copied" : "Copy layout code"}
                 </Button>
@@ -269,17 +188,7 @@ export default function ManageDashDetail() {
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {summaryCards.map(({ label, value, icon: Icon }) => (
-              <Card key={label} className="p-4">
-                <div className="text-xs uppercase tracking-wider text-gray-500 mb-1 flex items-center gap-2">
-                  <Icon className="w-4 h-4 text-gray-400" />
-                  {label}
-                </div>
-                <div className="text-2xl font-semibold text-gray-900">{value}</div>
-              </Card>
-            ))}
-          </div>
+          <DashboardOverview projectType={projectType} selectedTables={selectedTables} description={safeDashboard.description} />
 
           <section className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -295,83 +204,27 @@ export default function ManageDashDetail() {
                 ))}
               </div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-3">
-              <Card className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1">
-                      <LineChart className="w-4 h-4" />
-                      Revenue trend
-                    </p>
-                    <p className="text-lg font-semibold text-gray-900">Revenue flow</p>
-                  </div>
-                  <span className="text-xs text-green-600">+8% YoY</span>
-                </div>
-                <LineSparkline data={lineData} />
-              </Card>
-              <Card className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1">
-                      <PieChart className="w-4 h-4" />
-                      Revenue mix
-                    </p>
-                    <p className="text-lg font-semibold text-gray-900">Revenue mix</p>
-                  </div>
-                  <span className="text-xs text-gray-500">{donutData.length} segments</span>
-                </div>
-                <DonutChart data={donutData} />
-              </Card>
-              <Card className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1">
-                      <BarChart3 className="w-4 h-4" />
-                      Pipeline health
-                    </p>
-                    <p className="text-lg font-semibold text-gray-900">Deals by status</p>
-                  </div>
-                </div>
-                <ColumnChart data={barData} />
-              </Card>
-            </div>
-          </section>
-
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Action widgets</h3>
-                <p className="text-sm text-gray-500">Quick operations tied to each core table</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {actionTables.map((table) => (
-                <Card key={table.id} className="p-5 border border-dashed border-gray-200 bg-white/70 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{table.name}</p>
-                      <p className="text-xs text-gray-500">{table.description || table.purpose}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {insightConfigs.map((chart) => {
+                const data = buildChartData(chart, timeRange);
+                return (
+                  <Card
+                    key={chart.id}
+                    className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5 h-full min-h-[320px] flex flex-col gap-3 min-w-0"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">{chart.title}</p>
+                        {chart.description && <p className="text-xs text-gray-500">{chart.description}</p>}
+                      </div>
+                      <span className="text-[11px] text-gray-400">{chart.timeRangeMode || timeRangeLabels[timeRange]}</span>
                     </div>
-                    <PlusSquare className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="space-y-2">
-                    {(table.actions || []).slice(0, 3).map((action) => (
-                      <Button key={action} variant="outline" size="sm" className="w-full justify-start">
-                        {action}
-                      </Button>
-                    ))}
-                  </div>
-                  {table.recommendedWidgets?.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {table.recommendedWidgets.map((widget) => (
-                        <Badge key={`${table.id}-${widget}`} className="bg-indigo-50 text-indigo-700 text-xs">
-                          {widget}
-                        </Badge>
-                      ))}
+                    <div className="flex-1 w-full h-[280px] max-h-[300px] flex items-center justify-center min-w-0">
+                      {renderInsightChart(chart, data)}
                     </div>
-                  ) : null}
-                </Card>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           </section>
 
@@ -379,61 +232,18 @@ export default function ManageDashDetail() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Data tables</h3>
-                <p className="text-sm text-gray-500">Search, filter, and edit every dataset</p>
+                <p className="text-sm text-gray-500">Quick preview of each dataset. Open full table to edit.</p>
               </div>
             </div>
             {hasTables ? (
-              <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {mergedTables.map((table) => (
-                  <TableWidget key={table.id} table={table} />
+                  <TablePreviewCard key={table.id} table={table as DashboardTable} dashboardId={dashId} />
                 ))}
               </div>
             ) : (
               <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">No tables were generated for this dashboard.</Card>
             )}
-          </section>
-
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Field definitions</h3>
-                <p className="text-sm text-gray-500">Review every column powering the tables above</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {mergedTables.map((table) => (
-                <Card key={`${table.id}-fields`} className="p-5 border border-gray-100">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{table.name}</p>
-                      <p className="text-xs text-gray-500">{table.description || table.purpose}</p>
-                    </div>
-                    <Badge className="bg-primary/10 text-primary">{table.fields.length} fields</Badge>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3">
-                    {table.fields.map((field) => (
-                      <div key={field.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-gray-900">{field.fieldName}</p>
-                          <span className="text-[11px] uppercase tracking-wide text-indigo-500">{field.fieldType}</span>
-                        </div>
-                        {field.description && <p className="text-xs text-gray-500 mt-1">{field.description}</p>}
-                        {field.sampleData && <p className="text-[11px] text-slate-400 mt-1">Example: {field.sampleData}</p>}
-                      </div>
-                    ))}
-                  </div>
-                  {table.recommendedWidgets?.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {table.recommendedWidgets.map((widget) => (
-                        <Badge key={`${table.id}-${widget}`} className="bg-slate-100 text-slate-700 text-xs">
-                          {widget}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </Card>
-              ))}
-            </div>
           </section>
 
           {error && <div className="text-sm text-red-600">{error}</div>}
@@ -455,40 +265,52 @@ function LineSparkline({ data }: { data: ChartPoint[] }) {
     })
     .join(" ");
   return (
-    <svg viewBox="0 0 100 100" className="w-full h-24">
-      <polyline points={points} fill="none" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" />
+    <svg viewBox="0 0 100 100" className="w-full h-full">
+      <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#6366F1" stopOpacity="0.16" />
+        <stop offset="100%" stopColor="#6366F1" stopOpacity="0" />
+      </linearGradient>
+      <polyline points={points} fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeLinecap="round" />
+      <polygon points={`${points} 100,100 0,100`} fill="url(#lineGradient)" />
       {data.map((point, index) => {
         const x = (index / step) * 100;
         const y = 100 - (point.value / max) * 100;
-        return <circle key={point.label} cx={x} cy={y} r={2.5} fill="#4f46e5" />;
+        return <circle key={point.label} cx={x} cy={y} r={3} fill="#4f46e5" />;
       })}
     </svg>
   );
 }
 
 function DonutChart({ data }: { data: ChartPoint[] }) {
+  if (!data.length) return null;
   const total = data.reduce((sum, item) => sum + item.value, 0) || 1;
-  let start = 0;
-  const segments = data
-    .map((item, index) => {
-      const portion = item.value / total;
-      const end = start + portion;
-      const color = chartColors[index % chartColors.length];
-      const segment = `${color} ${start * 100}% ${end * 100}%`;
-      start = end;
-      return segment;
-    })
-    .join(", ");
-  const gradient = segments.length ? `conic-gradient(${segments})` : "#e5e7eb";
+  let accumulated = 0;
+
   return (
-    <div className="flex items-center gap-4">
-      <div className="relative h-24 w-24 rounded-full" style={{ backgroundImage: gradient }}>
-        <div className="absolute inset-3 bg-white rounded-full" />
-      </div>
+    <div className="flex items-center gap-4 w-full justify-start">
+      <svg viewBox="0 0 140 140" className="h-full w-32">
+        {data.map((item, idx) => {
+          const startAngle = (accumulated / total) * Math.PI * 2;
+          const slice = (item.value / total) * Math.PI * 2;
+          accumulated += item.value;
+          const endAngle = startAngle + slice;
+          const largeArc = slice > Math.PI ? 1 : 0;
+          const radius = 60;
+          const cx = 70;
+          const cy = 70;
+          const startX = cx + radius * Math.cos(startAngle);
+          const startY = cy + radius * Math.sin(startAngle);
+          const endX = cx + radius * Math.cos(endAngle);
+          const endY = cy + radius * Math.sin(endAngle);
+          const d = `M ${cx} ${cy} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
+          return <path key={item.label} d={d} fill={chartColors[idx % chartColors.length]} />;
+        })}
+        <circle cx="70" cy="70" r="36" fill="white" />
+      </svg>
       <div className="space-y-1 text-xs text-gray-600">
         {data.map((item, index) => (
           <div key={item.label} className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: chartColors[index % chartColors.length] }} />
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartColors[index % chartColors.length] }} />
             <span className="text-sm text-gray-900">{item.label}</span>
             <span className="text-xs text-gray-500">{Math.round((item.value / total) * 100)}%</span>
           </div>
@@ -502,135 +324,66 @@ function ColumnChart({ data }: { data: ChartPoint[] }) {
   if (!data.length) return null;
   const max = Math.max(...data.map((item) => item.value), 1);
   return (
-    <div className="flex items-end gap-3 h-32">
-      {data.map((point) => (
-        <div key={point.label} className="flex flex-col items-center gap-2">
-          <div className="flex h-full w-6 items-end">
-            <span className="block w-full rounded-full bg-gradient-to-t from-slate-900 to-slate-500" style={{ height: `${(point.value / max) * 100}%` }} />
+    <div className="flex items-end gap-3 h-full w-full max-w-full">
+      {data.map((point, idx) => (
+        <div key={point.label} className="flex flex-col items-center gap-1 flex-1 min-w-[40px]">
+          <div className="flex h-full w-full items-end">
+            <span
+              className="block w-full rounded-md bg-gradient-to-t from-indigo-500 to-indigo-400"
+              style={{ height: `${(point.value / max) * 100}%` }}
+            />
           </div>
-          <span className="text-[11px] text-gray-500">{point.label}</span>
+          <span className="text-[11px] text-gray-500 text-center truncate w-full">{point.label}</span>
         </div>
       ))}
     </div>
   );
 }
 
-interface TableWidgetProps {
-  table: DashboardTable;
+function buildChartData(config: InsightChartConfig, range: TimeRange): ChartPoint[] {
+  if (config.type === "timeSeries") {
+    const labels = getTimelineLabels(range);
+    return labels.map((label, idx) => ({ label, value: Math.max(5, (idx + 1) * 10 + Math.floor(Math.random() * 20)) }));
+  }
+
+  const pickGroups = (): string[] => {
+    const key = (config.groupByField || config.title).toLowerCase();
+    if (key.includes("status") || key.includes("stage")) return ["New", "In progress", "Completed", "On hold"];
+    if (key.includes("owner") || key.includes("team")) return ["Team A", "Team B", "Team C"];
+    if (key.includes("category")) return ["Category A", "Category B", "Category C", "Category D"];
+    if (key.includes("department")) return ["ER", "ICU", "Ward", "Lab"];
+    return ["Segment A", "Segment B", "Segment C"];
+  };
+
+  if (config.type === "funnel") {
+    const steps = ["Stage 1", "Stage 2", "Stage 3", "Stage 4"];
+    let current = 100;
+    return steps.map((step) => {
+      current = Math.max(8, Math.round(current * (0.5 + Math.random() * 0.25)));
+      return { label: step, value: current };
+    });
+  }
+
+  const groups = pickGroups();
+  return groups.map((g) => ({ label: g, value: Math.max(10, Math.round(Math.random() * 80 + 20)) }));
 }
 
-function TableWidget({ table }: TableWidgetProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const sampleRecords = generateSampleRecords(table.fields as DashboardField[], table.id);
-  const filteredRecords = !searchTerm.trim()
-    ? sampleRecords
-    : sampleRecords.filter((record) => Object.values(record.values).some((value) => value.toLowerCase().includes(searchTerm.toLowerCase())));
-  const filteredIds = filteredRecords.map((record) => record.id);
-  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
-
-  const toggleRecordSelection = (recordId: string) => {
-    setSelectedIds((prev) => (prev.includes(recordId) ? prev.filter((id) => id !== recordId) : [...prev, recordId]));
-  };
-
-  const toggleSelectAll = () => {
-    setSelectedIds((prev) => {
-      if (allFilteredSelected) return prev.filter((id) => !filteredIds.includes(id));
-      const merged = new Set([...prev, ...filteredIds]);
-      return Array.from(merged);
-    });
-  };
-
+function renderInsightChart(config: InsightChartConfig, data: ChartPoint[]) {
+  if (config.type === "timeSeries")
+    return (
+      <div className="w-full h-full flex items-center">
+        <LineSparkline data={data} />
+      </div>
+    );
+  if (config.type === "breakdown")
+    return (
+      <div className="w-full h-full flex items-center">
+        <DonutChart data={data} />
+      </div>
+    );
   return (
-    <Card className="border border-gray-100 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-gray-900">{table.name}</p>
-          <p className="text-xs text-gray-500">{table.description || table.purpose}</p>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-          {(table.actions || []).slice(0, 3).map((action) => (
-            <Badge key={action} className="bg-gray-100 text-gray-700">
-              {action}
-            </Badge>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex-1 min-w-[220px] relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input placeholder="Search records..." value={searchTerm} onChange={(e) => setSearchTerm((e.target as HTMLInputElement).value)} className="pl-10" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm">
-            Export
-          </Button>
-          <Button variant="outline" size="sm">
-            Import
-          </Button>
-          <Button size="sm" className="gap-1">
-            <Plus className="w-4 h-4" />
-            Add record
-          </Button>
-        </div>
-      </div>
-      <div className="overflow-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600 uppercase tracking-wide text-xs">
-            <tr>
-              <th className="px-4 py-3 text-left w-12">
-                <Checkbox checked={allFilteredSelected} onCheckedChange={toggleSelectAll} />
-              </th>
-              <th className="px-4 py-3 text-left w-32">Actions</th>
-              {table.fields.map((field) => (
-                <th key={field.id} className="px-4 py-3 text-left whitespace-nowrap border-l border-gray-100">
-                  {field.fieldName}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filteredRecords.map((record) => (
-              <tr key={record.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <Checkbox checked={selectedIds.includes(record.id)} onCheckedChange={() => toggleRecordSelection(record.id)} />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500">
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </td>
-                {table.fields.map((field) => (
-                  <td key={`${record.id}-${field.id}`} className="px-4 py-3 text-gray-700 border-l border-gray-50">
-                    {record.values[field.id]}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex items-center justify-between px-4 py-3 text-xs text-gray-500 border-t border-gray-100">
-        <span>
-          Showing {filteredRecords.length} of {sampleRecords.length} records
-        </span>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="text-gray-500" disabled>
-            Previous
-          </Button>
-          <Button variant="default" size="sm" className="px-3">
-            1
-          </Button>
-          <Button variant="ghost" size="sm" className="text-gray-500" disabled>
-            Next
-          </Button>
-        </div>
-      </div>
-    </Card>
+    <div className="w-full h-full flex items-center">
+      <ColumnChart data={data} />
+    </div>
   );
 }
