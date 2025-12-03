@@ -1,3 +1,5 @@
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
 import { Features } from "./components/Features";
@@ -7,210 +9,159 @@ import { Footer } from "./components/Footer";
 import { Login } from "./pages/Login";
 import { SignUp } from "./pages/SignUp";
 import { AIConversation } from "./pages/AIConversation";
-import { useCallback, useState, useEffect } from "react";
-import {
-  AuthUser,
-  getCurrentSession,
-  clearSession,
-  fetchMe,
-  persistSession,
-} from "./services/auth";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { NotificationPage } from "./pages/NotificationPage";
 import Profile from "./pages/Profile";
-import ManageDash from "./pages/ManageDash";
+import ManageDashList from "./pages/ManageDashList";
+import ManageDashDetail from "./pages/ManageDashDetail";
+import { clearSession, fetchMe, getCurrentSession, type AuthUser } from "./services/auth";
 
-type View =
-  | "home"
-  | "login"
-  | "register"
-  | "chat"
-  | "settings"
-  | "notifications"
-  | "profile"
-  | "managedash";
-
-const VIEW_PATH: Record<View, string> = {
-  home: "/home",
-  login: "/login",
-  register: "/register",
-  chat: "/chat",
-  settings: "/settings",
-  notifications: "/notifications",
-  profile: "/profile",
-  managedash: "/managedash",
+const Landing = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLogout: () => void }) => {
+  const navigate = useNavigate();
+  return (
+    <div className="min-h-screen bg-white">
+      <Header
+        onChatOpen={() => navigate("/chat")}
+        onLoginOpen={() => navigate("/login")}
+        onSignUpOpen={() => navigate("/register")}
+        onProfileOpen={() => navigate("/profile")}
+        onSettingsOpen={() => navigate("/settings")}
+        onManageDash={() => navigate("/managedash")}
+        currentUser={currentUser}
+        onLogout={onLogout}
+      />
+      <main>
+        <Hero onLoginOpen={() => navigate("/login")} onSignUpOpen={() => navigate("/register")} isAuthenticated={!!currentUser} />
+        <Features />
+        <Testimonials />
+        <Pricing />
+      </main>
+      <Footer />
+    </div>
+  );
 };
 
-export default function App() {
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isSignUpOpen, setIsSignUpOpen] = useState(false);
-  const [isAIConversationOpen, setIsAIConversationOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isManageDashOpen, setIsManageDashOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-
-  const setView = useCallback(
-    (view: View, options?: { replace?: boolean }) => {
-      setIsLoginOpen(view === "login");
-      setIsSignUpOpen(view === "register");
-      setIsAIConversationOpen(view === "chat");
-      setIsSettingsOpen(view === "settings");
-      setIsNotificationsOpen(view === "notifications");
-      setIsProfileOpen(view === "profile");
-      setIsManageDashOpen(view === "managedash");
-
-      const targetPath = VIEW_PATH[view];
-      if (window.location.pathname !== targetPath) {
-        const method = options?.replace ? "replaceState" : "pushState";
-        window.history[method]({}, "", targetPath);
-      }
-    },
-    []
+const LoginPage = ({ onLoginSuccess }: { onLoginSuccess: (user: AuthUser) => void }) => {
+  const navigate = useNavigate();
+  return (
+    <Login
+      onBack={() => navigate("/")}
+      onSwitchToSignUp={() => navigate("/register")}
+      onSuccess={(user) => {
+        onLoginSuccess(user);
+        navigate("/home");
+      }}
+    />
   );
+};
 
-  const applyPathToView = useCallback(() => {
-    const path = window.location.pathname;
-    if (path === VIEW_PATH.login) setView("login", { replace: true });
-    else if (path === VIEW_PATH.register) setView("register", { replace: true });
-    else if (path === VIEW_PATH.chat) setView("chat", { replace: true });
-    else if (path === VIEW_PATH.settings) setView("settings", { replace: true });
-    else if (path === VIEW_PATH.notifications)
-      setView("notifications", { replace: true });
-    else if (path === VIEW_PATH.profile)
-      setView("profile", { replace: true });
-    else if (path === VIEW_PATH.managedash)
-      setView("managedash", { replace: true });
-    else setView("home", { replace: true });
-  }, [setView]);
+const SignUpPage = ({ onLoginSuccess }: { onLoginSuccess: (user: AuthUser) => void }) => {
+  const navigate = useNavigate();
+  return (
+    <SignUp
+      onBack={() => navigate("/")}
+      onSwitchToLogin={() => navigate("/login")}
+      onSuccess={(user) => {
+        onLoginSuccess(user);
+        navigate("/home");
+      }}
+    />
+  );
+};
+
+const ChatPage = () => {
+  const navigate = useNavigate();
+  return <AIConversation onBack={() => navigate("/")} />;
+};
+
+const SettingsPage = () => {
+  const navigate = useNavigate();
+  return <ProfileSettings onBack={() => navigate("/")} onLogout={() => navigate("/")} />;
+};
+
+const NotificationsPage = () => {
+  const navigate = useNavigate();
+  return <NotificationPage onBack={() => navigate("/")} />;
+};
+
+const RequireAuth = ({ user, children }: { user: AuthUser | null; children: JSX.Element }) => {
+  const location = useLocation();
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return children;
+};
+
+function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
     const session = getCurrentSession();
-    if (session?.user && session?.token) {
+    if (session?.token) {
+      if (session.user) {
+        setCurrentUser(session.user);
+      }
       fetchMe(session.token)
         .then((res) => setCurrentUser(res.user))
-        .catch(() => clearSession());
+        .catch(() => {
+          clearSession();
+          setCurrentUser(null);
+        })
+        .finally(() => setCheckingSession(false));
+    } else {
+      setCheckingSession(false);
     }
   }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tokenFromOAuth = params.get("token");
-    if (tokenFromOAuth) {
-      fetchMe(tokenFromOAuth)
-        .then((res) => {
-          persistSession({ token: tokenFromOAuth, user: res.user }, true);
-          setCurrentUser(res.user);
-          setView("home", { replace: true });
-        })
-        .finally(() => {
-          params.delete("token");
-          const newQuery = params.toString();
-          const newUrl = `${window.location.pathname}${
-            newQuery ? `?${newQuery}` : ""
-          }${window.location.hash}`;
-          window.history.replaceState({}, "", newUrl);
-        });
-    }
-  }, [setView]);
-
-  useEffect(() => {
-    applyPathToView();
-    const onPopstate = () => applyPathToView();
-    window.addEventListener("popstate", onPopstate);
-    return () => window.removeEventListener("popstate", onPopstate);
-  }, [applyPathToView]);
-
-  const handleLoginSuccess = (user: AuthUser) => {
-    setCurrentUser(user);
-    setView("home");
-  };
 
   const handleLogout = () => {
     clearSession();
     setCurrentUser(null);
-    setView("home");
   };
 
-  const isHomeView =
-    !isLoginOpen &&
-    !isSignUpOpen &&
-    !isAIConversationOpen &&
-    !isSettingsOpen &&
-    !isNotificationsOpen &&
-    !isProfileOpen &&
-    !isManageDashOpen;
+  const handleLoginSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+  };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-600">
+        Loading...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-white">
-      {isAIConversationOpen ? (
-        <AIConversation onBack={() => setView("home")} />
-      ) : isSignUpOpen ? (
-        <SignUp
-          onBack={() => setView("home")}
-          onSwitchToLogin={() => setView("login")}
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing currentUser={currentUser} onLogout={handleLogout} />} />
+        <Route path="/home" element={<Landing currentUser={currentUser} onLogout={handleLogout} />} />
+        <Route path="/login" element={<LoginPage onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/register" element={<SignUpPage onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route
+          path="/managedash"
+          element={
+            <RequireAuth user={currentUser}>
+              <ManageDashList />
+            </RequireAuth>
+          }
         />
-      ) : isLoginOpen ? (
-        <Login
-          onBack={() => setView("home")}
-          onSwitchToSignUp={() => setView("register")}
-          onSuccess={handleLoginSuccess}
+        <Route
+          path="/managedash/:dashId"
+          element={
+            <RequireAuth user={currentUser}>
+              <ManageDashDetail />
+            </RequireAuth>
+          }
         />
-      ) : isProfileOpen ? (
-        <Profile />
-      ) : isSettingsOpen ? (
-        <ProfileSettings onBack={() => setView("home")} onLogout={handleLogout} />
-      ) : isNotificationsOpen ? (
-        <NotificationPage onBack={() => setView("home")} />
-      ) : isManageDashOpen ? (
-        <>
-          <Header
-            onChatOpen={() => setView("chat")}
-            onLoginOpen={() => setView("login")}
-            onSignUpOpen={() => setView("register")}
-            onProfileOpen={() => setView("profile")}
-            onSettingsOpen={() => setView("settings")}
-            onManageDash={() => setView("managedash")}
-            currentUser={currentUser}
-            onLogout={handleLogout}
-          />
-
-          <main>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-              <ManageDash />
-            </div>
-          </main>
-
-          <Footer />
-        </>
-      ) : isHomeView ? (
-        <>
-          <Header
-            onChatOpen={() => setView("chat")}
-            onLoginOpen={() => setView("login")}
-            onSignUpOpen={() => setView("register")}
-            onProfileOpen={() => setView("profile")}
-            onSettingsOpen={() => setView("settings")}
-            onManageDash={() => setView("managedash")}
-            currentUser={currentUser}
-            onLogout={handleLogout}
-          />
-
-          <main>
-            <Hero
-              onLoginOpen={() => setView("login")}
-              onSignUpOpen={() => setView("register")}
-              isAuthenticated={!!currentUser}
-            />
-            <Features />
-            <Testimonials />
-            <Pricing />
-          </main>
-
-          <Footer />
-        </>
-      ) : null}
-    </div>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
+
+export default App;
