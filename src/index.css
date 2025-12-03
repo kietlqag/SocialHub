@@ -3262,3 +3262,14 @@ html {
 .dark .active-conversation * {
   color: #f8fafc !important;
 }
+
+.manage-dash-wrapper {
+  min-height: 100vh;
+  overflow-y: auto;
+}
+
+html,
+body {
+  height: auto !important;
+  overflow-y: auto !important;
+}

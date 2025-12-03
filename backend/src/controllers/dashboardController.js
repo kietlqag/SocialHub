@@ -19,11 +19,11 @@ export async function generateStructure(req, res) {
 
 export async function createDashboard(req, res) {
   const owner = parseOwner(req);
-  const { name, description, fields, widgets, componentCode } = req.body;
+  const { name, description, fields, widgets, componentCode, tables } = req.body;
   if (!owner.sessionId && !owner.userId) {
     throw new HttpError(400, "sessionId or userId required");
   }
-  const dashboard = await saveDashboard({ ...owner, name, description, fields, widgets, componentCode });
+  const dashboard = await saveDashboard({ ...owner, name, description, fields, widgets, componentCode, tables });
   res.status(201).json({ dashboard });
 }
 

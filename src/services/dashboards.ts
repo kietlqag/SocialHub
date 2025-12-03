@@ -18,12 +18,24 @@ export type DashboardWidget = {
   codeSnippet: string;
 };
 
+export type DashboardTable = {
+  id: string;
+  name: string;
+  description?: string;
+  purpose?: string;
+  actions?: string[];
+  kpis?: { label: string; value: string; trend?: string }[];
+  recommendedWidgets?: string[];
+  fields: DashboardField[];
+};
+
 export type Dashboard = {
   id: string;
   name: string;
   description?: string;
   fields: DashboardField[];
   widgets?: DashboardWidget[];
+  tables?: DashboardTable[];
   componentCode?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -31,6 +43,7 @@ export type Dashboard = {
 
 export type GeneratedDashboardStructure = {
   fields: DashboardField[];
+  tables: DashboardTable[];
   widgets: DashboardWidget[];
   componentCode: string;
 };
@@ -52,6 +65,7 @@ export const dashboardApi = {
     sessionId: string;
     userId?: string | null;
     widgets?: DashboardWidget[];
+    tables?: DashboardTable[];
     componentCode?: string;
   }) => api.post<{ dashboard: Dashboard }>("/dashboards", payload),
   list: (sessionId: string, userId?: string | null) =>

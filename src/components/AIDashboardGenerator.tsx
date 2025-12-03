@@ -24,7 +24,12 @@ import {
   Database,
 } from "lucide-react";
 import { cn } from "./ui/utils";
-import { dashboardApi, type DashboardField, type DashboardWidget } from "../services/dashboards";
+import {
+  dashboardApi,
+  type DashboardField,
+  type DashboardTable,
+  type DashboardWidget,
+} from "../services/dashboards";
 
 interface AIDashboardGeneratorProps {
   isOpen: boolean;
@@ -45,6 +50,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedFields, setGeneratedFields] = useState<DashboardField[]>([]);
   const [generatedWidgets, setGeneratedWidgets] = useState<DashboardWidget[]>([]);
+  const [generatedTables, setGeneratedTables] = useState<DashboardTable[]>([]);
   const [componentCode, setComponentCode] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,10 +73,16 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
     setIsGenerating(true);
     try {
       const res = await dashboardApi.generate({ name: dashboardName, description });
-      setGeneratedFields(res.fields);
-      setGeneratedWidgets(res.widgets || []);
-      setComponentCode(res.componentCode || "");
-      setStep("review");
+      onCreateDashboard?.({
+        name: dashboardName.trim(),
+        description: description.trim(),
+        fields: res.fields,
+        widgets: res.widgets || [],
+        tables: res.tables || [],
+        componentCode: res.componentCode || "",
+      });
+      setGeneratedTables(res.tables || []);
+      handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate dashboard");
     } finally {
@@ -106,6 +118,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
       description,
       fields: generatedFields,
       widgets: generatedWidgets,
+      tables: generatedTables,
       componentCode,
     });
     handleClose();
@@ -117,6 +130,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
     setDashboardName("");
     setGeneratedFields([]);
     setGeneratedWidgets([]);
+    setGeneratedTables([]);
     setComponentCode("");
     setCopied(false);
     setIsGenerating(false);
