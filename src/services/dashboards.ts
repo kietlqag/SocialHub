@@ -1,12 +1,15 @@
 import { api } from "./api";
 
 export type DashboardField = {
-  id: string;
-  fieldName: string;
-  fieldType: string;
+  id?: string;
+  key?: string;
+  name?: string;
+  fieldName?: string;
+  fieldType?: string;
+  type?: string;
   description?: string;
   sampleData?: string;
-  required: boolean;
+  required?: boolean;
 };
 
 export type DashboardWidget = {
@@ -19,7 +22,8 @@ export type DashboardWidget = {
 };
 
 export type DashboardTable = {
-  id: string;
+  id?: string;
+  key?: string;
   name: string;
   description?: string;
   purpose?: string;
@@ -34,20 +38,47 @@ export type Dashboard = {
   id: string;
   name: string;
   description?: string;
-  fields: DashboardField[];
+  fields?: DashboardField[];
   widgets?: DashboardWidget[];
   tables?: DashboardTable[];
   componentCode?: string;
   type?: string;
   createdAt?: string;
   updatedAt?: string;
+  relationships?: Array<{
+    fromTableKey: string;
+    fromFieldKey: string;
+    toTableKey: string;
+    toFieldKey: string;
+    type: string;
+  }>;
+  ui?: {
+    defaultTableKey?: string;
+    tableDropdownOrder?: string[];
+    emptyStateText?: string;
+  };
 };
 
 export type GeneratedDashboardStructure = {
-  fields: DashboardField[];
+  dashboardId: string;
+  name: string;
+  type?: string;
+  description?: string;
   tables: DashboardTable[];
-  widgets: DashboardWidget[];
-  componentCode: string;
+  relationships?: Array<{
+    fromTableKey: string;
+    fromFieldKey: string;
+    toTableKey: string;
+    toFieldKey: string;
+    type: string;
+  }>;
+  ui?: {
+    defaultTableKey?: string;
+    tableDropdownOrder?: string[];
+    emptyStateText?: string;
+  };
+  widgets?: DashboardWidget[];
+  componentCode?: string;
 };
 
 type InferredSchema = {
@@ -69,7 +100,15 @@ const withOwnerParams = (sessionId: string, userId?: string) => {
 };
 
 export const dashboardApi = {
-  generate: (payload: { name: string; description: string; type?: string; fileProvided?: boolean; inferredSchema?: InferredSchema }) =>
+  generate: (payload: {
+    name: string;
+    description: string;
+    type?: string;
+    sessionId: string;
+    userId?: string | null;
+    fileProvided?: boolean;
+    inferredSchema?: InferredSchema;
+  }) =>
     api.post<GeneratedDashboardStructure>("/dashboards/generate", payload),
   create: (payload: {
     name: string;

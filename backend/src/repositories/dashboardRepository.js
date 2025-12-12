@@ -6,11 +6,8 @@ const collection = () => getSocialhubDb().collection("dashboards");
 const mapDashboard = (doc) => ({
   id: doc._id.toString(),
   name: doc.name,
+  type: doc.type || "",
   description: doc.description || "",
-  fields: doc.fields || [],
-  widgets: doc.widgets || [],
-  tables: doc.tables || [],
-  componentCode: doc.componentCode || "",
   sessionId: doc.sessionId || null,
   userId: doc.userId || null,
   createdAt: doc.createdAt,
@@ -26,8 +23,11 @@ const ownerFilter = ({ sessionId, userId }) => {
 export async function insertDashboard(doc) {
   const now = new Date();
   const payload = {
-    ...doc,
-    tables: doc.tables || [],
+    name: doc.name,
+    type: doc.type || "",
+    description: doc.description || "",
+    sessionId: doc.sessionId || null,
+    userId: doc.userId || null,
     createdAt: now,
     updatedAt: now,
   };

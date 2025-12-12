@@ -18,9 +18,11 @@ type Props = {
 
 const SAMPLE_ROWS = 5;
 
+const displayFieldName = (field: DashboardField) => field.fieldName || (field as any).name || field.key || field.id || "Field";
+
 const buildSampleValue = (field: DashboardField, index: number) => {
   if (field.sampleData) return field.sampleData.replace(/\{\{\s*index\s*\}\}/gi, String(index + 1));
-  const fallback = `${field.fieldName || "Field"} ${index + 1}`;
+  const fallback = `${displayFieldName(field)} ${index + 1}`;
   const type = field.fieldType?.toLowerCase?.() || "";
   if (type.includes("date")) {
     const date = new Date();
@@ -96,8 +98,8 @@ export function TablePreviewCard({ table, dashboardId, title, description, actio
               <thead className="text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   {fields.map((field) => (
-                    <th key={field.id} className="px-3 py-2 text-left whitespace-nowrap">
-                      {field.fieldName}
+                    <th key={field.id || field.key || displayFieldName(field)} className="px-3 py-2 text-left whitespace-nowrap">
+                      {displayFieldName(field)}
                     </th>
                   ))}
                 </tr>
@@ -106,8 +108,8 @@ export function TablePreviewCard({ table, dashboardId, title, description, actio
                 {sampleRows.map((row, idx) => (
                   <tr key={idx} className="hover:bg-white">
                     {fields.map((field) => (
-                      <td key={field.id} className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                        {row[field.id]}
+                      <td key={field.id || field.key || displayFieldName(field)} className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                        {row[field.id || field.key || ""]}
                       </td>
                     ))}
                   </tr>

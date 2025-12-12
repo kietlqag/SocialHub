@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { ArrowLeft, LayoutDashboard, BarChart3, Table } from "lucide-react";
+import { ArrowLeft, BarChart3, Table } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardTable } from "../services/dashboards";
 import { buildDomainModel, generateInsightChartsFromDomain, type InsightChartConfig } from "../dashboard/insightGenerator";
 import { useDynamicDashboardMetrics } from "../dashboard/useDynamicDashboardMetrics";
@@ -90,17 +90,28 @@ export default function ManageDashDetail() {
   const hasData = mergedTables.some((t) => Array.isArray((t as any).sampleRows) && (t as any).sampleRows.length > 0);
 
   const totalTables = mergedTables.length;
-  const totalFields = mergedTables.reduce((sum, table) => sum + table.fields.length, 0);
+  const totalFields = mergedTables.reduce((sum, table) => sum + (table.fields?.length || 0), 0);
   const totalInsights = chartConfigs.length;
-  const tableOptions = [
-    { id: "customers", title: "Customers & Clients", description: "A 360° view of leads, accounts, and key contacts.", count: 98 },
-    { id: "orders", title: "Orders / Contracts", description: "Track orders, contracts, and fulfillment.", count: 34 },
-    { id: "projects", title: "Projects / Campaigns", description: "Strategic initiatives and campaigns.", count: 12 },
-    { id: "finance", title: "Finance / Revenue", description: "Financial and revenue performance.", count: 7 },
-  ];
-  const [activeTableId, setActiveTableId] = useState<string>(tableOptions[0].id);
+  const tableOptions = useMemo(
+    () =>
+      mergedTables.map((table, idx) => ({
+        id: table.key || table.id || `table-${idx}`,
+        title: table.name || `Table ${idx + 1}`,
+        description: table.description || table.purpose || "",
+        count: Array.isArray((table as any).sampleRows) ? (table as any).sampleRows.length : 0,
+        ref: table,
+      })),
+    [mergedTables],
+  );
+  const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [tablesMenuOpen, setTablesMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!tableOptions.length) return;
+    if (!activeTableId || !tableOptions.some((t) => t.id === activeTableId)) {
+      setActiveTableId(tableOptions[0].id);
+    }
+  }, [tableOptions, activeTableId]);
   const domainModel = useMemo(() => buildDomainModel(safeDashboard, mergedTables as DashboardTable[]), [safeDashboard, mergedTables]);
   const defaultInsights = useMemo(() => generateInsightChartsFromDomain(domainModel), [domainModel]);
   const selectedTables = useMemo(() => mergedTables.map((t) => t.name || t.id || "").filter(Boolean), [mergedTables]);
@@ -148,16 +159,26 @@ export default function ManageDashDetail() {
     setChartConfigs(nextCharts);
   }, [defaultInsights, hasData]);
 
+  const displayFieldName = (field: any) => field.fieldName || field.name || field.key || field.id || "Field";
+  const getVisibleFields = (fields: any[] = []) =>
+    fields.filter((f) => {
+      const key = (f.key || f.fieldName || f.name || "").toString().toLowerCase();
+      return key && key !== "_id" && key !== "created_at" && key !== "updated_at";
+    });
+
   useEffect(() => {
     setTableConfigs(
-      mergedTables.map((table) => ({
-        id: table.id,
-        title: table.name,
-        description: table.description || table.purpose,
-        actions: (table.actions || []).slice(0, 3),
-        columns: table.fields.slice(0, 4).map((f) => f.fieldName || f.id),
-        sourceTable: table.id,
-      }))
+      mergedTables.map((table, idx) => {
+        const visibleFields = getVisibleFields(table.fields || []);
+        return {
+          id: table.id || table.key || `table-${idx}`,
+          title: table.name,
+          description: table.description || table.purpose,
+          actions: (table.actions || []).slice(0, 3),
+          columns: visibleFields.slice(0, 4).map((f) => displayFieldName(f)),
+          sourceTable: table.id || table.key || `table-${idx}`,
+        };
+      }),
     );
   }, [mergedTables]);
 
@@ -173,51 +194,70 @@ export default function ManageDashDetail() {
   };
 
 const renderContent = () => {
-    if (activeSection === "overview") {
-      return <OverviewContent kpis={overviewKpis} range={timeRange} colors={chartColors} />;
-    }
-    if (activeSection === "insights") {
-      return (
-        <InsightsContent
-          charts={chartConfigs}
-          renderChart={renderInsightChart}
-          buildChartData={buildChartData}
-          range={timeRange}
-          rangeLabel={timeRangeLabels[timeRange]}
-        />
-      );
-    }
-    if (activeSection === "tables") {
-      const activeTable = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
-      return (
-        <div className="space-y-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900">{activeTable.title}</h2>
-              <p className="text-sm text-gray-600">{activeTable.description}</p>
-            </div>
-            <Button variant="ghost" className="text-sm text-gray-700">
-              View all →
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary">Add record</Button>
-            <Button variant="outline">Segment</Button>
-            <Button variant="outline">Update</Button>
-          </div>
-          <div className="relative max-w-md">
-            <Input placeholder="Search preview..." className="pl-10" />
-          </div>
-          <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">No sample data</Card>
-        </div>
-      );
-    }
+  if (activeSection === "overview") {
     return <OverviewContent kpis={overviewKpis} range={timeRange} colors={chartColors} />;
-  };
+  }
+  if (activeSection === "insights") {
+    return (
+      <InsightsContent
+        charts={chartConfigs}
+        renderChart={renderInsightChart}
+        buildChartData={buildChartData}
+        range={timeRange}
+        rangeLabel={timeRangeLabels[timeRange]}
+      />
+    );
+  }
+  if (activeSection === "tables") {
+    if (!tableOptions.length) {
+      return <Card className="p-8 text-center text-gray-500 border border-dashed border-gray-200">No tables available</Card>;
+    }
+    const activeOption = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
+    const activeTable = activeOption.ref;
+    const visibleFields = getVisibleFields(activeTable?.fields || []);
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900">{activeOption.title}</h2>
+            <p className="text-sm text-gray-600">{activeOption.description || "No description"}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(activeTable?.actions && activeTable.actions.length ? activeTable.actions : ["Add record", "Segment", "Update"])
+            .slice(0, 3)
+            .map((action) => (
+              <Button key={action} variant="outline">
+                {action}
+              </Button>
+            ))}
+        </div>
+        <div className="relative max-w-md">
+          <Input placeholder="Search preview..." className="pl-10" />
+        </div>
+        <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">
+          {safeDashboard.ui?.emptyStateText || "No sample data"}
+        </Card>
+        {visibleFields.length ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {visibleFields.slice(0, 4).map((field) => (
+              <Card key={field.key || field.id} className="p-4">
+                <div className="text-sm font-semibold text-gray-900">{displayFieldName(field)}</div>
+                <div className="text-xs text-gray-500 capitalize">{field.fieldType || (field as any).type || "Text"}</div>
+              </Card>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  return <OverviewContent kpis={overviewKpis} range={timeRange} colors={chartColors} />;
+};
 
   const sidebarItems = [
     { id: "overview", label: "Overview", icon: BarChart3, count: overviewKpis.length },
     { id: "insights", label: "Insights", icon: BarChart3, count: totalInsights },
+    { id: "tables", label: "Tables", icon: Table, count: tableOptions.length },
   ];
 
   if (!dashId) {
@@ -267,7 +307,7 @@ const renderContent = () => {
         tableDropdown={{
           label: "Tables",
           icon: Table,
-          count: totalTables || tableOptions.length,
+          count: tableOptions.length,
           open: tablesMenuOpen,
           onToggle: () => setTablesMenuOpen((v) => !v),
           content: (

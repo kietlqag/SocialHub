@@ -4,6 +4,7 @@ import {
   saveDashboard,
   listDashboards,
   removeDashboard,
+  generateAndPersistDashboard,
 } from "../services/dashboardService.js";
 
 const parseOwner = (req) => ({
@@ -12,8 +13,12 @@ const parseOwner = (req) => ({
 });
 
 export async function generateStructure(req, res) {
-  const { name, description } = req.body;
-  const structure = await generateDashboardFields({ name, description });
+  const { name, description, type, sessionId, userId } = req.body;
+  const owner = {
+    sessionId: sessionId || req.query.sessionId || null,
+    userId: userId || req.query.userId || null,
+  };
+  const structure = await generateAndPersistDashboard({ name, type, description, ...owner });
   res.json(structure);
 }
 

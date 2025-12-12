@@ -38,13 +38,20 @@ const getSessionId = () => {
 };
 
 type DraftDashboard = {
+  id?: string;
   name: string;
   description: string;
   fields: DashboardField[];
   widgets?: Dashboard["widgets"];
   tables?: Dashboard["tables"];
   componentCode?: string;
+  relationships?: any[];
   type?: string;
+  ui?: {
+    defaultTableKey?: string;
+    tableDropdownOrder?: string[];
+    emptyStateText?: string;
+  };
 };
 
 type DecoratedDashboard = Dashboard & {
@@ -115,6 +122,35 @@ export default function ManageDashList() {
 
   const handleCreateDashboard = async (data: DraftDashboard) => {
     if (!sessionId) return;
+    if (data.id) {
+      const sanitizedTables = (data.tables || []).map((t) => ({ ...t, sampleRows: [] }));
+      const derivedFields =
+        data.fields && data.fields.length
+          ? data.fields
+          : sanitizedTables.flatMap((table, tableIdx) =>
+              (table.fields || []).map((f, fieldIdx) => ({
+                ...f,
+                id: f.id || `${table.key || table.id || tableIdx}-${f.key || fieldIdx}`,
+                fieldName: f.fieldName || f.name || f.key || `Field ${fieldIdx + 1}`,
+                fieldType: f.fieldType || f.type || "Text",
+              })),
+            );
+      const sanitizedDashboard = {
+        id: data.id,
+        name: data.name,
+        description: data.description || "",
+        fields: derivedFields,
+        widgets: data.widgets || [],
+        tables: sanitizedTables,
+        componentCode: data.componentCode || "",
+        type: data.type,
+        relationships: data.relationships || [],
+        ui: data.ui,
+      } as Dashboard;
+      setDashboards((prev) => [sanitizedDashboard, ...prev]);
+      navigate(`/managedash/${data.id}`);
+      return;
+    }
     try {
       const res = await dashboardApi.create({
         name: data.name,
@@ -167,11 +203,12 @@ export default function ManageDashList() {
   };
 
   const derivedDashboards: DecoratedDashboard[] = dashboards.map((d, index) => {
-    const fieldCount = d.fields?.length || 0;
+    const tableFields = Array.isArray(d.tables) ? d.tables.flatMap((t) => t.fields || []) : [];
+    const fieldCount = d.fields?.length ? d.fields.length : tableFields.length;
     const widgetCount = Array.isArray(d.widgets) ? d.widgets.length : 0;
     const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
-    const overviewCount = widgetCount > 0 ? Math.max(1, Math.min(4, widgetCount)) : 4;
-    const insightsCount = widgetCount > 0 ? Math.min(widgetCount, 2) : 3;
+    const overviewCount = 4;
+    const insightsCount = widgetCount > 0 ? Math.min(widgetCount, 4) : Math.max(1, Math.min(4, tableCount));
     return {
       ...d,
       fieldCount,
@@ -417,7 +454,13 @@ export default function ManageDashList() {
         {error && <div className="text-sm text-red-600">{error}</div>}
       </main>
 
-      <AIDashboardGenerator isOpen={generatorOpen} onClose={() => setGeneratorOpen(false)} onCreateDashboard={handleCreateDashboard} />
+      <AIDashboardGenerator
+        isOpen={generatorOpen}
+        onClose={() => setGeneratorOpen(false)}
+        onCreateDashboard={handleCreateDashboard}
+        sessionId={sessionId}
+        userId={currentUser?.id || null}
+      />
     </div>
   );
 }

@@ -7,6 +7,16 @@ import {
   deleteDashboardForOwner,
   updateDashboardForOwner,
 } from "../repositories/dashboardRepository.js";
+import {
+  insertTables,
+  listTablesByDashboard,
+  deleteTablesByDashboard,
+} from "../repositories/dashboardTableRepository.js";
+import {
+  insertRelationships,
+  listRelationshipsByDashboard,
+  deleteRelationshipsByDashboard,
+} from "../repositories/dashboardRelationshipRepository.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -444,6 +454,86 @@ const sanitizeTables = (tables = []) => {
     .filter((table) => table.fields.length);
 };
 
+const ensureSystemFields = (fields = []) => {
+  const requiredKeys = ["_id", "created_at", "updated_at"];
+  const existing = new Set(fields.map((f) => f.key));
+  const system = [
+    { key: "_id", type: "id", required: true },
+    { key: "created_at", type: "date", required: true },
+    { key: "updated_at", type: "date", required: true },
+  ];
+  const merged = [...fields];
+  system.forEach((f) => {
+    if (!existing.has(f.key)) merged.unshift(f);
+  });
+  return merged;
+};
+
+function validateBlueprint(blueprint) {
+  if (!blueprint || typeof blueprint !== "object") throw new HttpError(502, "Invalid AI response");
+  const tables = Array.isArray(blueprint.tables) ? blueprint.tables : [];
+  if (tables.length < 4 || tables.length > 8) throw new HttpError(502, "AI schema missing required tables");
+  tables.forEach((table) => {
+    if (!table.key || !table.name || !Array.isArray(table.fields)) throw new HttpError(502, "Invalid table structure");
+    table.fields = ensureSystemFields(table.fields);
+    table.fields.forEach((field) => {
+      if (!field.key || !field.type) throw new HttpError(502, "Invalid field structure");
+      if (!["id", "string", "number", "boolean", "date", "enum", "reference", "text"].includes(field.type)) {
+        throw new HttpError(502, "Unsupported field type");
+      }
+    });
+  });
+  const relationships = Array.isArray(blueprint.relationships) ? blueprint.relationships : [];
+  relationships.forEach((rel) => {
+    if (!rel.fromTableKey || !rel.fromFieldKey || !rel.toTableKey || !rel.toFieldKey || !rel.type) {
+      throw new HttpError(502, "Invalid relationship");
+    }
+  });
+  const ui = blueprint.ui || {
+    defaultTableKey: tables[0]?.key || "",
+    tableDropdownOrder: tables.map((t) => t.key),
+    emptyStateText: "No records yet. Click Add record to start.",
+  };
+  return { tables, relationships, ui };
+}
+
+async function generateSchemaBlueprint({ name, description, type }) {
+  const client = requireOpenAI();
+  const promptMessages = [
+    {
+      role: "system",
+      content: `You are an AI Database Schema Designer for a dynamic dashboard system.
+User did NOT upload a data file.
+Return ONLY valid JSON with tables (4-8), relationships, and ui.
+Tables: key, name, description, fields[]. Fields: key, type (id|string|number|boolean|date|enum|reference|text), required, options(if enum), ref(if reference).
+Include system fields in every table: _id (id, required), created_at (date, required), updated_at (date, required).
+Relationships: fromTableKey, fromFieldKey, toTableKey, toFieldKey, type(one-to-many|many-to-one|many-to-many).
+UI: defaultTableKey, tableDropdownOrder, emptyStateText.
+Forbidden: sample data, records, widgets, KPIs, charts, UI form configs.`,
+    },
+    {
+      role: "user",
+      content: `Dashboard name: ${name}\nDashboard type: ${type || ""}\nDescription: ${description}\nReturn JSON only.`,
+    },
+  ];
+
+  let aiContent = null;
+  try {
+    const completion = await client.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: promptMessages,
+      temperature: 0.3,
+      max_tokens: 900,
+    });
+    aiContent = completion.choices?.[0]?.message?.content?.trim() || null;
+  } catch (err) {
+    console.error("dashboard generation failed", err.message);
+  }
+
+  const parsed = extractJsonPayload(aiContent);
+  return validateBlueprint(parsed);
+}
+
 function extractJsonPayload(text) {
   if (!text) return null;
   const match = text.match(/```json([\s\S]*?)```/i);
@@ -455,44 +545,39 @@ function extractJsonPayload(text) {
   }
 }
 
-export async function generateDashboardFields({ name, description }) {
+export async function generateDashboardFields({ name, description, type }) {
   if (!name?.trim() || !description?.trim()) {
     throw new HttpError(400, "Name and description are required");
   }
-  const client = requireOpenAI();
-  const promptMessages = [
-    {
-      role: "system",
-      content:
-        'Bạn là AI thiết kế schema cho dashboard. Người dùng KHÔNG upload file. Nhiệm vụ: phân tích mô tả để tạo schema (bảng + cột + quan hệ). Không tạo dữ liệu giả. Không dùng schema mặc định. Chỉ trả về JSON blueprint với tối thiểu 4 bảng. Mỗi bảng có name, description, purpose, fields[]. Field chỉ dùng loại: Text, Number, Currency, Date, Boolean, Email, URL, Dropdown, Multi-select, Percentage. Thêm relationships nếu có (fromTable, toTable, description). Không tạo records, sample data, hay dữ liệu ví dụ.',
-    },
-    {
-      role: "user",
-      content: `Dashboard name: ${name}\nDescription: ${description}\nReturn only JSON with tables (>=4), fields, and relationships.`,
-    },
-  ];
+  const blueprint = await generateSchemaBlueprint({ name, description, type });
+  return {
+    fields: [],
+    tables: blueprint.tables,
+    relationships: blueprint.relationships,
+    widgets: [],
+    componentCode: "",
+    ui: blueprint.ui,
+  };
+}
 
-  let aiContent = null;
-  try {
-    const completion = await client.chat.completions.create({
-      model: OPENAI_MODEL,
-      messages: promptMessages,
-      temperature: 0.4,
-      max_tokens: 800,
-    });
-    aiContent = completion.choices?.[0]?.message?.content?.trim() || null;
-  } catch (err) {
-    console.error("dashboard generation failed", err.message);
+export async function generateAndPersistDashboard({ name, type, description, sessionId, userId }) {
+  if (!sessionId && !userId) {
+    throw new HttpError(400, "sessionId or userId required");
   }
-
-  const parsed = extractJsonPayload(aiContent);
-  const aiTables = sanitizeTables(parsed?.tables);
-  const tables = aiTables.length ? aiTables : selectTableTemplates(description).map(buildTableBlueprint);
-  const fields = tables.flatMap((table) => table.fields);
-  const widgets = buildWidgetBlueprints(fields);
-  const componentCode = buildDashboardComponent(tables, widgets);
-  const relationships = buildRelationships(tables);
-  return { fields, tables, widgets, componentCode, relationships };
+  const blueprint = await generateDashboardFields({ name, description, type });
+  const dashboard = await insertDashboard({ name, type, description, sessionId, userId });
+  await insertTables(dashboard.id, blueprint.tables);
+  await insertRelationships(dashboard.id, blueprint.relationships);
+  return {
+    dashboardId: dashboard.id,
+    name: dashboard.name,
+    type: dashboard.type,
+    description: dashboard.description,
+    tables: blueprint.tables,
+    relationships: blueprint.relationships,
+    ui: blueprint.ui,
+    widgets: [],
+  };
 }
 
 export async function saveDashboard({ sessionId, userId, name, description, fields, widgets, componentCode, tables }) {
@@ -523,7 +608,15 @@ export async function saveDashboard({ sessionId, userId, name, description, fiel
 
 export async function listDashboards({ sessionId, userId }) {
   if (!sessionId && !userId) return [];
-  return listDashboardsForOwner({ sessionId, userId });
+  const dashboards = await listDashboardsForOwner({ sessionId, userId });
+  const withSchema = await Promise.all(
+    dashboards.map(async (dash) => {
+      const tables = await listTablesByDashboard(dash.id);
+      const relationships = await listRelationshipsByDashboard(dash.id);
+      return { ...dash, tables, relationships };
+    }),
+  );
+  return withSchema;
 }
 
 export async function removeDashboard(id, { sessionId, userId }) {
@@ -531,6 +624,10 @@ export async function removeDashboard(id, { sessionId, userId }) {
     throw new HttpError(400, "sessionId or userId required");
   }
   const deleted = await deleteDashboardForOwner(id, { sessionId, userId });
+  if (deleted) {
+    await deleteTablesByDashboard(id);
+    await deleteRelationshipsByDashboard(id);
+  }
   if (!deleted) {
     throw new HttpError(404, "Dashboard not found");
   }

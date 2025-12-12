@@ -38,6 +38,7 @@ const getSessionId = () => {
 };
 
 type DraftDashboard = {
+  id?: string;
   name: string;
   description: string;
   fields: DashboardField[];
@@ -101,12 +102,43 @@ export default function ManageDash() {
   }, [sessionId]);
 
   const handleCreateDashboard = (data: DraftDashboard) => {
+    // Nếu đã persist (có id) thì mở preview luôn, không gọi create nữa
     setSelected(data);
     setCreatedOpen(true);
   };
 
   const handleSaveDashboard = async (dash: DraftDashboard) => {
     if (!sessionId) throw new Error("Missing session");
+    if (dash.id) {
+      const sanitizedTables = (dash.tables || []).map((t, idx) => ({
+        ...t,
+        id: t.id || t.key || `table-${idx}`,
+        sampleRows: Array.isArray((t as any).sampleRows) ? (t as any).sampleRows : [],
+      }));
+      const derivedFields =
+        dash.fields && dash.fields.length
+          ? dash.fields
+          : sanitizedTables.flatMap((table, tableIdx) =>
+              (table.fields || []).map((f, fieldIdx) => ({
+                ...f,
+                id: f.id || `${table.key || table.id || tableIdx}-${f.key || fieldIdx}`,
+                fieldName: (f as any).fieldName || (f as any).name || f.key || `Field ${fieldIdx + 1}`,
+                fieldType: (f as any).fieldType || (f as any).type || "Text",
+              })),
+            );
+      const hydrated = {
+        id: dash.id,
+        name: dash.name,
+        description: dash.description,
+        fields: derivedFields,
+        widgets: dash.widgets || [],
+        tables: sanitizedTables,
+        componentCode: dash.componentCode,
+        type: dash.type,
+      } as Dashboard;
+      setDashboards((prev) => [hydrated, ...prev]);
+      return;
+    }
     const res = await dashboardApi.create({
       name: dash.name,
       description: dash.description,
@@ -387,6 +419,8 @@ export default function ManageDash() {
         isOpen={generatorOpen}
         onClose={() => setGeneratorOpen(false)}
         onCreateDashboard={handleCreateDashboard}
+        sessionId={sessionId}
+        userId={null}
       />
 
       <CreatedDashboardView
@@ -398,4 +432,3 @@ export default function ManageDash() {
     </div>
   );
 }
-

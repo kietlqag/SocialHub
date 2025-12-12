@@ -36,13 +36,23 @@ interface AIDashboardGeneratorProps {
   isOpen: boolean;
   onClose: () => void;
   onCreateDashboard?: (data: {
+    id?: string;
     name: string;
     type?: string;
     description: string;
     fields: DashboardField[];
     widgets?: DashboardWidget[];
+    tables?: DashboardTable[];
+    relationships?: any[];
+    ui?: {
+      defaultTableKey?: string;
+      tableDropdownOrder?: string[];
+      emptyStateText?: string;
+    };
     componentCode?: string;
   }) => void;
+  sessionId: string;
+  userId?: string | null;
 }
 
 type ParsedTable = {
@@ -61,7 +71,7 @@ type ParsedSchema = {
   totalRows: number;
 };
 
-export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AIDashboardGeneratorProps) {
+export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessionId, userId }: AIDashboardGeneratorProps) {
   const [step, setStep] = useState<"describe" | "review">("describe");
   const [description, setDescription] = useState("");
   const [dashboardName, setDashboardName] = useState("");
@@ -567,6 +577,8 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
         name: dashboardName,
         description,
         type: dashboardType,
+        sessionId,
+        userId: userId || undefined,
         fileProvided: Boolean(parsedSchema),
         inferredSchema: parsedSchema
           ? {
@@ -582,15 +594,31 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard }: AID
           : undefined,
       });
       const tables = res.tables?.length ? res.tables : fallbackTables;
-      const fields = res.fields?.length ? res.fields : fallbackFields;
+      const relationships = res.relationships || [];
+      const ui = res.ui;
       const widgets = res.widgets || [];
+      const fieldsFromTables: DashboardField[] = (tables || []).flatMap((table, tableIdx) =>
+        (table.fields || []).map((field, fieldIdx) => ({
+          id: field.id || `${table.key || table.name || tableIdx}-${field.key || fieldIdx}`,
+          key: field.key,
+          fieldName: field.fieldName || field.name || field.key || `Field ${fieldIdx + 1}`,
+          fieldType: field.fieldType || (field as any).type || "Text",
+          description: field.description || "",
+          sampleData: "",
+          required: Boolean(field.required),
+        })),
+      );
+      const fields = fieldsFromTables.length ? fieldsFromTables : fallbackFields;
       onCreateDashboard?.({
+        id: res.dashboardId,
         name: dashboardName.trim(),
         type: dashboardType,
         description: description.trim(),
         fields,
         widgets,
         tables,
+        relationships,
+        ui,
         componentCode: res.componentCode || "",
       });
       setGeneratedFields(fields);
