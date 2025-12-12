@@ -44,6 +44,7 @@ type DraftDashboard = {
   widgets?: Dashboard["widgets"];
   tables?: Dashboard["tables"];
   componentCode?: string;
+  type?: string;
 };
 
 type DecoratedDashboard = Dashboard & {
@@ -94,7 +95,7 @@ export default function ManageDashList() {
     let active = true;
     setLoading(true);
     dashboardApi
-      .list(sessionId)
+      .list(sessionId, currentUser?.id || undefined)
       .then((res) => {
         if (!active) return;
         setDashboards(res.dashboards || []);
@@ -110,7 +111,7 @@ export default function ManageDashList() {
     return () => {
       active = false;
     };
-  }, [sessionId]);
+  }, [sessionId, currentUser?.id]);
 
   const handleCreateDashboard = async (data: DraftDashboard) => {
     if (!sessionId) return;
@@ -122,19 +123,39 @@ export default function ManageDashList() {
         tables: data.tables,
         widgets: data.widgets,
         componentCode: data.componentCode,
+        type: data.type,
         sessionId,
+        userId: currentUser?.id || null,
       });
-      setDashboards((prev) => [res.dashboard, ...prev]);
+      const sanitizedTables =
+        res.dashboard.tables?.map((t) => ({
+          ...t,
+          // Nếu không có file upload thì không gắn sampleRows (tránh dữ liệu ảo)
+          sampleRows: dataFileAttached(data) ? t.sampleRows : [],
+        })) || [];
+
+      const sanitizedDashboard = {
+        ...res.dashboard,
+        tables: sanitizedTables,
+      };
+
+      setDashboards((prev) => [sanitizedDashboard, ...prev]);
       navigate(`/managedash/${res.dashboard.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create dashboard");
     }
   };
 
+  const dataFileAttached = (draft: DraftDashboard) => {
+    // Khi AI generator có parsedSchema sẽ đính sampleRows vào tables
+    // Nếu không có parsedSchema -> tables chỉ là cấu trúc rỗng, tránh hiển thị mock
+    return draft.tables?.some((t) => Array.isArray(t.sampleRows) && t.sampleRows.length > 0);
+  };
+
   const handleDelete = async (id: string) => {
     if (!sessionId) return;
     try {
-      await dashboardApi.delete(id, sessionId);
+      await dashboardApi.delete(id, sessionId, currentUser?.id || undefined);
       setDashboards((prev) => prev.filter((d) => d.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete dashboard");
@@ -149,11 +170,15 @@ export default function ManageDashList() {
     const fieldCount = d.fields?.length || 0;
     const widgetCount = Array.isArray(d.widgets) ? d.widgets.length : 0;
     const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
+    const overviewCount = widgetCount > 0 ? Math.max(1, Math.min(4, widgetCount)) : 4;
+    const insightsCount = widgetCount > 0 ? Math.min(widgetCount, 2) : 3;
     return {
       ...d,
       fieldCount,
       widgetCount,
       tableCount,
+      overviewCount,
+      insightsCount,
       createdLabel: d.createdAt ? new Date(d.createdAt).toLocaleString() : "Just now",
       updatedLabel: d.updatedAt ? new Date(d.updatedAt).toLocaleString() : null,
       icon: iconPool[index % iconPool.length],
@@ -288,18 +313,12 @@ export default function ManageDashList() {
                         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{dashboard.description || "Custom dashboard"}</p>
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Fields</p>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-sm text-gray-900">{dashboard.fieldCount}</span>
-                              <span className="text-xs text-green-600">Configured</span>
-                            </div>
+                            <p className="text-xs text-gray-500 mb-1">Overview</p>
+                            <span className="text-sm text-gray-900">{dashboard.overviewCount}</span>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Widgets</p>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-sm text-gray-900">{dashboard.widgetCount}</span>
-                              <span className="text-xs text-blue-600">Linked</span>
-                            </div>
+                            <p className="text-xs text-gray-500 mb-1">Insights</p>
+                            <span className="text-sm text-gray-900">{dashboard.insightsCount}</span>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Tables</p>
@@ -355,12 +374,12 @@ export default function ManageDashList() {
                         </div>
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Fields</p>
-                            <span className="text-sm text-gray-900">{dashboard.fieldCount}</span>
+                            <p className="text-xs text-gray-500 mb-1">Overview</p>
+                            <span className="text-sm text-gray-900">{dashboard.overviewCount}</span>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Widgets</p>
-                            <span className="text-sm text-gray-900">{dashboard.widgetCount}</span>
+                            <p className="text-xs text-gray-500 mb-1">Insights</p>
+                            <span className="text-sm text-gray-900">{dashboard.insightsCount}</span>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Tables</p>
@@ -369,9 +388,9 @@ export default function ManageDashList() {
                         </div>
                         <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
                           <div className="flex items-center gap-3">
-                            <span>{dashboard.fieldCount} fields</span>
+                            <span>{dashboard.overviewCount} overview</span>
                             <span aria-hidden="true">.</span>
-                            <span>{dashboard.widgetCount} widgets</span>
+                            <span>{dashboard.insightsCount} insights</span>
                           </div>
                           <Badge className="bg-green-100 text-green-800">Active</Badge>
                         </div>

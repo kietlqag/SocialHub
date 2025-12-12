@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Input } from "../components/ui/input";
-import { Save, ArrowLeft, LayoutDashboard, CheckCircle2, Download, Upload, Plus, Search } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, Table } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardTable } from "../services/dashboards";
-import { DashboardOverview } from "../dashboard/DashboardOverview";
-import { TablePreviewCard } from "./components/TablePreviewCard";
 import { buildDomainModel, generateInsightChartsFromDomain, type InsightChartConfig } from "../dashboard/insightGenerator";
 import { useDynamicDashboardMetrics } from "../dashboard/useDynamicDashboardMetrics";
-import { useMemo } from "react";
+import { Sidebar } from "../dashboard/Sidebar";
+import { ContentWrapper } from "../dashboard/ContentWrapper";
+import { OverviewContent } from "../dashboard/OverviewContent";
+import { InsightsContent } from "../dashboard/InsightsContent";
+import { Input } from "../components/ui/input";
 
 type ChartPoint = { label: string; value: number };
 type TimeRange = "7d" | "30d" | "12m";
@@ -57,6 +58,7 @@ export default function ManageDashDetail() {
       sourceTable: string;
     }[]
   >([]);
+  const [activeSection, setActiveSection] = useState<"overview" | "insights" | "tables">("overview");
 
   useEffect(() => {
     if (!dashId || !sessionId) return;
@@ -84,13 +86,21 @@ export default function ManageDashDetail() {
   }, [dashId, sessionId]);
 
   const safeDashboard = dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] };
-  const tables = safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : [];
-  const mergedTables = tables;
+  const mergedTables = safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : [];
+  const hasData = mergedTables.some((t) => Array.isArray((t as any).sampleRows) && (t as any).sampleRows.length > 0);
 
   const totalTables = mergedTables.length;
   const totalFields = mergedTables.reduce((sum, table) => sum + table.fields.length, 0);
+  const totalInsights = chartConfigs.length;
+  const tableOptions = [
+    { id: "customers", title: "Customers & Clients", description: "A 360° view of leads, accounts, and key contacts.", count: 98 },
+    { id: "orders", title: "Orders / Contracts", description: "Track orders, contracts, and fulfillment.", count: 34 },
+    { id: "projects", title: "Projects / Campaigns", description: "Strategic initiatives and campaigns.", count: 12 },
+    { id: "finance", title: "Finance / Revenue", description: "Financial and revenue performance.", count: 7 },
+  ];
+  const [activeTableId, setActiveTableId] = useState<string>(tableOptions[0].id);
+  const [tablesMenuOpen, setTablesMenuOpen] = useState(false);
 
-  const hasTables = mergedTables.length > 0;
   const domainModel = useMemo(() => buildDomainModel(safeDashboard, mergedTables as DashboardTable[]), [safeDashboard, mergedTables]);
   const defaultInsights = useMemo(() => generateInsightChartsFromDomain(domainModel), [domainModel]);
   const selectedTables = useMemo(() => mergedTables.map((t) => t.name || t.id || "").filter(Boolean), [mergedTables]);
@@ -103,29 +113,42 @@ export default function ManageDashDetail() {
     if (normalized.includes("crm") || normalized.includes("deal") || normalized.includes("pipeline")) return "crm";
     return "crm";
   }, [safeDashboard.description, safeDashboard.name]);
-  const { metrics } = useDynamicDashboardMetrics({ projectType, selectedTables, description: safeDashboard.description });
-  useEffect(() => {
-    // initialize KPI configs from AI metrics
-    if (metrics && metrics.length) {
-      setOverviewKpis(
-        metrics.map((m) => ({
-          id: m.key,
-          title: m.label,
-          description: m.description,
-          value: m.value,
-          icon: m.icon,
-        }))
-      );
-    }
-  }, [metrics]);
+  const { metrics } = useDynamicDashboardMetrics({
+    projectType,
+    selectedTables,
+    description: safeDashboard.description,
+    hasData,
+  });
 
   useEffect(() => {
-    // initialize chart configs
-    setChartConfigs(defaultInsights);
-  }, [defaultInsights]);
+    const withData =
+      hasData && metrics?.length
+        ? metrics.map((m) => ({
+            id: m.key,
+            title: m.label,
+            description: m.description,
+            value: m.value,
+            icon: m.icon,
+          }))
+        : null;
+    const placeholders = [
+      { id: "kpi-1", title: "Revenue", description: "No data", value: 0 },
+      { id: "kpi-2", title: "Active users", description: "No data", value: 0 },
+      { id: "kpi-3", title: "Conversion", description: "No data", value: "0%" },
+    ];
+    setOverviewKpis(withData && withData.length ? withData : placeholders);
+  }, [metrics, hasData]);
 
   useEffect(() => {
-    // initialize table preview configs from current tables
+    const placeholders: InsightChartConfig[] = [
+      { id: "placeholder-ts", title: "Activity over time", description: "No data", type: "timeSeries", range: "Empty" } as any,
+      { id: "placeholder-breakdown", title: "Category breakdown", description: "No data", type: "breakdown" } as any,
+    ];
+    const nextCharts = hasData && defaultInsights.length ? defaultInsights : placeholders;
+    setChartConfigs(nextCharts);
+  }, [defaultInsights, hasData]);
+
+  useEffect(() => {
     setTableConfigs(
       mergedTables.map((table) => ({
         id: table.id,
@@ -138,36 +161,6 @@ export default function ManageDashDetail() {
     );
   }, [mergedTables]);
 
-  if (!dashId)
-    return (
-      <div className="min-h-screen overflow-y-auto bg-gray-50 p-6">
-        <Button variant="ghost" onClick={() => navigate("/managedash")} className="mb-4 gap-2">
-          <ArrowLeft className="w-4 h-4" /> Back to dashboards
-        </Button>
-        <div className="text-gray-500">Missing dashboard id.</div>
-      </div>
-    );
-
-  if (loading)
-    return (
-      <div className="min-h-screen overflow-y-auto bg-gray-50 p-6">
-        <Button variant="ghost" onClick={() => navigate("/managedash")} className="mb-4 gap-2">
-          <ArrowLeft className="w-4 h-4" /> Back to dashboards
-        </Button>
-        <div className="text-gray-500">Loading dashboard...</div>
-      </div>
-    );
-
-  if (!dashboard)
-    return (
-      <div className="min-h-screen overflow-y-auto bg-gray-50 p-6">
-        <Button variant="ghost" onClick={() => navigate("/managedash")} className="mb-4 gap-2">
-          <ArrowLeft className="w-4 h-4" /> Back to dashboards
-        </Button>
-        <div className="text-gray-500">{error || "Dashboard not found."}</div>
-      </div>
-    );
-
   const handleCopyCode = async () => {
     if (!safeDashboard?.componentCode) return;
     try {
@@ -179,213 +172,222 @@ export default function ManageDashDetail() {
     }
   };
 
-  return (
-    <div className="min-h-screen overflow-y-auto bg-gray-50">
-      <div className="p-6">
-        <Button variant="ghost" onClick={() => navigate("/managedash")} className="gap-2 mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back to dashboards
-        </Button>
-        <div className="p-6 border-b border-gray-200 bg-white rounded-xl">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-start gap-3">
-                <div className="p-3 bg-primary/10 rounded-xl">
-                  <LayoutDashboard className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 uppercase tracking-wide">
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
-                    Created
-                  </div>
-                  <h1 className="text-2xl text-gray-900 mt-1">{safeDashboard.name || "AI dashboard"}</h1>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {safeDashboard.description || `Your AI-generated dashboard with ${totalTables} tables and ${totalFields} fields.`}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" onClick={handleCopyCode} disabled={!safeDashboard.componentCode}>
-                  {copied ? "Code copied" : "Copy layout code"}
-                </Button>
-                <Button className="gap-2" disabled>
-                  <Save className="w-4 h-4" /> Saved
-                </Button>
-              </div>
+const renderContent = () => {
+    if (activeSection === "overview") {
+      return <OverviewContent kpis={overviewKpis} range={timeRange} colors={chartColors} />;
+    }
+    if (activeSection === "insights") {
+      return (
+        <InsightsContent
+          charts={chartConfigs}
+          renderChart={renderInsightChart}
+          buildChartData={buildChartData}
+          range={timeRange}
+          rangeLabel={timeRangeLabels[timeRange]}
+        />
+      );
+    }
+    if (activeSection === "tables") {
+      const activeTable = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
+      return (
+        <div className="space-y-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">{activeTable.title}</h2>
+              <p className="text-sm text-gray-600">{activeTable.description}</p>
             </div>
-            <p className="text-sm text-gray-500">
-              Clean layout preview inspired by the reference UI. Organize records instantly, then persist the dashboard to MongoDB when you are ready.
-            </p>
+            <Button variant="ghost" className="text-sm text-gray-700">
+              View all →
+            </Button>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary">Add record</Button>
+            <Button variant="outline">Segment</Button>
+            <Button variant="outline">Update</Button>
+          </div>
+          <div className="relative max-w-md">
+            <Input placeholder="Search preview..." className="pl-10" />
+          </div>
+          <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">No sample data</Card>
         </div>
+      );
+    }
+    return <OverviewContent kpis={overviewKpis} range={timeRange} colors={chartColors} />;
+  };
 
-        <div className="min-h-full py-6 space-y-6">
-          <Card className="p-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="w-full max-w-2xl relative mx-auto sm:mx-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input placeholder="Search dashboards, tables, data..." className="pl-10" />
-            </div>
-            <div className="flex flex-wrap gap-2 items-center sm:justify-end">
-              <Button variant="outline" className="gap-2">
-                <Download className="w-4 h-4" /> Export layout
-              </Button>
-              <Button variant="outline" className="gap-2">
-                <Upload className="w-4 h-4" /> Import data
-              </Button>
-              <Button className="gap-2">
-                <Plus className="w-4 h-4" /> Add record
-              </Button>
-            </div>
-          </Card>
+  const sidebarItems = [
+    { id: "overview", label: "Overview", icon: BarChart3, count: overviewKpis.length },
+    { id: "insights", label: "Insights", icon: BarChart3, count: totalInsights },
+  ];
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: "Overview", value: overviewKpis.length },
-              { label: "Insights", value: chartConfigs.length },
-              { label: "Tables", value: tableConfigs.length },
-            ].map((item) => (
-              <Card key={item.label} className="p-4 rounded-2xl flex flex-col gap-1">
-                <span className="text-2xl font-semibold text-gray-900">{item.value}</span>
-                <span className="text-sm text-gray-600">{item.label}</span>
-              </Card>
-            ))}
-          </div>
+  if (!dashId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8F9FB]">
+        <div className="text-gray-500">Missing dashboard id.</div>
+      </div>
+    );
+  }
 
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Overview</h3>
-                <p className="text-sm text-gray-500">Business KPIs generated from your description</p>
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8F9FB] text-gray-500">
+        Loading dashboard...
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex bg-[#F8F9FB]">
+      <Sidebar
+        items={sidebarItems}
+        activeId={activeSection}
+        onSelect={setActiveSection}
+        header={
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start gap-3 px-1">
+              <div className="h-10 w-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-sm font-semibold text-gray-800">
+                {safeDashboard.name?.slice(0, 2).toUpperCase() || "DB"}
               </div>
-              <Button variant="outline" size="sm" onClick={() => setOverviewKpis((prev) => [...prev, { id: `kpi-${prev.length + 1}`, title: "New KPI", value: 0 }])}>
-                + Add KPI
-              </Button>
+              <div>
+                <div className="text-sm font-semibold text-gray-900">{safeDashboard.name || "AI dashboard"}</div>
+                <div className="text-xs text-gray-500">{safeDashboard.type || "V1"}</div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {overviewKpis.map((kpi) => (
-                <Card key={kpi.id} className="p-4 flex flex-col gap-2 rounded-2xl">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    {kpi.icon}
-                    <span className="truncate">{kpi.title}</span>
-                  </div>
-                  {kpi.description && <p className="text-xs text-gray-500 line-clamp-2">{kpi.description}</p>}
-                  <div className="text-2xl font-semibold text-gray-900">{kpi.value}</div>
-                </Card>
+          </div>
+        }
+        footer={
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-2"
+            onClick={() => navigate("/managedash")}
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to dashboards
+          </Button>
+        }
+        tableDropdown={{
+          label: "Tables",
+          icon: Table,
+          count: totalTables || tableOptions.length,
+          open: tablesMenuOpen,
+          onToggle: () => setTablesMenuOpen((v) => !v),
+          content: (
+            <div className="py-2">
+              {tableOptions.map((table) => (
+                <button
+                  key={table.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTableId(table.id);
+                    setActiveSection("tables");
+                    setTablesMenuOpen(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#F5F5F5] flex items-center gap-2"
+                >
+                  <span className="flex-1 font-semibold text-sm text-gray-900">{table.title}</span>
+                  <span className="text-xs text-gray-600">{table.count}</span>
+                </button>
               ))}
             </div>
-          </section>
+          ),
+        }}
+      />
 
-          <section className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Insights</h3>
-                <p className="text-sm text-gray-500">Charts that highlight key metrics across tables</p>
-              </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setChartConfigs((prev) => [
-                      ...prev,
-                      { id: `chart-${prev.length + 1}`, title: "New chart", type: "breakdown", source: "custom", timeRangeMode: timeRange },
-                    ])
-                  }
-                >
-                  + Add chart
-                </Button>
-                {timeRangeOptions.map((range) => (
-                  <Button key={range} size="sm" variant={timeRange === range ? "default" : "outline"} onClick={() => setTimeRange(range)}>
-                    {timeRangeLabels[range]}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {chartConfigs.map((chart) => {
-                const data = buildChartData(chart, timeRange);
-                return (
-                  <Card
-                    key={chart.id}
-                    className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5 h-full min-h-[320px] flex flex-col gap-3 min-w-0"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">{chart.title}</p>
-                        {chart.description && <p className="text-xs text-gray-500">{chart.description}</p>}
-                      </div>
-                      <span className="text-[11px] text-gray-400">{chart.timeRangeMode || timeRangeLabels[timeRange]}</span>
-                    </div>
-                    <div className="flex-1 w-full h-[280px] max-h-[300px] flex items-center justify-center min-w-0">
-                      {renderInsightChart(chart, data)}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Data tables</h3>
-                <p className="text-sm text-gray-500">Quick preview of each dataset. Open full table to edit.</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setTableConfigs((prev) => [
-                    ...prev,
-                    {
-                      id: `table-${prev.length + 1}`,
-                      title: "New preview",
-                      description: "Custom preview",
-                      actions: [],
-                      columns: [],
-                      sourceTable: mergedTables[0]?.id || "",
-                    },
-                  ])
-                }
-                disabled={!mergedTables.length}
-              >
-                + Add table
-              </Button>
-            </div>
-            {hasTables ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {tableConfigs.map((cfg) => {
-                  const table = mergedTables.find((t) => t.id === cfg.sourceTable) || mergedTables[0];
-                  if (!table) return null;
-                  return (
-                    <TablePreviewCard
-                      key={cfg.id}
-                      table={table as DashboardTable}
-                      dashboardId={dashId}
-                      title={cfg.title}
-                      description={cfg.description}
-                      actionsOverride={cfg.actions}
-                      previewColumns={cfg.columns}
-                    />
-                  );
-                })}
-              </div>
-            ) : (
-              <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">No tables were generated for this dashboard.</Card>
-            )}
-          </section>
-
-          {error && <div className="text-sm text-red-600">{error}</div>}
-        </div>
+      <div className="flex-1 flex flex-col">
+        <ContentWrapper
+          title={safeDashboard.name || "AI dashboard"}
+          subtitle={safeDashboard.description || `Your AI-generated dashboard with ${totalTables} tables and ${totalFields} fields.`}
+          onCopyLayout={handleCopyCode}
+          onExport={() => {}}
+          onImport={() => {}}
+          onAddRecord={() => {}}
+          actionsDisabled={!dashboard}
+          showActions={false}
+          showSearch={false}
+        >
+          {renderContent()}
+        </ContentWrapper>
+        {error && <div className="px-6 pb-6 text-sm text-red-600">{error}</div>}
       </div>
     </div>
   );
 }
 
+function buildChartData(config: InsightChartConfig, range: TimeRange): ChartPoint[] {
+  if (config.description === "No data" || config.range === "Empty") return [];
+  if (config.type === "timeSeries") {
+    const labels = getTimelineLabels(range);
+    return labels.map((label, idx) => ({ label, value: Math.max(5, (idx + 1) * 10 + Math.floor(Math.random() * 20)) }));
+  }
+
+  const pickGroups = (): string[] => {
+    const key = (config.groupByField || config.title).toLowerCase();
+    if (key.includes("status") || key.includes("stage")) return ["New", "In progress", "Completed", "On hold"];
+    if (key.includes("owner") || key.includes("team")) return ["Team A", "Team B", "Team C"];
+    if (key.includes("category")) return ["Category A", "Category B", "Category C", "Category D"];
+    if (key.includes("department")) return ["ER", "ICU", "Ward", "Lab"];
+    return ["Segment A", "Segment B", "Segment C"];
+  };
+
+  if (config.type === "funnel") {
+    const steps = ["Stage 1", "Stage 2", "Stage 3", "Stage 4"];
+    let current = 100;
+    return steps.map((step) => {
+      current = Math.max(8, Math.round(current * (0.5 + Math.random() * 0.25)));
+      return { label: step, value: current };
+    });
+  }
+
+  const groups = pickGroups();
+  return groups.map((g) => ({ label: g, value: Math.max(10, Math.round(Math.random() * 80 + 20)) }));
+}
+
+function renderInsightChart(config: InsightChartConfig, data: ChartPoint[]) {
+  const hasData = data.length > 0;
+  if (config.type === "timeSeries")
+    return (
+      <div className="w-full h-full flex items-center">
+        {hasData ? (
+          <LineSparkline data={data} />
+        ) : (
+          <div className="w-full h-full border border-dashed border-gray-200 rounded-lg p-4 flex items-center justify-center text-xs text-gray-500">
+            Empty time series chart
+          </div>
+        )}
+      </div>
+    );
+  if (config.type === "breakdown")
+    return (
+      <div className="w-full h-full flex items-center">
+        {hasData ? (
+          <DonutChart data={data} />
+        ) : (
+          <div className="w-full h-full border border-dashed border-gray-200 rounded-lg p-4 flex items-center justify-center text-xs text-gray-500">
+            Empty breakdown chart
+          </div>
+        )}
+      </div>
+    );
+  return (
+    <div className="w-full h-full flex items-center">
+      {hasData ? (
+        <ColumnChart data={data} />
+      ) : (
+        <div className="w-full h-full border border-dashed border-gray-200 rounded-lg p-4 flex items-center justify-center text-xs text-gray-500">
+          Empty column chart
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LineSparkline({ data }: { data: ChartPoint[] }) {
-  if (!data.length) return null;
+  if (!data.length) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg">
+        No data
+      </div>
+    );
+  }
   const max = Math.max(...data.map((item) => item.value), 1);
   const step = data.length > 1 ? data.length - 1 : 1;
   const points = data
@@ -413,7 +415,13 @@ function LineSparkline({ data }: { data: ChartPoint[] }) {
 }
 
 function DonutChart({ data }: { data: ChartPoint[] }) {
-  if (!data.length) return null;
+  if (!data.length) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg">
+        No data
+      </div>
+    );
+  }
   const total = data.reduce((sum, item) => sum + item.value, 0) || 1;
   let accumulated = 0;
 
@@ -452,7 +460,13 @@ function DonutChart({ data }: { data: ChartPoint[] }) {
 }
 
 function ColumnChart({ data }: { data: ChartPoint[] }) {
-  if (!data.length) return null;
+  if (!data.length) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg">
+        No data
+      </div>
+    );
+  }
   const max = Math.max(...data.map((item) => item.value), 1);
   return (
     <div className="flex items-end gap-3 h-full w-full max-w-full">
@@ -467,54 +481,6 @@ function ColumnChart({ data }: { data: ChartPoint[] }) {
           <span className="text-[11px] text-gray-500 text-center truncate w-full">{point.label}</span>
         </div>
       ))}
-    </div>
-  );
-}
-
-function buildChartData(config: InsightChartConfig, range: TimeRange): ChartPoint[] {
-  if (config.type === "timeSeries") {
-    const labels = getTimelineLabels(range);
-    return labels.map((label, idx) => ({ label, value: Math.max(5, (idx + 1) * 10 + Math.floor(Math.random() * 20)) }));
-  }
-
-  const pickGroups = (): string[] => {
-    const key = (config.groupByField || config.title).toLowerCase();
-    if (key.includes("status") || key.includes("stage")) return ["New", "In progress", "Completed", "On hold"];
-    if (key.includes("owner") || key.includes("team")) return ["Team A", "Team B", "Team C"];
-    if (key.includes("category")) return ["Category A", "Category B", "Category C", "Category D"];
-    if (key.includes("department")) return ["ER", "ICU", "Ward", "Lab"];
-    return ["Segment A", "Segment B", "Segment C"];
-  };
-
-  if (config.type === "funnel") {
-    const steps = ["Stage 1", "Stage 2", "Stage 3", "Stage 4"];
-    let current = 100;
-    return steps.map((step) => {
-      current = Math.max(8, Math.round(current * (0.5 + Math.random() * 0.25)));
-      return { label: step, value: current };
-    });
-  }
-
-  const groups = pickGroups();
-  return groups.map((g) => ({ label: g, value: Math.max(10, Math.round(Math.random() * 80 + 20)) }));
-}
-
-function renderInsightChart(config: InsightChartConfig, data: ChartPoint[]) {
-  if (config.type === "timeSeries")
-    return (
-      <div className="w-full h-full flex items-center">
-        <LineSparkline data={data} />
-      </div>
-    );
-  if (config.type === "breakdown")
-    return (
-      <div className="w-full h-full flex items-center">
-        <DonutChart data={data} />
-      </div>
-    );
-  return (
-    <div className="w-full h-full flex items-center">
-      <ColumnChart data={data} />
     </div>
   );
 }

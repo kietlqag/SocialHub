@@ -51,13 +51,12 @@ export function TablePreviewCard({ table, dashboardId, title, description, actio
     return table.fields.slice(0, 4);
   }, [previewColumns, table.fields]);
 
-  const sampleRows = useMemo(
-    () =>
-      Array.from({ length: Math.min(SAMPLE_ROWS, table.fields.length ? SAMPLE_ROWS : 0) }).map((_, idx) =>
-        Object.fromEntries(fields.map((f) => [f.id, buildSampleValue(f, idx)]))
-      ),
-    [fields, table.fields.length]
-  );
+  const sampleRows = useMemo(() => {
+    const provided = (table as any).sampleRows as Record<string, any>[] | undefined;
+    // Only show provided sample rows (from uploaded file). Avoid synthesizing mock data.
+    if (provided && provided.length) return provided.slice(0, SAMPLE_ROWS);
+    return [];
+  }, [table]);
 
   return (
     <Card className="p-5 space-y-4 h-full flex flex-col">

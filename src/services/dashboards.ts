@@ -27,6 +27,7 @@ export type DashboardTable = {
   kpis?: { label: string; value: string; trend?: string }[];
   recommendedWidgets?: string[];
   fields: DashboardField[];
+  sampleRows?: Record<string, any>[];
 };
 
 export type Dashboard = {
@@ -37,6 +38,7 @@ export type Dashboard = {
   widgets?: DashboardWidget[];
   tables?: DashboardTable[];
   componentCode?: string;
+  type?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -48,6 +50,17 @@ export type GeneratedDashboardStructure = {
   componentCode: string;
 };
 
+type InferredSchema = {
+  fileName: string;
+  fileType: "csv" | "excel";
+  tables: Array<{
+    name: string;
+    columns: Array<{ name: string; inferredType: "number" | "string" | "date" | "boolean" | "mixed" }>;
+    numericFields: string[];
+    sampleRows: Record<string, any>[];
+  }>;
+};
+
 const withOwnerParams = (sessionId: string, userId?: string) => {
   const params = new URLSearchParams();
   if (sessionId) params.set("sessionId", sessionId);
@@ -56,7 +69,7 @@ const withOwnerParams = (sessionId: string, userId?: string) => {
 };
 
 export const dashboardApi = {
-  generate: (payload: { name: string; description: string }) =>
+  generate: (payload: { name: string; description: string; type?: string; fileProvided?: boolean; inferredSchema?: InferredSchema }) =>
     api.post<GeneratedDashboardStructure>("/dashboards/generate", payload),
   create: (payload: {
     name: string;
@@ -67,6 +80,7 @@ export const dashboardApi = {
     widgets?: DashboardWidget[];
     tables?: DashboardTable[];
     componentCode?: string;
+    type?: string;
   }) => api.post<{ dashboard: Dashboard }>("/dashboards", payload),
   list: (sessionId: string, userId?: string | null) =>
     api.get<{ dashboards: Dashboard[] }>(`/dashboards${withOwnerParams(sessionId, userId || undefined)}`),

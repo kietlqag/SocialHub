@@ -14,6 +14,7 @@ type Params = {
   projectType: string;
   selectedTables?: string[];
   description?: string;
+  hasData?: boolean;
 };
 
 // Heuristic to guess profile purely from business description.
@@ -53,7 +54,7 @@ function fakeValueForMetric(key: string): number {
   return base;
 }
 
-export function useDynamicDashboardMetrics({ projectType, selectedTables = [], description }: Params) {
+export function useDynamicDashboardMetrics({ projectType, selectedTables = [], description, hasData = true }: Params) {
   const resolvedType = inferProfile(projectType, description);
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<MetricValue[]>([]);
@@ -61,6 +62,12 @@ export function useDynamicDashboardMetrics({ projectType, selectedTables = [], d
   const availableMetrics = useMemo(() => getProfileMetrics(resolvedType), [resolvedType]);
 
   useEffect(() => {
+    if (!hasData) {
+      setMetrics([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const normalizedTables = selectedTables.map((t) => t.toLowerCase().trim()).filter(Boolean);
 
@@ -86,7 +93,7 @@ export function useDynamicDashboardMetrics({ projectType, selectedTables = [], d
 
     setMetrics(resolved);
     setLoading(false);
-  }, [availableMetrics, selectedTables]);
+  }, [availableMetrics, selectedTables, hasData]);
 
   return { metrics, loading };
 }

@@ -21,10 +21,10 @@ function StatCard({ label, value, icon }: { label: string; value: number | strin
 }
 
 export function DashboardOverview({ projectType, selectedTables, description }: Props) {
-  const { metrics, loading } = useDynamicDashboardMetrics({ projectType, selectedTables, description });
+  const { metrics, loading } = useDynamicDashboardMetrics({ projectType, selectedTables, description, hasData: true });
 
-  const placeholderCount = loading ? Math.max(selectedTables.length || 4, 4) : metrics.length || 4;
-  const items = loading ? Array.from({ length: placeholderCount }) : metrics.length ? metrics : Array.from({ length: 4 });
+  const placeholderCount = loading ? Math.max(selectedTables.length || 4, 4) : metrics.length || 1;
+  const items = loading ? Array.from({ length: placeholderCount }) : metrics;
 
   return (
     <div className="space-y-3">
@@ -34,18 +34,24 @@ export function DashboardOverview({ projectType, selectedTables, description }: 
           <p className="text-sm text-gray-500">Business metrics tailored to your tables</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {items.map((item, idx) =>
-          loading ? (
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {items.map((_, idx) => (
             <Card key={`skeleton-${idx}`} className="p-4 space-y-2">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-6 w-20" />
             </Card>
-          ) : (
+          ))}
+        </div>
+      ) : metrics.length ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {metrics.map((item) => (
             <StatCard key={item.key} label={item.label} value={item.value} icon={item.icon} />
-          )
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <Card className="p-4 text-sm text-gray-600">No data yet. Import data to see KPIs.</Card>
+      )}
     </div>
   );
 }

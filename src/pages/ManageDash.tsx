@@ -44,6 +44,7 @@ type DraftDashboard = {
   widgets?: Dashboard["widgets"];
   tables?: Dashboard["tables"];
   componentCode?: string;
+  type?: string;
 };
 
 type DecoratedDashboard = Dashboard & {
@@ -113,6 +114,7 @@ export default function ManageDash() {
       tables: dash.tables,
       widgets: dash.widgets,
       componentCode: dash.componentCode,
+      type: dash.type,
       sessionId,
     });
     setDashboards((prev) => [res.dashboard, ...prev]);
@@ -137,6 +139,7 @@ export default function ManageDash() {
       widgets: dashboard.widgets,
       tables: dashboard.tables,
       componentCode: dashboard.componentCode,
+      type: dashboard.type,
     });
     setCreatedOpen(true);
   };
@@ -395,7 +398,4 @@ export default function ManageDash() {
     </div>
   );
 }
-
-
-
 

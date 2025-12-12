@@ -219,56 +219,48 @@ const FALLBACK_FIELDS = [
     fieldName: "Customer Name",
     fieldType: "Text",
     description: "Full name of the customer",
-    sampleData: "John Smith",
     required: true,
   },
   {
     fieldName: "Email",
     fieldType: "Email",
     description: "Customer email address",
-    sampleData: "john.smith@example.com",
     required: true,
   },
   {
     fieldName: "Purchase Amount",
     fieldType: "Currency",
     description: "Total purchase amount",
-    sampleData: "$1,234.56",
     required: true,
   },
   {
     fieldName: "Purchase Date",
     fieldType: "Date",
     description: "Date of purchase",
-    sampleData: "2024-11-24",
     required: true,
   },
   {
     fieldName: "Status",
     fieldType: "Dropdown",
     description: "Order status",
-    sampleData: "Completed",
     required: true,
   },
   {
     fieldName: "Customer Lifetime Value",
     fieldType: "Currency",
     description: "Total value of all customer purchases",
-    sampleData: "$5,678.90",
     required: false,
   },
   {
     fieldName: "Subscription Active",
     fieldType: "Boolean",
     description: "Whether customer has active subscription",
-    sampleData: "Yes",
     required: false,
   },
   {
     fieldName: "Referral Source",
     fieldType: "Dropdown",
     description: "How customer found us",
-    sampleData: "Google Ads",
     required: false,
   },
 ];
@@ -278,7 +270,7 @@ const normalizeField = (field, index) => ({
   fieldName: (field.fieldName || `Field ${index + 1}`).toString().slice(0, 80),
   fieldType: SUPPORTED_TYPES.includes(field.fieldType) ? field.fieldType : "Text",
   description: field.description?.toString().slice(0, 200) || "",
-  sampleData: field.sampleData?.toString().slice(0, 80) || "",
+  sampleData: "",
   required: Boolean(field.required),
 });
 
@@ -301,13 +293,13 @@ const buildWidgetSnippet = (field, dataKey) => {
   const descriptionLine = field.description
     ? `\n      <CardDescription>${escapeForJsx(field.description)}</CardDescription>`
     : "";
-  const sampleValue = escapeForJsx(field.sampleData || "");
+  const sampleValue = escapeForJsx(field.sampleData || "No data");
   return `<Card key="${field.id}" className="h-full">
       <CardHeader>
         <CardTitle>${escapeForJsx(field.fieldName)}</CardTitle>${descriptionLine}
       </CardHeader>
       <CardContent>
-        <p className="text-3xl font-semibold">{data?.${dataKey} ?? "${sampleValue || "—"}"}</p>
+        <p className="text-3xl font-semibold">{data?.${dataKey} ?? "${sampleValue}"}</p>
       </CardContent>
     </Card>`;
 };
@@ -357,6 +349,37 @@ ${sections.join("\n\n")}
     </div>
   );
 }`;
+};
+
+const buildRelationships = (tables = []) => {
+  const rels = [];
+  const find = (keyword) => tables.find((t) => t.name.toLowerCase().includes(keyword));
+  const customers = find("customer");
+  const orders = find("order") || find("contract");
+  const projects = find("project") || find("campaign");
+  const finance = find("finance") || find("revenue");
+  if (customers && orders) {
+    rels.push({
+      fromTable: orders.name,
+      toTable: customers.name,
+      description: "Orders/Contracts reference Customers & Clients",
+    });
+  }
+  if (orders && finance) {
+    rels.push({
+      fromTable: finance.name,
+      toTable: orders.name,
+      description: "Finance aggregates values from Orders/Contracts",
+    });
+  }
+  if (projects && customers) {
+    rels.push({
+      fromTable: projects.name,
+      toTable: customers.name,
+      description: "Projects/Campaigns are linked to Customers & Clients",
+    });
+  }
+  return rels;
 };
 
 const buildWidgetBlueprints = (fields) =>
@@ -440,12 +463,12 @@ export async function generateDashboardFields({ name, description }) {
   const promptMessages = [
     {
       role: "system",
-    content:
-        'You are a B2B ops data architect. Given a dashboard idea, respond with JSON only. Include a "tables" array describing at least 4 data tables (e.g., Customers, Orders, Projects, Finance, Inventory). Each table should include name, description, purpose, actions[], kpis[] (label, value, trend), recommendedWidgets[], and fields[]. Fields should use only the following types: Text, Number, Currency, Date, Boolean, Email, URL, Dropdown, Multi-select, Percentage.',
+      content:
+        'Bạn là AI thiết kế schema cho dashboard. Người dùng KHÔNG upload file. Nhiệm vụ: phân tích mô tả để tạo schema (bảng + cột + quan hệ). Không tạo dữ liệu giả. Không dùng schema mặc định. Chỉ trả về JSON blueprint với tối thiểu 4 bảng. Mỗi bảng có name, description, purpose, fields[]. Field chỉ dùng loại: Text, Number, Currency, Date, Boolean, Email, URL, Dropdown, Multi-select, Percentage. Thêm relationships nếu có (fromTable, toTable, description). Không tạo records, sample data, hay dữ liệu ví dụ.',
     },
     {
       role: "user",
-      content: `Dashboard name: ${name}\nDescription: ${description}\nReturn only JSON with the tables and their fields.`,
+      content: `Dashboard name: ${name}\nDescription: ${description}\nReturn only JSON with tables (>=4), fields, and relationships.`,
     },
   ];
 
@@ -468,7 +491,8 @@ export async function generateDashboardFields({ name, description }) {
   const fields = tables.flatMap((table) => table.fields);
   const widgets = buildWidgetBlueprints(fields);
   const componentCode = buildDashboardComponent(tables, widgets);
-  return { fields, tables, widgets, componentCode };
+  const relationships = buildRelationships(tables);
+  return { fields, tables, widgets, componentCode, relationships };
 }
 
 export async function saveDashboard({ sessionId, userId, name, description, fields, widgets, componentCode, tables }) {
