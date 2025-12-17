@@ -561,10 +561,29 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
     fileInputRef.current?.click();
   };
 
+  const inferTypeFromDescription = (text: string) => {
+    const normalized = (text || "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase();
+    if (/(health|clinic|patient|y te|benh|bac si|phong kham|lab)/.test(normalized)) return "healthcare";
+    if (/(school|education|student|course|lop|giang vien)/.test(normalized)) return "education";
+    if (/(saas|subscription|mrr|product)/.test(normalized)) return "saas";
+    if (/(finance|cash|revenue|profit|chi phi|tai chinh)/.test(normalized)) return "finance";
+    if (/(commerce|retail|order|don hang|san pham|ecommerce|thuong mai)/.test(normalized)) return "ecommerce";
+    return "custom";
+  };
+
   const handleGenerate = async () => {
     setError(null);
     setIsGenerating(true);
-    const template = dashboardTemplates[dashboardType] || dashboardTemplates["ecommerce"] || { overview: [], insights: [], tables: [] };
+    const inferredType = inferTypeFromDescription(description);
+    const resolvedType = dashboardType && dashboardType !== "custom" ? dashboardType : inferredType;
+    const template =
+      dashboardTemplates[resolvedType] ||
+      dashboardTemplates[inferTypeFromDescription(description)] ||
+      dashboardTemplates["ecommerce"] ||
+      { overview: [], insights: [], tables: [] };
     const fallbackTables = template.tables;
     const fallbackFields: DashboardField[] = fallbackTables
       .flatMap((t) => t.fields || [])
@@ -576,7 +595,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
       const res = await dashboardApi.generate({
         name: dashboardName,
         description,
-        type: dashboardType,
+        type: resolvedType,
         sessionId,
         userId: userId || undefined,
         fileProvided: Boolean(parsedSchema),
@@ -593,7 +612,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
             }
           : undefined,
       });
-      const tables = res.tables?.length ? res.tables : fallbackTables;
+      const tables = res.tables?.length ? res.tables : [];
       const relationships = res.relationships || [];
       const ui = res.ui;
       const widgets = res.widgets || [];
@@ -612,7 +631,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
       onCreateDashboard?.({
         id: res.dashboardId,
         name: dashboardName.trim(),
-        type: dashboardType,
+        type: resolvedType,
         description: description.trim(),
         fields,
         widgets,
@@ -625,8 +644,15 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
       setGeneratedTables(tables);
       setGeneratedWidgets(widgets);
       handleClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate dashboard");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message =
+        status === 502
+          ? "AI service returned an invalid response. Please refine your description and try again."
+          : err instanceof Error
+            ? err.message
+            : "Failed to generate dashboard";
+      setError(message);
     } finally {
       setIsGenerating(false);
     }
@@ -730,25 +756,6 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
                 />
               </div>
 
-              <div className="space-y-3">
-                <label className="text-sm text-gray-700">Loai dashboard</label>
-                <Select value={dashboardType} onValueChange={setDashboardType}>
-                  <SelectTrigger className="text-base">
-                    <SelectValue placeholder="Chon mot loai (vi du: Thuong mai dien tu)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dashboardTypes.map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{type.label}</span>
-                          <span className="text-xs text-gray-500">{type.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="space-y-2">
               <label className="text-sm text-gray-700 flex items-center justify-between">
                 <span>Upload sample data (optional)</span>
@@ -835,7 +842,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
                 <Button variant="outline" onClick={handleClose}>Cancel</Button>
                 <Button
                   onClick={handleGenerate}
-                  disabled={!description.trim() || !dashboardName.trim() || !dashboardType || isGenerating}
+                  disabled={!description.trim() || !dashboardName.trim() || isGenerating}
                   className="gap-2 min-w-[160px]"
                 >
                   {isGenerating ? (

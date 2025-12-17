@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
+import "../styles/managedash.css";
 
 const DASHBOARD_SESSION_KEY = "socialhub:dashboards_session";
 
@@ -228,7 +229,7 @@ export default function ManageDashList() {
   const favoriteDashboards = derivedDashboards.slice(0, 3);
 
   return (
-    <div className="manage-dash-wrapper min-h-screen overflow-y-auto bg-gray-50">
+    <div className="manage-dash-wrapper mdash-surface min-h-screen overflow-y-auto">
       <Header
         onManageDash={() => navigate("/managedash")}
         onChatOpen={() => navigate("/chat")}
@@ -244,42 +245,45 @@ export default function ManageDashList() {
         }}
       />
 
-      <main className="max-w-7xl mx-auto p-6 space-y-10">
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <div className="relative max-w-2xl mx-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input placeholder="Search dashboards..." className="pl-10 pr-4" />
+      <main className="max-w-7xl mx-auto p-6 sm:p-8 space-y-12 mdash-container">
+        <div className="rounded-2xl mdash-card glass-panel p-4 shadow-md">
+          <div className="relative max-w-3xl mx-auto">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input placeholder="Search dashboards..." className="pl-11 pr-5 mdash-search-input" />
           </div>
         </div>
 
-        <section className="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-2xl p-8 border border-indigo-100">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-white rounded-lg shadow-sm">
-                  <Sparkles className="w-6 h-6 text-indigo-600" />
+        <section className="rounded-3xl mdash-hero-card p-8 md:p-10 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
+            <div className="flex-1 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="icon-circle">
+                  <Sparkles className="w-6 h-6 text-white" />
                 </div>
-                <h2 className="text-2xl text-gray-900">AI Dashboard Generator</h2>
+                <div className="flex items-center gap-2">
+                  <div className="hero-chip">AI-Powered</div>
+                  <h2 className="text-3xl font-semibold text-slate-900">Dashboard Generator</h2>
+                </div>
               </div>
-              <p className="text-gray-700 mb-4 max-w-2xl">
+              <p className="text-slate-700 text-lg max-w-2xl">
                 Describe your needs in plain language and let AI instantly craft the structure with all the fields, data types, and configurations you require.
               </p>
               <div className="flex items-center gap-3 flex-wrap">
-                <Button onClick={() => setGeneratorOpen(true)} className="gap-2">
+                <Button onClick={() => setGeneratorOpen(true)} className="gap-2 mdash-primary-btn">
                   <Sparkles className="w-4 h-4" />
                   Create New Dashboard
                 </Button>
-                <div className="flex items-center gap-2 text-sm text-gray-600 bg-white/70 px-3 py-1.5 rounded-full">
+                <div className="flex items-center gap-2 text-sm text-slate-600 bg-white/60 px-3 py-1.5 rounded-full shadow-inner">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
                   </span>
-                  AI-Powered
+                  Live AI builder online
                 </div>
               </div>
             </div>
             <div className="hidden lg:block">
-              <div className="w-32 h-32 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-3xl opacity-20" />
+              <div className="hero-visual-blob" />
             </div>
           </div>
         </section>
@@ -290,10 +294,10 @@ export default function ManageDashList() {
           </div>
         ) : (
           <>
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="w-5 h-5 text-gray-600" />
-                <h3 className="text-xl font-semibold text-gray-900">Recently viewed</h3>
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-slate-500" />
+                <h3 className="text-xl font-semibold text-slate-900">Recently viewed</h3>
               </div>
               {hasDashboards ? (
                 <div className="flex gap-4 overflow-x-auto pb-2">
@@ -302,32 +306,32 @@ export default function ManageDashList() {
                     return (
                       <Card
                         key={item.id}
-                        className="min-w-[280px] p-4 hover:shadow-lg transition-all cursor-pointer"
+                        className="min-w-[280px] p-4 mdash-card hover:shadow-lg transition-all cursor-pointer hover-lift"
                         onClick={() => openDashboard(item.id)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${item.accentColor}`}>
-                            <IconComponent className="w-5 h-5 text-white" />
+                          <div className={`accent-pill ${item.accentColor}`}>
+                            <IconComponent className="w-5 h-5 text-white drop-shadow-sm" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                            <p className="text-xs text-gray-500">{item.updatedLabel || item.createdLabel}</p>
+                            <p className="text-sm font-medium text-slate-900">{item.name}</p>
+                            <p className="text-xs text-slate-500">{item.updatedLabel || item.createdLabel}</p>
                           </div>
-                          <ArrowRight className="w-4 h-4 text-gray-400" />
+                          <ArrowRight className="w-4 h-4 text-slate-400" />
                         </div>
                       </Card>
                     );
                   })}
                 </div>
               ) : (
-                <Card className="p-6 text-center text-gray-500">No dashboards viewed yet.</Card>
+                <Card className="p-6 text-center text-slate-500 mdash-card">No dashboards viewed yet — start by generating a dashboard.</Card>
               )}
             </section>
 
-            <section>
-              <div className="flex items-center gap-2 mb-4">
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
                 <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                <h3 className="text-xl font-semibold text-gray-900">Favorite dashboards</h3>
+                <h3 className="text-xl font-semibold text-slate-900">Favorite dashboards</h3>
               </div>
               {hasDashboards ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -337,37 +341,37 @@ export default function ManageDashList() {
                     return (
                       <Card
                         key={dashboard.id}
-                        className="p-6 hover:shadow-lg transition-all cursor-pointer group"
+                        className="p-6 mdash-card hover:shadow-lg hover-lift transition-all cursor-pointer group"
                         onClick={() => openDashboard(dashboard.id)}
                       >
                         <div className="flex items-start justify-between mb-4">
-                          <div className={`p-3 ${dashboard.accentColor} rounded-xl`}>
-                            <IconComponent className="w-6 h-6 text-white" />
+                          <div className={`p-3 ${dashboard.accentColor} rounded-2xl shadow-inner`}>
+                            <IconComponent className="w-6 h-6 text-white drop-shadow" />
                           </div>
                           <Star className={`w-5 h-5 ${isFavorite ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} />
                         </div>
-                        <h4 className="text-lg font-semibold text-gray-900 mb-2">{dashboard.name}</h4>
-                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{dashboard.description || "Custom dashboard"}</p>
+                        <h4 className="text-lg font-semibold text-slate-900 mb-2">{dashboard.name}</h4>
+                        <p className="text-sm text-slate-600 mb-4 line-clamp-2">{dashboard.description || "Custom dashboard"}</p>
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Overview</p>
-                            <span className="text-sm text-gray-900">{dashboard.overviewCount}</span>
+                            <p className="text-xs text-slate-500 mb-1">Overview</p>
+                            <span className="text-sm text-slate-900">{dashboard.overviewCount}</span>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Insights</p>
-                            <span className="text-sm text-gray-900">{dashboard.insightsCount}</span>
+                            <p className="text-xs text-slate-500 mb-1">Insights</p>
+                            <span className="text-sm text-slate-900">{dashboard.insightsCount}</span>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Tables</p>
-                            <span className="text-sm text-gray-900">{dashboard.tableCount}</span>
+                            <p className="text-xs text-slate-500 mb-1">Tables</p>
+                            <span className="text-sm text-slate-900">{dashboard.tableCount}</span>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between pt-4 border-t border-gray-100 text-xs text-gray-500">
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-100 text-xs text-slate-500">
                           <span>Updated {dashboard.updatedLabel || dashboard.createdLabel}</span>
-                          <Badge className="bg-green-100 text-green-800">Active</Badge>
+                          <Badge className="bg-green-50 text-green-700 border border-green-100">Active</Badge>
                         </div>
                         <Button
-                          className="w-full mt-4 gap-2"
+                          className="w-full mt-4 gap-2 mdash-ghost-btn"
                           variant="outline"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -386,10 +390,13 @@ export default function ManageDashList() {
               )}
             </section>
 
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-semibold text-gray-900">All dashboards</h3>
-                <Button variant="outline" size="sm">
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LayoutDashboard className="w-5 h-5 text-slate-500" />
+                  <h3 className="text-xl font-semibold text-slate-900">All dashboards</h3>
+                </div>
+                <Button variant="outline" size="sm" className="mdash-ghost-btn">
                   Sort by: Recent
                 </Button>
               </div>
@@ -398,45 +405,45 @@ export default function ManageDashList() {
                   {derivedDashboards.map((dashboard) => {
                     const IconComponent = dashboard.icon;
                     return (
-                      <Card key={dashboard.id} className="p-6 flex flex-col gap-4 hover:shadow-lg transition">
+                      <Card key={dashboard.id} className="p-6 flex flex-col gap-4 mdash-card hover:shadow-lg hover-lift transition">
                         <div className="flex items-start justify-between">
-                          <div className={`p-3 ${dashboard.accentColor} rounded-xl`}>
-                            <IconComponent className="w-6 h-6 text-white" />
+                          <div className={`p-3 ${dashboard.accentColor} rounded-2xl shadow-inner`}>
+                            <IconComponent className="w-6 h-6 text-white drop-shadow" />
                           </div>
                           <Star className="w-5 h-5 text-gray-300" />
                         </div>
                         <div>
-                          <h4 className="text-lg font-semibold text-gray-900">{dashboard.name}</h4>
-                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{dashboard.description || "Generated dashboard"}</p>
+                          <h4 className="text-lg font-semibold text-slate-900">{dashboard.name}</h4>
+                          <p className="text-sm text-slate-600 mt-1 line-clamp-2">{dashboard.description || "Generated dashboard"}</p>
                         </div>
                         <div className="grid grid-cols-3 gap-4 text-sm">
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Overview</p>
-                            <span className="text-sm text-gray-900">{dashboard.overviewCount}</span>
+                            <p className="text-xs text-slate-500 mb-1">Overview</p>
+                            <span className="text-sm text-slate-900">{dashboard.overviewCount}</span>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Insights</p>
-                            <span className="text-sm text-gray-900">{dashboard.insightsCount}</span>
+                            <p className="text-xs text-slate-500 mb-1">Insights</p>
+                            <span className="text-sm text-slate-900">{dashboard.insightsCount}</span>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Tables</p>
-                            <span className="text-sm text-gray-900">{dashboard.tableCount}</span>
+                            <p className="text-xs text-slate-500 mb-1">Tables</p>
+                            <span className="text-sm text-slate-900">{dashboard.tableCount}</span>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
+                        <div className="flex items-center justify-between text-xs text-slate-500 pt-4 border-t border-slate-100">
                           <div className="flex items-center gap-3">
                             <span>{dashboard.overviewCount} overview</span>
                             <span aria-hidden="true">.</span>
                             <span>{dashboard.insightsCount} insights</span>
                           </div>
-                          <Badge className="bg-green-100 text-green-800">Active</Badge>
+                          <Badge className="bg-green-50 text-green-700 border border-green-100">Active</Badge>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button className="flex-1 gap-2" variant="outline" onClick={() => openDashboard(dashboard.id)}>
+                          <Button className="flex-1 gap-2 mdash-ghost-btn" variant="outline" onClick={() => openDashboard(dashboard.id)}>
                             Open dashboard
                             <ArrowRight className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(dashboard.id)}>
+                          <Button variant="ghost" size="icon" className="rounded-lg hover:bg-red-50" onClick={() => handleDelete(dashboard.id)}>
                             <Trash2 className="w-4 h-4 text-red-500" />
                           </Button>
                         </div>
@@ -445,7 +452,9 @@ export default function ManageDashList() {
                   })}
                 </div>
               ) : (
-                <Card className="p-6 text-center text-gray-500">Create your first dashboard to populate this list.</Card>
+                <Card className="p-6 text-center text-slate-500 mdash-card">
+                  Create your first dashboard to populate this list. Your creations will appear here.
+                </Card>
               )}
             </section>
           </>

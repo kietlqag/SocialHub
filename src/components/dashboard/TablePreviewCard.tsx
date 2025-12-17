@@ -1,11 +1,11 @@
 import { useMemo } from "react";
-import { Card } from "../../components/ui/card";
-import { Button } from "../../components/ui/button";
-import { Badge } from "../../components/ui/badge";
-import { DashboardField, DashboardTable } from "../../services/dashboards";
-import { Search } from "lucide-react";
-import { Input } from "../../components/ui/input";
 import { useNavigate } from "react-router-dom";
+import { Search } from "lucide-react";
+import { Card } from "../ui/card";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Input } from "../ui/input";
+import { DashboardField, DashboardTable } from "../../services/dashboards";
 
 type Props = {
   table: DashboardTable;
@@ -18,7 +18,8 @@ type Props = {
 
 const SAMPLE_ROWS = 5;
 
-const displayFieldName = (field: DashboardField) => field.fieldName || (field as any).name || field.key || field.id || "Field";
+const displayFieldName = (field: DashboardField) =>
+  field.fieldName || (field as any).name || field.key || field.id || "Field";
 
 const buildSampleValue = (field: DashboardField, index: number) => {
   if (field.sampleData) return field.sampleData.replace(/\{\{\s*index\s*\}\}/gi, String(index + 1));
@@ -30,7 +31,10 @@ const buildSampleValue = (field: DashboardField, index: number) => {
     return date.toLocaleDateString();
   }
   if (type.includes("currency") || type.includes("number")) {
-    return Intl.NumberFormat("en-US", { style: type.includes("currency") ? "currency" : "decimal", currency: "USD" }).format(1000 + index * 42);
+    return Intl.NumberFormat("en-US", {
+      style: type.includes("currency") ? "currency" : "decimal",
+      currency: "USD",
+    }).format(1000 + index * 42);
   }
   if (type.includes("email")) {
     const slug = field.fieldName?.toLowerCase().replace(/[^a-z0-9]/g, "") || "user";
@@ -40,13 +44,20 @@ const buildSampleValue = (field: DashboardField, index: number) => {
   return fallback;
 };
 
-export function TablePreviewCard({ table, dashboardId, title, description, actionsOverride, previewColumns }: Props) {
+export function TablePreviewCard({
+  table,
+  dashboardId,
+  title,
+  description,
+  actionsOverride,
+  previewColumns,
+}: Props) {
   const navigate = useNavigate();
   const fields = useMemo(() => {
     if (previewColumns && previewColumns.length) {
       const normalized = previewColumns.map((c) => c.toLowerCase());
       const selected = table.fields.filter(
-        (f) => normalized.includes((f.id || "").toLowerCase()) || normalized.includes((f.fieldName || "").toLowerCase())
+        (f) => normalized.includes((f.id || "").toLowerCase()) || normalized.includes((f.fieldName || "").toLowerCase()),
       );
       if (selected.length) return selected.slice(0, 4);
     }
@@ -73,7 +84,7 @@ export function TablePreviewCard({ table, dashboardId, title, description, actio
           onClick={() => navigate(dashboardId ? `/managedash/${dashboardId}?table=${table.id}` : `/managedash`)}
           className="shrink-0"
         >
-          View all →
+          View all ƒ+'
         </Button>
       </div>
 
@@ -108,8 +119,11 @@ export function TablePreviewCard({ table, dashboardId, title, description, actio
                 {sampleRows.map((row, idx) => (
                   <tr key={idx} className="hover:bg-white">
                     {fields.map((field) => (
-                      <td key={field.id || field.key || displayFieldName(field)} className="px-3 py-2 text-gray-700 whitespace-nowrap">
-                        {row[field.id || field.key || ""]}
+                      <td
+                        key={field.id || field.key || displayFieldName(field)}
+                        className="px-3 py-2 text-gray-700 whitespace-nowrap"
+                      >
+                        {row[field.id || field.key || ""] ?? buildSampleValue(field, idx)}
                       </td>
                     ))}
                   </tr>

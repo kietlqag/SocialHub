@@ -1,6 +1,6 @@
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { TablePreviewCard } from "../pages/components/TablePreviewCard";
+import { TablePreviewCard } from "../components/dashboard/TablePreviewCard";
 import type { DashboardTable } from "../services/dashboards";
 
 type TablesContentProps = {

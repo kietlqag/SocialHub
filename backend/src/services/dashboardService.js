@@ -17,6 +17,10 @@ import {
   listRelationshipsByDashboard,
   deleteRelationshipsByDashboard,
 } from "../repositories/dashboardRelationshipRepository.js";
+import {
+  insertRecord as insertDashboardRecord,
+  listRecordsByDashboard,
+} from "../repositories/dashboardRecordRepository.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -469,32 +473,134 @@ const ensureSystemFields = (fields = []) => {
   return merged;
 };
 
-function validateBlueprint(blueprint) {
-  if (!blueprint || typeof blueprint !== "object") throw new HttpError(502, "Invalid AI response");
-  const tables = Array.isArray(blueprint.tables) ? blueprint.tables : [];
-  if (tables.length < 4 || tables.length > 8) throw new HttpError(502, "AI schema missing required tables");
-  tables.forEach((table) => {
-    if (!table.key || !table.name || !Array.isArray(table.fields)) throw new HttpError(502, "Invalid table structure");
-    table.fields = ensureSystemFields(table.fields);
+const allowedFieldTypes = ["id", "string", "number", "boolean", "date", "enum", "reference", "text"];
+
+const slugify = (value = "") =>
+  value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || `key-${randomUUID().slice(0, 6)}`;
+
+function extractJsonObject(text) {
+  if (!text) return null;
+  const fencedJson = text.match(/```json([\s\S]*?)```/i);
+  const fenced = !fencedJson && text.match(/```([\s\S]*?)```/);
+  let candidate = fencedJson ? fencedJson[1] : fenced ? fenced[1] : null;
+  if (!candidate) {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      candidate = text.slice(start, end + 1);
+    }
+  }
+  const jsonString = (candidate || text).trim();
+  try {
+    return JSON.parse(jsonString);
+  } catch (err) {
+    console.error("AI response parse failed", {
+      rawPreview: text?.slice(0, 500),
+      extractedPreview: jsonString?.slice(0, 500),
+    });
+    throw new HttpError(502, "AI returned invalid JSON");
+  }
+}
+
+function validateBlueprint(rawBlueprint) {
+  const errors = [];
+  if (!rawBlueprint || typeof rawBlueprint !== "object") {
+    throw new HttpError(502, "Invalid AI response: missing JSON object");
+  }
+
+  const normalizeTable = (table, index) => {
+    const name = table?.name?.toString().trim();
+    const key = table?.key?.toString().trim() || (name ? slugify(name) : `table-${index}`);
+    if (!name) errors.push("Table missing name");
+    if (!table.fields || !Array.isArray(table.fields)) errors.push(`Table ${name || key} missing fields array`);
+    const fieldKeyByName = {};
+    const normalizedFields = Array.isArray(table.fields)
+      ? table.fields.map((field, fieldIndex) => {
+          const fname = field.fieldName || field.name || field.key || `Field ${fieldIndex + 1}`;
+          const fkey = field.key || (field.name ? slugify(field.name) : slugify(fname));
+          fieldKeyByName[fname.toString().toLowerCase()] = fkey;
+          const ftype = field.type || field.fieldType;
+          if (!ftype) errors.push(`Field ${fname} missing type`);
+          if (ftype && !allowedFieldTypes.includes(ftype)) errors.push(`Field ${fname} has unsupported type ${ftype}`);
+          return {
+            ...field,
+            key: fkey,
+            type: allowedFieldTypes.includes(ftype) ? ftype : ftype,
+          };
+        })
+      : [];
+    return { key, name, fields: ensureSystemFields(normalizedFields), fieldKeyByName };
+  };
+
+  const tablesRaw = Array.isArray(rawBlueprint.tables) ? rawBlueprint.tables : [];
+  if (tablesRaw.length < 4 || tablesRaw.length > 8) {
+    errors.push("AI schema must include between 4 and 8 tables");
+  }
+  const tableMap = new Map();
+  const tableNameMap = new Map();
+  const normalizedTables = tablesRaw.map((table, idx) => {
+    const normalized = normalizeTable(table, idx);
+    tableMap.set(normalized.key, normalized);
+    if (normalized.name) tableNameMap.set(normalized.name.toLowerCase(), normalized.key);
+    return normalized;
+  });
+
+  const relationshipsRaw = Array.isArray(rawBlueprint.relationships) ? rawBlueprint.relationships : [];
+  const normalizedRelationships = relationshipsRaw.map((rel, idx) => {
+    let fromTableKey = rel.fromTableKey || tableNameMap.get(rel.fromTable?.toString().toLowerCase());
+    let toTableKey = rel.toTableKey || tableNameMap.get(rel.toTable?.toString().toLowerCase());
+    const fromTable = tableMap.get(fromTableKey);
+    const toTable = tableMap.get(toTableKey);
+    if (!fromTableKey && rel.fromTable) fromTableKey = slugify(rel.fromTable);
+    if (!toTableKey && rel.toTable) toTableKey = slugify(rel.toTable);
+
+    const mapField = (table, fieldKey, fieldName) => {
+      if (fieldKey) return fieldKey;
+      if (!table || !fieldName) return null;
+      return table.fieldKeyByName[fieldName.toString().toLowerCase()] || null;
+    };
+
+    const fromFieldKey = mapField(fromTable, rel.fromFieldKey, rel.fromField) || rel.fromFieldKey;
+    const toFieldKey = mapField(toTable, rel.toFieldKey, rel.toField) || rel.toFieldKey;
+    if (!fromTableKey || !fromFieldKey || !toTableKey || !toFieldKey || !rel.type) {
+      errors.push(`Relationship ${idx + 1} is incomplete`);
+    }
+    return { fromTableKey, fromFieldKey, toTableKey, toFieldKey, type: rel.type };
+  });
+
+  normalizedTables.forEach((table) => {
+    if (!table.key) errors.push("Table missing key after normalization");
+    if (!table.name) errors.push(`Table ${table.key} missing name`);
+    if (!Array.isArray(table.fields) || !table.fields.length) {
+      errors.push(`Table ${table.key} missing fields`);
+    }
     table.fields.forEach((field) => {
-      if (!field.key || !field.type) throw new HttpError(502, "Invalid field structure");
-      if (!["id", "string", "number", "boolean", "date", "enum", "reference", "text"].includes(field.type)) {
-        throw new HttpError(502, "Unsupported field type");
+      if (!field.key) errors.push(`Field missing key in table ${table.key}`);
+      if (!field.type) errors.push(`Field ${field.key} missing type in table ${table.key}`);
+      if (field.type && !allowedFieldTypes.includes(field.type)) {
+        errors.push(`Field ${field.key} has unsupported type ${field.type}`);
       }
     });
   });
-  const relationships = Array.isArray(blueprint.relationships) ? blueprint.relationships : [];
-  relationships.forEach((rel) => {
-    if (!rel.fromTableKey || !rel.fromFieldKey || !rel.toTableKey || !rel.toFieldKey || !rel.type) {
-      throw new HttpError(502, "Invalid relationship");
-    }
-  });
-  const ui = blueprint.ui || {
-    defaultTableKey: tables[0]?.key || "",
-    tableDropdownOrder: tables.map((t) => t.key),
-    emptyStateText: "No records yet. Click Add record to start.",
-  };
-  return { tables, relationships, ui };
+
+  if (errors.length) {
+    throw new HttpError(502, `Invalid AI response: ${errors.join("; ")}`);
+  }
+
+  const ui =
+    rawBlueprint.ui || {
+      defaultTableKey: normalizedTables[0]?.key || "",
+      tableDropdownOrder: normalizedTables.map((t) => t.key),
+      emptyStateText: "No records yet. Click Add record to start.",
+    };
+
+  return { tables: normalizedTables, relationships: normalizedRelationships, ui };
 }
 
 async function generateSchemaBlueprint({ name, description, type }) {
@@ -517,31 +623,33 @@ Forbidden: sample data, records, widgets, KPIs, charts, UI form configs.`,
     },
   ];
 
-  let aiContent = null;
-  try {
+  const strictReminder = {
+    role: "system",
+    content: "Return ONLY JSON. No markdown, no backticks, no explanation. Must be JSON.parse() valid.",
+  };
+
+  const callAI = async (messages, attemptLabel) => {
     const completion = await client.chat.completions.create({
       model: OPENAI_MODEL,
-      messages: promptMessages,
+      messages,
       temperature: 0.3,
       max_tokens: 900,
     });
-    aiContent = completion.choices?.[0]?.message?.content?.trim() || null;
-  } catch (err) {
-    console.error("dashboard generation failed", err.message);
-  }
+    const aiContent = completion.choices?.[0]?.message?.content?.trim() || null;
+    const parsed = extractJsonObject(aiContent);
+    return validateBlueprint(parsed);
+  };
 
-  const parsed = extractJsonPayload(aiContent);
-  return validateBlueprint(parsed);
-}
-
-function extractJsonPayload(text) {
-  if (!text) return null;
-  const match = text.match(/```json([\s\S]*?)```/i);
-  const jsonString = match ? match[1] : text;
   try {
-    return JSON.parse(jsonString);
+    return await callAI(promptMessages, "attempt-1");
   } catch (err) {
-    return null;
+    console.error("AI schema generation attempt 1 failed", err.message);
+    try {
+      return await callAI([...promptMessages, strictReminder], "attempt-2");
+    } catch (err2) {
+      console.error("AI schema generation attempt 2 failed", err2.message);
+      throw new HttpError(502, err2.message || "AI returned invalid JSON");
+    }
   }
 }
 
@@ -642,4 +750,38 @@ export async function updateDashboard(id, { sessionId, userId }, updates) {
     throw new HttpError(404, "Dashboard not found");
   }
   return next;
+}
+
+export async function addDashboardRecord({ dashboardId, tableKey, record, sessionId, userId }) {
+  if (!sessionId && !userId) {
+    throw new HttpError(400, "sessionId or userId required");
+  }
+  if (!dashboardId || !tableKey || !record || typeof record !== "object") {
+    throw new HttpError(400, "dashboardId, tableKey, and record are required");
+  }
+  // verify ownership
+  const dashboards = await listDashboardsForOwner({ sessionId, userId });
+  const exists = dashboards.find((d) => d.id === dashboardId);
+  if (!exists) {
+    // Ownership check failed or dashboard missing; return empty set instead of 404 to keep UI empty-state friendly
+    return [];
+  }
+  const inserted = await insertDashboardRecord({ dashboardId, tableKey, record });
+  return inserted;
+}
+
+export async function listDashboardRecords({ dashboardId, tableKey, sessionId, userId }) {
+  if (!dashboardId || !tableKey) {
+    throw new HttpError(400, "dashboardId and tableKey are required");
+  }
+  if (!sessionId && !userId) {
+    throw new HttpError(400, "sessionId or userId required");
+  }
+  const dashboards = await listDashboardsForOwner({ sessionId, userId });
+  const exists = dashboards.find((d) => d.id === dashboardId);
+  if (!exists) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+  const records = await listRecordsByDashboard({ dashboardId, tableKey });
+  return records || [];
 }

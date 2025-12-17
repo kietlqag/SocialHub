@@ -1,13 +1,14 @@
-﻿import { Button } from "../components/ui/button";
+import { useState } from "react";
+import { Mail, Lock, ArrowLeft, Loader2, KeyRound } from "lucide-react";
+import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Separator } from "../components/ui/separator";
 import { Checkbox } from "../components/ui/checkbox";
-import { Mail, Lock, ArrowLeft, Sparkles, Loader2, KeyRound } from "lucide-react";
-import { useState } from "react";
 import { AuthUser, login, requestPasswordReset, resetPassword } from "../services/auth";
 import { toast } from "sonner@2.0.3";
 import { API_URL } from "../services/api";
+import "../styles/pages/LoginPage.css";
 
 export function Login({
   onBack,
@@ -96,15 +97,14 @@ export function Login({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="w-full bg-white/95 backdrop-blur-sm border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl text-primary">SocialHub</h1>
+    <div className="login-page">
+      <div className="login-header">
+        <div className="login-header-inner">
+          <div className="login-header-content">
+            <h1 className="login-brand">SocialHub</h1>
             {onBack && (
-              <Button variant="ghost" onClick={onBack}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
+              <Button variant="ghost" onClick={onBack} className="login-back-button">
+                <ArrowLeft className="h-4 w-4" />
                 Back to Home
               </Button>
             )}
@@ -112,27 +112,22 @@ export function Login({
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
-        <div className="w-full max-w-md">
-          {/* Welcome Message */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
-            <h2 className="text-3xl text-gray-900 mb-2">Welcome back</h2>
-            <p className="text-gray-600">Sign in to your SocialHub account</p>
+      <div className="login-main">
+        <div className="login-card-container">
+          <div className="login-welcome">
+            <h2 className="login-title">Welcome!</h2>
+            <p className="login-subtitle">Sign in to your SocialHub account</p>
           </div>
 
-          {/* Login Form Card */}
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Email Field */}
+          <div className="login-card">
+            <form onSubmit={handleSubmit} className="login-form space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email" className="login-label">
+                  Email address
+                </Label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400" />
+                  <div className="login-icon">
+                    <Mail className="h-5 w-5" />
                   </div>
                   <Input
                     id="email"
@@ -140,7 +135,7 @@ export function Login({
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
+                    className="login-input pl-10"
                     required
                   />
                 </div>
@@ -149,19 +144,22 @@ export function Login({
               {!resetRequested && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Password</Label>
-                    <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer select-none">
+                    <Label htmlFor="password" className="login-label">
+                      Password
+                    </Label>
+                    <label className="login-inline-toggle">
                       <Checkbox
                         id="toggle-password"
                         checked={showPassword}
                         onCheckedChange={(checked) => setShowPassword(Boolean(checked))}
+                        className="login-checkbox"
                       />
                       <span>Show password</span>
                     </label>
                   </div>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-gray-400" />
+                    <div className="login-icon">
+                      <Lock className="h-5 w-5" />
                     </div>
                     <Input
                       id="password"
@@ -169,33 +167,38 @@ export function Login({
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10"
+                      className="login-input pl-10"
                       required
                     />
                   </div>
                 </div>
               )}
 
-              {/* Reset Password (Step after receiving code) */}
               {resetRequested && (
-                <div className="space-y-2 border border-primary/20 rounded-lg p-3 bg-primary/5">
-                  <p className="text-sm text-gray-600">
+                <div className="login-reset-panel space-y-2">
+                  <p className="login-reset-copy">
                     Ma reset da duoc gui den email cua ban. Nhap ma va mat khau moi de hoan tat.
                   </p>
-                  <Label htmlFor="resetCode">Reset code</Label>
+                  <Label htmlFor="resetCode" className="login-label">
+                    Reset code
+                  </Label>
                   <Input
                     id="resetCode"
                     value={resetCode}
                     onChange={(e) => setResetCode(e.target.value)}
                     placeholder="Enter code you received"
+                    className="login-input"
                   />
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="newPassword">New password</Label>
-                    <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer select-none">
+                    <Label htmlFor="newPassword" className="login-label">
+                      New password
+                    </Label>
+                    <label className="login-inline-toggle">
                       <Checkbox
                         id="show-reset-passwords"
                         checked={showResetPasswords}
                         onCheckedChange={(checked) => setShowResetPasswords(Boolean(checked))}
+                        className="login-checkbox"
                       />
                       <span>Show password</span>
                     </label>
@@ -206,16 +209,26 @@ export function Login({
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Enter new password"
+                    className="login-input"
                   />
-                  <Label htmlFor="confirmNewPassword">Confirm new password</Label>
+                  <Label htmlFor="confirmNewPassword" className="login-label">
+                    Confirm new password
+                  </Label>
                   <Input
                     id="confirmNewPassword"
                     type={showResetPasswords ? "text" : "password"}
                     value={confirmNewPassword}
                     onChange={(e) => setConfirmNewPassword(e.target.value)}
                     placeholder="Re-enter new password"
+                    className="login-input"
                   />
-                  <Button type="button" variant="outline" onClick={handleResetPassword} disabled={loading}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleResetPassword}
+                    disabled={loading}
+                    className="login-secondary-button"
+                  >
                     Update password
                   </Button>
                 </div>
@@ -223,26 +236,27 @@ export function Login({
 
               {!resetRequested && (
                 <>
-                  <div className="flex items-center justify-between pt-1 text-sm text-gray-700">
-                    <label className="flex items-center space-x-2 cursor-pointer select-none text-sm text-gray-700">
+                  <div className="login-row">
+                    <label className="login-inline-toggle">
                       <Checkbox
                         id="remember"
                         checked={rememberMe}
                         onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                        className="login-checkbox"
                       />
                       <span className="leading-none">Remember me for 30 days</span>
                     </label>
                     <button
                       type="button"
                       onClick={handleForgotPassword}
-                      className="text-sm text-gray-700 hover:text-primary transition-colors inline-flex items-center"
+                      className="login-link inline-flex items-center"
                     >
                       <KeyRound className="mr-1 h-4 w-4" />
                       Forgot password?
                     </button>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={loading}>
+                  <Button type="submit" className="login-primary-button w-full" disabled={loading}>
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -256,23 +270,21 @@ export function Login({
               )}
             </form>
 
-            {/* Divider */}
-            <div className="relative my-6">
+            <div className="login-divider relative">
               <div className="absolute inset-0 flex items-center">
-                <Separator />
+                <Separator className="login-separator" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                <span className="login-separator-label">Or continue with</span>
               </div>
             </div>
 
-            {/* Social Login Buttons */}
             <div className="grid grid-cols-2 gap-3">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleSocialLogin("Google")}
-                className="w-full"
+                onClick={() => handleSocialLogin("google")}
+                className="social-button w-full"
               >
                 <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
                   <path
@@ -297,8 +309,8 @@ export function Login({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleSocialLogin("GitHub")}
-                className="w-full"
+                onClick={() => handleSocialLogin("github")}
+                className="social-button w-full"
               >
                 <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
                   <path
@@ -311,25 +323,20 @@ export function Login({
               </Button>
             </div>
 
-            {/* Sign Up Link */}
-            <p className="mt-6 text-center text-gray-600">
+            <p className="login-footer-text">
               Don't have an account?{" "}
-              <button 
-                onClick={onSwitchToSignUp}
-                className="text-primary hover:text-primary/80 transition-colors"
-              >
+              <button onClick={onSwitchToSignUp} className="login-link">
                 Start your free trial
               </button>
             </p>
 
-            {/* Terms */}
-            <p className="mt-4 text-center text-xs text-gray-500">
+            <p className="login-terms">
               By signing in, you agree to our{" "}
-              <a href="#" className="text-primary hover:underline">
+              <a href="#" className="login-link">
                 Terms of Service
               </a>{" "}
               and{" "}
-              <a href="#" className="text-primary hover:underline">
+              <a href="#" className="login-link">
                 Privacy Policy
               </a>
             </p>
@@ -339,7 +346,3 @@ export function Login({
     </div>
   );
 }
-
-
-
-

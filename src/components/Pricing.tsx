@@ -56,42 +56,45 @@ const plans = [
 
 export function Pricing() {
   return (
-    <section id="pricing" className="py-20 bg-white">
+    <section id="pricing" className="pricing-section py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl">
+          <h2 className="section-heading text-3xl sm:text-4xl lg:text-5xl font-semibold text-slate-900">
             Choose the perfect plan for your needs
           </h2>
-          <p className="mt-4 max-w-2xl mx-auto text-xl text-gray-600">
+          <p className="section-subtitle mt-4 max-w-2xl mx-auto text-xl">
             Start with a 14-day free trial. No credit card required.
           </p>
         </div>
         
         <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3">
           {plans.map((plan, index) => (
-            <Card key={index} className={`relative ${plan.popular ? 'border-primary shadow-lg scale-105' : ''}`}>
+            <Card key={index} className={`relative pricing-card ${plan.popular ? "popular" : ""}`}>
               {plan.popular && (
-                <Badge className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-primary">
+                <Badge className="plan-badge absolute -top-3 left-1/2 transform -translate-x-1/2">
                   Most Popular
                 </Badge>
               )}
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                <CardTitle className="text-2xl font-semibold text-slate-900">{plan.name}</CardTitle>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">{plan.price}</span>
+                  <span className="text-4xl font-bold plan-price">{plan.price}</span>
                   <span className="text-gray-500">{plan.period}</span>
                 </div>
-                <CardDescription className="mt-2">{plan.description}</CardDescription>
+                <CardDescription className="mt-3 text-base text-slate-600">{plan.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className={`w-full mb-6 ${plan.popular ? '' : 'variant-outline'}`}>
+                <Button
+                  variant={plan.popular ? "default" : "outline"}
+                  className={`w-full mb-6 ${plan.popular ? "cta-primary" : "cta-ghost"}`}
+                >
                   Start Free Trial
                 </Button>
                 <ul className="space-y-3">
                   {plan.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-start">
+                    <li key={featureIndex} className="flex items-start text-slate-700">
                       <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5 mr-3" />
-                      <span className="text-gray-700">{feature}</span>
+                      <span>{feature}</span>
                     </li>
                   ))}
                 </ul>

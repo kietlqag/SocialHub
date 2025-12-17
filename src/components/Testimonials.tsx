@@ -31,35 +31,35 @@ const testimonials = [
 
 export function Testimonials() {
   return (
-    <section id="testimonials" className="py-20 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="testimonials" className="testimonials-section py-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl">
+          <h2 className="section-heading text-3xl sm:text-4xl lg:text-5xl font-semibold text-slate-900">
             Trusted by thousands of businesses
           </h2>
-          <p className="mt-4 max-w-2xl mx-auto text-xl text-gray-600">
+          <p className="section-subtitle mt-4 max-w-2xl mx-auto text-xl">
             See what our customers are saying about SocialHub
           </p>
         </div>
         
         <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3">
           {testimonials.map((testimonial, index) => (
-            <Card key={index} className="bg-white hover:shadow-lg transition-shadow duration-300">
-              <CardContent className="p-6">
+            <Card key={index} className="testimonial-card">
+              <CardContent className="p-7">
                 <div className="flex items-center mb-4">
                   {[...Array(testimonial.rating)].map((_, i) => (
                     <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
                   ))}
                 </div>
-                <p className="text-gray-700 mb-6">"{testimonial.content}"</p>
+                <p className="quote-text mb-6 text-base leading-relaxed">"{testimonial.content}"</p>
                 <div className="flex items-center">
-                  <Avatar className="h-10 w-10">
+                  <Avatar className="h-11 w-11">
                     <AvatarImage src="" alt={testimonial.name} />
                     <AvatarFallback>{testimonial.avatar}</AvatarFallback>
                   </Avatar>
                   <div className="ml-3">
-                    <p className="text-sm font-medium text-gray-900">{testimonial.name}</p>
-                    <p className="text-sm text-gray-500">{testimonial.role}, {testimonial.company}</p>
+                    <p className="text-sm font-semibold text-slate-900">{testimonial.name}</p>
+                    <p className="text-sm text-slate-500">{testimonial.role}, {testimonial.company}</p>
                   </div>
                 </div>
               </CardContent>

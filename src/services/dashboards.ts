@@ -125,4 +125,23 @@ export const dashboardApi = {
     api.get<{ dashboards: Dashboard[] }>(`/dashboards${withOwnerParams(sessionId, userId || undefined)}`),
   delete: (id: string, sessionId: string, userId?: string | null) =>
     api.delete<{ success: boolean }>(`/dashboards/${id}${withOwnerParams(sessionId, userId || undefined)}`),
+  listRecords: (params: { dashboardId: string; tableKey: string; sessionId?: string; userId?: string | null }) => {
+    const query = new URLSearchParams();
+    query.set("dashboardId", params.dashboardId);
+    query.set("tableKey", params.tableKey);
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    return api.get<{ records: Record<string, any>[] }>(`/records?${query.toString()}`);
+  },
+  addRecord: (payload: {
+    dashboardId: string;
+    tableKey: string;
+    record: Record<string, any>;
+    sessionId: string;
+    userId?: string | null;
+  }) =>
+    api.post<{ record: { id: string; tableKey: string; record: Record<string, any> } }>(
+      `/dashboards/${payload.dashboardId}/records`,
+      payload,
+    ),
 };

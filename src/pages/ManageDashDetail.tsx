@@ -59,6 +59,11 @@ export default function ManageDashDetail() {
     }[]
   >([]);
   const [activeSection, setActiveSection] = useState<"overview" | "insights" | "tables">("overview");
+  const [addFormOpen, setAddFormOpen] = useState(false);
+  const [draftRecord, setDraftRecord] = useState<Record<string, any>>({});
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const [recordSaving, setRecordSaving] = useState(false);
+  const [recordsByTable, setRecordsByTable] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     if (!dashId || !sessionId) return;
@@ -85,9 +90,25 @@ export default function ManageDashDetail() {
     };
   }, [dashId, sessionId]);
 
-  const safeDashboard = dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] };
-  const mergedTables = safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : [];
-  const hasData = mergedTables.some((t) => Array.isArray((t as any).sampleRows) && (t as any).sampleRows.length > 0);
+  // Memoize the fallback dashboard object to avoid a new reference every render (which was retriggering effects).
+  const safeDashboard = useMemo(
+    () => dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] },
+    [dashboard],
+  );
+  const mergedTables = useMemo(
+    () => (safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : []),
+    [safeDashboard],
+  );
+  const totalRecordCount = useMemo(
+    () =>
+      Object.values(recordsByTable).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0) +
+      mergedTables.reduce(
+        (sum, t) => sum + (Array.isArray((t as any).sampleRows) ? (t as any).sampleRows.length : 0),
+        0,
+      ),
+    [recordsByTable, mergedTables],
+  );
+  const hasData = totalRecordCount > 0;
 
   const totalTables = mergedTables.length;
   const totalFields = mergedTables.reduce((sum, table) => sum + (table.fields?.length || 0), 0);
@@ -98,10 +119,12 @@ export default function ManageDashDetail() {
         id: table.key || table.id || `table-${idx}`,
         title: table.name || `Table ${idx + 1}`,
         description: table.description || table.purpose || "",
-        count: Array.isArray((table as any).sampleRows) ? (table as any).sampleRows.length : 0,
+        count:
+          (recordsByTable[table.key || table.id || ""] || []).length ||
+          (Array.isArray((table as any).sampleRows) ? (table as any).sampleRows.length : 0),
         ref: table,
       })),
-    [mergedTables],
+    [mergedTables, recordsByTable],
   );
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [tablesMenuOpen, setTablesMenuOpen] = useState(false);
@@ -182,6 +205,27 @@ export default function ManageDashDetail() {
     );
   }, [mergedTables]);
 
+  // Fetch records for the active table
+  useEffect(() => {
+    const activeOption = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
+    const activeTable = activeOption?.ref;
+    if (!dashId || !activeTable) return;
+    const tableKey = activeTable.key || activeTable.id || "";
+    let cancelled = false;
+    dashboardApi
+      .listRecords({ dashboardId: dashId, tableKey, sessionId })
+      .then((res) => {
+        if (cancelled) return;
+        setRecordsByTable((prev) => ({ ...prev, [tableKey]: res.records || [] }));
+      })
+      .catch(() => {
+        // swallow; UI will fall back to sampleRows
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dashId, activeTableId, tableOptions, sessionId]);
+
   const handleCopyCode = async () => {
     if (!safeDashboard?.componentCode) return;
     try {
@@ -193,7 +237,7 @@ export default function ManageDashDetail() {
     }
   };
 
-const renderContent = () => {
+  const renderContent = () => {
   if (activeSection === "overview") {
     return <OverviewContent kpis={overviewKpis} range={timeRange} colors={chartColors} />;
   }
@@ -208,33 +252,90 @@ const renderContent = () => {
       />
     );
   }
-  if (activeSection === "tables") {
-    if (!tableOptions.length) {
-      return <Card className="p-8 text-center text-gray-500 border border-dashed border-gray-200">No tables available</Card>;
-    }
-    const activeOption = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
-    const activeTable = activeOption.ref;
-    const visibleFields = getVisibleFields(activeTable?.fields || []);
-    return (
-      <div className="space-y-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900">{activeOption.title}</h2>
+    if (activeSection === "tables") {
+      if (!tableOptions.length) {
+        return <Card className="p-8 text-center text-gray-500 border border-dashed border-gray-200">No tables available</Card>;
+      }
+      const activeOption = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
+      const activeTable = activeOption.ref;
+      const visibleFields = getVisibleFields(activeTable?.fields || []);
+      const handleSaveRecord = async () => {
+        if (!activeTable) return;
+        const requiredMissing = visibleFields.some((f) => f.required && !draftRecord[f.key || f.id || f.fieldName || f.name || ""]);
+        if (requiredMissing) {
+          setRecordError("Please fill all required fields.");
+          return;
+        }
+        setRecordError(null);
+        try {
+          setRecordSaving(true);
+          const res = await dashboardApi.addRecord({
+            dashboardId: dashId!,
+            tableKey: activeTable.key || activeTable.id || "",
+            record: draftRecord,
+            sessionId,
+          });
+          const tableKey = activeTable.key || activeTable.id || "";
+          const appendedRecord = res?.record?.record || draftRecord;
+          setRecordsByTable((prev) => {
+            const next = prev[tableKey] ? [...prev[tableKey]] : [];
+            next.unshift(appendedRecord);
+            return { ...prev, [tableKey]: next };
+          });
+          setAddFormOpen(false);
+          setDraftRecord({});
+        } catch (err: any) {
+          setRecordError(err?.message || "Failed to save");
+        } finally {
+          setRecordSaving(false);
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">{activeOption.title}</h2>
             <p className="text-sm text-gray-600">{activeOption.description || "No description"}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {(activeTable?.actions && activeTable.actions.length ? activeTable.actions : ["Add record", "Segment", "Update"])
-            .slice(0, 3)
-            .map((action) => (
-              <Button key={action} variant="outline">
-                {action}
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <Button variant="secondary" onClick={() => setAddFormOpen(true)}>Add data</Button>
+          <div className="relative w-full md:max-w-md">
+            <Input placeholder="Search preview..." className="pl-10" />
+          </div>
+        </div>
+        {addFormOpen ? (
+          <Card className="p-4 space-y-3 border border-dashed border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {visibleFields.slice(0, 6).map((field) => {
+                const key = field.key || field.id || field.fieldName || field.name || "";
+                return (
+                  <div key={key} className="space-y-1">
+                    <div className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                      <span>{displayFieldName(field)}</span>
+                      {field.required ? <span className="text-red-500">*</span> : null}
+                    </div>
+                    <Input
+                      value={draftRecord[key] ?? ""}
+                      onChange={(e) => setDraftRecord((prev) => ({ ...prev, [key]: (e.target as HTMLInputElement).value }))}
+                      placeholder={field.description || "Enter value"}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {recordError ? <div className="text-xs text-red-600">{recordError}</div> : null}
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={handleSaveRecord}>
+                {recordSaving ? "Saving..." : "Save"}
               </Button>
-            ))}
-        </div>
-        <div className="relative max-w-md">
-          <Input placeholder="Search preview..." className="pl-10" />
-        </div>
+              <Button variant="outline" onClick={() => { setAddFormOpen(false); setDraftRecord({}); setRecordError(null); }}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        ) : null}
         <Card className="p-10 text-center text-gray-500 border border-dashed border-gray-200">
           {safeDashboard.ui?.emptyStateText || "No sample data"}
         </Card>
@@ -248,6 +349,22 @@ const renderContent = () => {
             ))}
           </div>
         ) : null}
+        {/* Simple record preview */}
+        <div className="grid grid-cols-1 gap-3">
+          {(recordsByTable[activeTable.key || activeTable.id || ""] || []).slice(0, 5).map((rec, idx) => (
+            <Card key={idx} className="p-4 text-left">
+              {visibleFields.slice(0, 4).map((field) => {
+                const key = field.key || field.id || field.fieldName || field.name || "";
+                return (
+                  <div key={key} className="text-sm text-gray-700">
+                    <span className="font-semibold">{displayFieldName(field)}: </span>
+                    <span>{rec[key] ?? "-"}</span>
+                  </div>
+                );
+              })}
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
@@ -257,7 +374,6 @@ const renderContent = () => {
   const sidebarItems = [
     { id: "overview", label: "Overview", icon: BarChart3, count: overviewKpis.length },
     { id: "insights", label: "Insights", icon: BarChart3, count: totalInsights },
-    { id: "tables", label: "Tables", icon: Table, count: tableOptions.length },
   ];
 
   if (!dashId) {

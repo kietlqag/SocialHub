@@ -36,30 +36,30 @@ const features = [
 
 export function Features() {
   return (
-    <section id="features" className="py-20 bg-white">
+    <section id="features" className="feature-section py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl">
+          <h2 className="section-heading text-3xl sm:text-4xl lg:text-5xl font-semibold text-slate-900">
             Everything you need to manage your business
           </h2>
-          <p className="mt-4 max-w-2xl mx-auto text-xl text-gray-600">
+          <p className="section-subtitle mt-4 max-w-2xl mx-auto text-xl">
             Powerful dashboard tools designed to help you visualize data, track performance, and make informed decisions.
           </p>
         </div>
         
         <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature, index) => (
-            <Card key={index} className="relative hover:shadow-lg transition-shadow duration-300">
+            <Card key={index} className="relative feature-card">
               <CardHeader>
                 <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <feature.icon className="h-8 w-8 text-primary" />
+                  <div className="flex-shrink-0 icon-bubble">
+                    <feature.icon className="h-6 w-6" />
                   </div>
-                  <CardTitle className="ml-3">{feature.title}</CardTitle>
+                  <CardTitle className="ml-3 text-lg font-semibold text-slate-900">{feature.title}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-base">
+                <CardDescription className="text-base text-slate-600">
                   {feature.description}
                 </CardDescription>
               </CardContent>

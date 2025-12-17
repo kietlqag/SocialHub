@@ -5,6 +5,8 @@ import {
   listDashboards,
   removeDashboard,
   generateAndPersistDashboard,
+  addDashboardRecord,
+  listDashboardRecords,
 } from "../services/dashboardService.js";
 
 const parseOwner = (req) => ({
@@ -44,4 +46,31 @@ export async function deleteDashboard(req, res) {
   }
   await removeDashboard(req.params.id, owner);
   res.json({ success: true });
+}
+
+export async function createDashboardRecord(req, res) {
+  const owner = parseOwner(req);
+  const { tableKey, record, dashboardId: bodyDashboardId } = req.body;
+  const { id: paramId } = req.params;
+  const dashboardId = paramId || bodyDashboardId;
+  const inserted = await addDashboardRecord({
+    dashboardId,
+    tableKey,
+    record,
+    sessionId: owner.sessionId,
+    userId: owner.userId,
+  });
+  res.status(201).json({ record: inserted });
+}
+
+export async function getDashboardRecords(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId, tableKey } = req.query;
+  const records = await listDashboardRecords({
+    dashboardId,
+    tableKey,
+    sessionId: owner.sessionId,
+    userId: owner.userId,
+  });
+  res.json({ records });
 }

@@ -26,30 +26,30 @@ export function Header({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <header className="w-full bg-white/95 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-50">
+    <header className="w-full bg-white/70 backdrop-blur-xl border-b border-white/60 shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-primary">SocialHub</h1>
+              <h1 className="text-2xl font-bold brand-mark">SocialHub</h1>
             </div>
           </div>
           
           {/* Desktop Navigation */}
           <nav className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-8">
-              <a href="/home" className="text-gray-600 hover:text-primary transition-colors">Home</a>
+              <a href="/home" className="nav-link">Home</a>
               {currentUser && (
                 <button
                   onClick={onManageDash}
-                  className="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded-md text-sm"
+                  className="nav-link text-sm"
                 >
                   Dashboard
                 </button>
               )}
               {/* AI Chat moved into the nav between Testimonials and Contact */}
-              <button onClick={onChatOpen} className="text-gray-600 hover:text-primary transition-colors px-2 py-1 rounded-md text-sm">AI Chat</button>
-              <a href="#contact" className="text-gray-600 hover:text-primary transition-colors">Contact</a>
+              <button onClick={onChatOpen} className="nav-link text-sm">AI Chat</button>
+              <a href="#contact" className="nav-link">Contact</a>
             </div>
           </nav>
 
@@ -71,8 +71,8 @@ export function Header({
                 </>
               ) : (
                 <>
-                  <Button variant="ghost" onClick={onLoginOpen}>Sign In</Button>
-                  <Button onClick={onSignUpOpen}>Start Free Trial</Button>
+                  <Button variant="ghost" className="cta-ghost" onClick={onLoginOpen}>Sign In</Button>
+                  <Button className="cta-primary" onClick={onSignUpOpen}>Start Free Trial</Button>
                 </>
               )}
             </div>
@@ -94,7 +94,7 @@ export function Header({
       {isMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-100">
-            <a href="/home" className="block px-3 py-2 text-gray-600 hover:text-primary">Home</a>
+            <a href="/home" className="block px-3 py-2 text-gray-700 hover:text-primary font-semibold">Home</a>
             {currentUser && (
               <Button
                 variant="ghost"
@@ -107,7 +107,7 @@ export function Header({
                 Dashboard
               </Button>
             )}
-            <a href="#contact" className="block px-3 py-2 text-gray-600 hover:text-primary">Contact</a>
+            <a href="#contact" className="block px-3 py-2 text-gray-700 hover:text-primary font-semibold">Contact</a>
               <div className="px-3 py-2 space-y-2">
               <Button variant="ghost" className="w-full" onClick={onChatOpen}>AI Chat</Button>
                 {currentUser ? (
@@ -122,11 +122,11 @@ export function Header({
                       <LogOut className="h-4 w-4 mr-2" />
                       Sign out
                     </Button>
-                  </>
+                </>
               ) : (
                 <>
-                  <Button variant="ghost" className="w-full" onClick={onLoginOpen}>Sign In</Button>
-                  <Button className="w-full" onClick={onSignUpOpen}>Start Free Trial</Button>
+                  <Button variant="ghost" className="w-full cta-ghost" onClick={onLoginOpen}>Sign In</Button>
+                  <Button className="w-full cta-primary" onClick={onSignUpOpen}>Start Free Trial</Button>
                 </>
               )}
             </div>

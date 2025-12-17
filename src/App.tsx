@@ -15,11 +15,12 @@ import Profile from "./pages/Profile";
 import ManageDashList from "./pages/ManageDashList";
 import ManageDashDetail from "./pages/ManageDashDetail";
 import { clearSession, fetchMe, getCurrentSession, type AuthUser } from "./services/auth";
+import "./styles/home.css";
 
 const Landing = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLogout: () => void }) => {
   const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen landing-page text-slate-900">
       <Header
         onChatOpen={() => navigate("/chat")}
         onLoginOpen={() => navigate("/login")}
