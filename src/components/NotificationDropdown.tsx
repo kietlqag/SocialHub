@@ -1,4 +1,5 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import {
@@ -11,7 +12,6 @@ import {
   Package,
   Calendar,
   MessageSquare,
-  Settings as SettingsIcon,
 } from "lucide-react";
 import { api } from "../services/api";
 
@@ -31,24 +31,51 @@ interface NotificationDropdownProps {
 
 export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = {}) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [coords, setCoords] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
+  const selfId = useRef(`dropdown-${Math.random().toString(36).slice(2, 8)}`);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    const handleOutside = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node) && !triggerRef.current?.contains(event.target as Node)) {
         setIsOpen(false);
       }
-    }
+    };
+    if (isOpen) document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [isOpen]);
 
+  useEffect(() => {
+    const handleCloseOthers = (event: Event) => {
+      const detailId = (event as CustomEvent)?.detail;
+      if (detailId !== selfId.current) setIsOpen(false);
+    };
+    window.addEventListener("close-all-dropdowns", handleCloseOthers as EventListener);
+    return () => window.removeEventListener("close-all-dropdowns", handleCloseOthers as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const top = rect.bottom + 12 + window.scrollY;
+      const right = Math.max(4, window.innerWidth + window.scrollX - rect.right);
+      setCoords({ top, right });
+    };
     if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
+      update();
+      window.addEventListener("scroll", update, true);
+      window.addEventListener("resize", update);
     }
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
   }, [isOpen]);
 
   // fetch notifications when dropdown opens (first time or subsequent opens)
@@ -58,15 +85,25 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       try {
         const res = await api.get<{ data: any[] }>("/notifications");
         const items = Array.isArray(res?.data) ? res.data : [];
-        const mapped = items.map((d) => ({
-          id: String(d._id || d.id),
-          type: d.type || "info",
-          title: d.title || "(no title)",
-          message: d.message || "",
-          time: d.createdAt || d.time || d.updatedAt || new Date().toISOString(),
-          read: !!d.read,
-          icon: d.type === "success" ? Package : d.type === "alert" ? AlertCircle : d.type === "warning" ? Calendar : MessageSquare,
-        } as NotificationItem));
+        const mapped = items.map(
+          (d) =>
+            ({
+              id: String(d._id || d.id),
+              type: d.type || "info",
+              title: d.title || "(no title)",
+              message: d.message || "",
+              time: d.createdAt || d.time || d.updatedAt || new Date().toISOString(),
+              read: !!d.read,
+              icon:
+                d.type === "success"
+                  ? Package
+                  : d.type === "alert"
+                    ? AlertCircle
+                    : d.type === "warning"
+                      ? Calendar
+                      : MessageSquare,
+            }) as NotificationItem,
+        );
         setNotifications(mapped);
         setHasLoadedOnce(true);
       } catch (err) {
@@ -79,7 +116,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
     if (isOpen && (!hasLoadedOnce || notifications.length === 0)) {
       load();
     }
-  }, [isOpen]);
+  }, [isOpen, hasLoadedOnce, notifications.length]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -87,7 +124,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
     try {
       const res = await api.patch<{ data: any }>(`/notifications/${id}`, { read: true });
       const updated = res?.data;
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: !!updated.read } : n)));
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: !!updated?.read } : n)));
     } catch (err) {
       console.error("Failed to mark as read", err);
     }
@@ -113,144 +150,125 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
   };
 
   const getNotificationColor = (type: NotificationItem["type"]) => {
-    // Returns a set of Tailwind classes for different UI parts per notification type
     switch (type) {
       case "success":
-        return {
-          bg: "bg-gradient-to-r from-green-50 via-green-100 to-white",
-          iconBg: "bg-green-50 text-green-600",
-          accent: "border-l-4 border-green-300",
-          dot: "bg-green-600"
-        };
+        return { dot: "bg-green-500" };
       case "warning":
-        return {
-          bg: "bg-gradient-to-r from-yellow-50 via-yellow-100 to-white",
-          iconBg: "bg-yellow-50 text-yellow-600",
-          accent: "border-l-4 border-yellow-300",
-          dot: "bg-yellow-500"
-        };
+        return { dot: "bg-yellow-500" };
       case "alert":
-        return {
-          bg: "bg-gradient-to-r from-red-50 via-red-100 to-white",
-          iconBg: "bg-red-50 text-red-600",
-          accent: "border-l-4 border-red-300",
-          dot: "bg-red-600"
-        };
+        return { dot: "bg-red-500" };
       default:
-        return {
-          bg: "bg-gradient-to-r from-sky-50 via-sky-100 to-white",
-          iconBg: "bg-sky-50 text-sky-600",
-          accent: "border-l-4 border-sky-300",
-          dot: "bg-sky-600"
-        };
+        return { dot: "bg-sky-500" };
     }
   };
 
-  const handleOpenSettings = () => {
+  const handleViewAll = () => {
     if (onViewAll) return onViewAll();
-
-    // fallback: update history + trigger popstate so App picks up the /settings path
     try {
-      window.history.pushState({}, "", "/settings");
+      window.history.pushState({}, "", "/notifications");
       window.dispatchEvent(new PopStateEvent("popstate"));
     } catch (e) {
       // no-op
     }
   };
 
-  // Note: use a fixed/responsive width for the dropdown instead of `w-full`.
-  // `w-full` was stretching to the width of the parent (the tiny icon button),
-  // causing the narrow vertical strip seen in the screenshot. Using an explicit
-  // width + a sensible max for small screens makes the popover readable.
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <Button variant="ghost" size="icon" className="relative" onClick={() => setIsOpen(!isOpen)}>
-        <Bell className="w-5 h-5" />
-        {unreadCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
-      </Button>
-
-      {isOpen && (
-        <div className="absolute right-0 sm:right-4 top-12 w-[22rem] sm:w-[30rem] max-w-[90vw] min-w-[18rem] bg-white rounded-lg shadow-lg border border-gray-200 z-50 h-96 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex-shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg text-gray-900">Notifications</h3>
-                {unreadCount > 0 && <Badge className="bg-red-500 text-white">{unreadCount}</Badge>}
-              </div>
-              <div className="flex items-center gap-2">
-                {unreadCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-auto p-0 text-primary hover:text-primary">
-                    Mark all as read
-                  </Button>
-                )}
-                <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+  const renderPanel = () => {
+    if (!isOpen) return null;
+    const panel = (
+      <div
+        className="dropdownPanel dropdownNotifications notificationDropdown flex flex-col"
+        ref={panelRef}
+        style={{ top: coords.top, right: coords.right, left: "auto", position: "absolute", zIndex: 9999 }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Notifications</h3>
+            {unreadCount > 0 && <Badge className="bg-red-500 text-white">{unreadCount}</Badge>}
           </div>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button className="text-xs text-indigo-600 hover:text-indigo-700" onClick={markAllAsRead}>
+                Mark all as read
+              </button>
+            )}
+            <button className="iconBtn" onClick={() => setIsOpen(false)}>
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
-          <div className="scroll-area flex-1 min-h-0 overflow-y-auto">
-            <div className="divide-y divide-gray-100">
-              {notifications.length === 0 ? (
-                <div className="p-8 text-center">
-                  <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-600 mb-1">No notifications</p>
-                  <p className="text-sm text-gray-500">You're all caught up!</p>
-                </div>
-              ) : (
-                notifications.map((notification) => {
-                  const Icon = notification.icon;
-                  return (
-                    <div key={notification.id} className={`p-4 transition-colors ${getNotificationColor(notification.type).bg} ${getNotificationColor(notification.type).accent} ${!notification.read ? "shadow-sm" : ""}`}>
-                      <div className="flex items-start gap-3">
-                        <div className={`p-2 rounded-lg flex-shrink-0 ${getNotificationColor(notification.type).iconBg}`}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <p className="text-sm text-gray-900">{notification.title}</p>
-                            {!notification.read && <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${getNotificationColor(notification.type).dot}`} />}
-                          </div>
-                          <p className="text-sm text-gray-600 mb-2 line-clamp-2 break-words whitespace-normal">{notification.message}</p>
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <span className="text-xs text-gray-500">{notification.time}</span>
-                            <div className="flex items-center gap-1">
-                              {!notification.read && (
-                                <Button variant="ghost" size="sm" onClick={() => markAsRead(notification.id)} className="h-7 px-2 text-xs">
-                                  <Check className="w-3 h-3 mr-1" />
-                                  Mark read
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="sm" onClick={() => removeNotification(notification.id)} className="h-7 px-2 text-xs text-gray-500 hover:text-red-600">
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
+        <div className="notificationList space-y-2 pr-1">
+          {isLoading ? (
+            <div className="p-6 text-sm text-slate-600 text-center">Loading...</div>
+          ) : notifications.length === 0 ? (
+            <div className="p-6 text-center text-slate-600">
+              <Bell className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+              No notifications
+            </div>
+          ) : (
+            notifications.map((notification) => {
+              const Icon = notification.icon || MessageSquare;
+              return (
+                <div key={notification.id} className="notificationItem">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-white/80 shadow-sm">
+                      <Icon className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900">{notification.title}</p>
+                        {!notification.read && <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${getNotificationColor(notification.type).dot}`} />}
+                      </div>
+                      <p className="text-sm text-slate-700 mb-2">{notification.message}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="notificationTime">{notification.time}</span>
+                        <div className="flex items-center gap-1">
+                          {!notification.read && (
+                            <button className="iconBtn" onClick={() => markAsRead(notification.id)}>
+                              <Check className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button className="iconBtn" onClick={() => removeNotification(notification.id)}>
+                            <X className="w-3 h-3" />
+                          </button>
                         </div>
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {notifications.length > 0 && (
-            <div className="p-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-              <Button variant="ghost" size="sm" className="w-full justify-center text-primary hover:text-primary mb-2" onClick={() => { setIsOpen(false); try { window.history.pushState({}, "", "/notifications"); window.dispatchEvent(new PopStateEvent("popstate")); } catch (e) {} }}>
-                <Bell className="w-4 h-4 mr-2" />
-                View all
-              </Button>
-            </div>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
-      )}
+
+        <div className="dropdownFooter">
+          <Button variant="ghost" size="sm" className="w-full justify-center" onClick={() => { setIsOpen(false); handleViewAll(); }}>
+            <Bell className="w-4 h-4 mr-2" />
+            View all
+          </Button>
+        </div>
+      </div>
+    );
+    return createPortal(panel, document.body);
+  };
+
+  return (
+    <div className="dropdownRoot notificationWrapper">
+      <Button
+        ref={triggerRef}
+        variant="ghost"
+        size="icon"
+        className="relative"
+        onClick={() => {
+          const next = !isOpen;
+          setIsOpen(next);
+          if (next) window.dispatchEvent(new CustomEvent("close-all-dropdowns", { detail: selfId.current }));
+        }}
+      >
+        <Bell className="w-5 h-5" />
+        {unreadCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+      </Button>
+      {renderPanel()}
     </div>
   );
 }
-
-
-
-

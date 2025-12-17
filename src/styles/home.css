@@ -86,6 +86,14 @@
   transform: scaleX(1);
 }
 
+.nav-link.active {
+  color: var(--brand-indigo);
+}
+
+.nav-link.active::after {
+  transform: scaleX(1);
+}
+
 .brand-mark {
   background: var(--brand-gradient);
   -webkit-background-clip: text;

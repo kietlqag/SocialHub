@@ -1,0 +1,474 @@
+.dashboardPage {
+  position: relative;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 20%, rgba(124, 106, 242, 0.15), transparent 35%),
+    radial-gradient(circle at 80% 10%, rgba(90, 141, 238, 0.18), transparent 35%),
+    linear-gradient(135deg, #f4f3ff, #eef2ff);
+  padding: 28px;
+}
+
+.dashBg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 40%, rgba(124, 106, 242, 0.14), transparent 45%),
+    radial-gradient(circle at 70% 70%, rgba(90, 141, 238, 0.14), transparent 45%);
+  filter: blur(20px);
+  opacity: 0.8;
+}
+
+.dashboardLayout {
+  position: relative;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 18px;
+  z-index: 1;
+}
+
+.dashboardSidebar {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(124, 106, 242, 0.16);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.1);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatarRing {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 12px 24px rgba(124, 106, 242, 0.35);
+}
+
+.sidebarTitle {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sidebarSubtitle {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.sidebarNav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.navItem:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+  border-color: rgba(124, 106, 242, 0.16);
+}
+
+.navItem.active {
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  box-shadow: 0 18px 36px rgba(124, 106, 242, 0.3);
+  border-color: transparent;
+}
+
+.dashboardMain {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(124, 106, 242, 0.14);
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mainHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mainTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mainSubtitle {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.mainActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ghostBtn {
+  border-radius: 999px;
+  border: 1px solid rgba(124, 106, 242, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.primaryBtn {
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 18px 36px rgba(124, 106, 242, 0.24);
+}
+
+.contentGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metricsRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.dashCard {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(124, 106, 242, 0.14);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.metricCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metricCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 32px rgba(124, 106, 242, 0.22);
+}
+
+.metricIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 22px rgba(124, 106, 242, 0.3);
+}
+
+.metricBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metricLabel {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.metricValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cardHeader h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cardHeader p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.glassBadge {
+  background: rgba(124, 106, 242, 0.12);
+  color: #4338ca;
+  border-radius: 999px;
+}
+
+.emptyStateRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(124, 106, 242, 0.06);
+  border: 1px dashed rgba(124, 106, 242, 0.24);
+}
+
+.emptyIcon {
+  color: #94a3b8;
+}
+
+.emptyTitle {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.emptySubtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.gridTwo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.chartCard {
+  min-height: 240px;
+}
+
+.emptyChart {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  height: 180px;
+  color: #475569;
+}
+
+.infoFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.infoCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(124, 106, 242, 0.14);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+.infoIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5a8dee, #7c6af2);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 20px rgba(90, 141, 238, 0.24);
+}
+
+.infoLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.infoType {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.searchBox {
+  position: relative;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  width: 16px;
+  height: 16px;
+}
+
+.searchInput {
+  padding-left: 34px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.chartCardLarge {
+  min-height: 280px;
+}
+
+.overviewCharts {
+  grid-template-columns: 2fr 1fr;
+}
+
+.pillTabs {
+  gap: 8px;
+  padding: 4px;
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.pillTabs button {
+  border-radius: 12px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  color: #0f172a;
+}
+
+.pillTabs button[data-state="active"] {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.2);
+}
+
+.pillTabs button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.tableCard {
+  margin-top: 8px;
+}
+
+.stackList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stackItem {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.stackIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(124, 106, 242, 0.12);
+  color: #4338ca;
+  display: grid;
+  place-items: center;
+}
+
+.stackTitle {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.stackSubtitle {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.tableCard .cardHeader {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.tableCard .headerActions {
+  justify-content: flex-end;
+}
+
+.tableCard .emptyStateRow {
+  margin-top: 12px;
+}
+
+@media (max-width: 960px) {
+  .dashboardLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardSidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .navItem {
+    flex: 1 1 45%;
+    justify-content: center;
+  }
+
+  .dashboardMain {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboardPage {
+    padding: 20px 14px;
+  }
+
+  .dashboardSidebar {
+    flex-direction: column;
+  }
+
+  .navItem {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}

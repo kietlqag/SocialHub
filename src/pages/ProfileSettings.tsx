@@ -23,11 +23,16 @@ import {
   Trash2,
   Plus,
   Save,
+  ArrowLeft,
+  KeyRound,
+  Smartphone,
+  Download,
+  Pencil,
 } from "lucide-react";
-
 import { getCurrentSession } from "../services/auth";
 import { api } from "../services/api";
 import { toast } from "sonner";
+import "../styles/settings.css";
 
 interface ProfileSettingsProps {
   onBack?: () => void;
@@ -58,7 +63,12 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
     monthlyNewsletter: false,
   });
 
-  const [appearance, setAppearance] = useState({ theme: "light", language: "en", timezone: "America/Los_Angeles", dateFormat: "MM/DD/YYYY" });
+  const [appearance, setAppearance] = useState({
+    theme: "light",
+    language: "en",
+    timezone: "America/Los_Angeles",
+    dateFormat: "MM/DD/YYYY",
+  });
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -66,18 +76,17 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) {
-        toast.error("Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ lÆ°u thay Ä‘á»•i");
+        toast.error("You need to sign in to save changes");
         setIsSaving(false);
         return;
       }
 
-      const payload: any = { preferences: { notifications, appearance } };
-
+      const payload = { preferences: { notifications, appearance } };
       await api.patch("/profile", payload, token);
-      toast.success("Cáº­p nháº­t cÃ i Ä‘áº·t thÃ nh cÃ´ng");
+      toast.success("Preferences saved");
     } catch (err) {
       console.error(err);
-      toast.error("KhÃ´ng thá»ƒ lÆ°u thay Ä‘á»•i");
+      toast.error("Unable to save changes");
     } finally {
       setIsSaving(false);
     }
@@ -106,63 +115,113 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
     { id: "billing" as const, label: "Billing", icon: CreditCard },
   ];
 
+  const primaryBtn =
+    "rounded-full px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-70";
+  const secondaryBtn =
+    "rounded-full px-5 py-2.5 bg-white/70 border border-slate-200 text-slate-700 hover:bg-white transition";
+
+  const inputClass =
+    "rounded-xl bg-white/70 border border-slate-200/60 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition";
+
+  const sectionTitle = (title: string, subtitle?: string) => (
+    <div className="settingsSectionHeader">
+      <p className="settingsSectionSubtitle">{subtitle}</p>
+      <h3 className="settingsSectionTitle">{title}</h3>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-lg font-semibold text-gray-900">SocialHub Settings</div>
+    <div className="settingsPage">
+      <div className="settingsBgOverlay" />
+      <div className="settingsBlob settingsBlob1" />
+      <div className="settingsBlob settingsBlob2" />
+
+      <div className="settingsContainer">
+        <div className="settingsHeader">
+          <div>
+            <p className="settingsSubtitle">Settings</p>
+            <p className="settingsTitle">SocialHub Settings</p>
+          </div>
           {onBack && (
-            <Button type="button" variant="outline" className="gap-2" onClick={onBack}>
+            <Button type="button" variant="ghost" className={`${secondaryBtn} flex items-center gap-2 px-4 py-2`} onClick={onBack}>
+              <ArrowLeft className="h-4 w-4" />
               Back to home
             </Button>
           )}
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-2 pb-10">
-        <div className="flex gap-6">
-          <aside className="w-64 flex-shrink-0">
-            <Card className="p-2">
-              <nav className="space-y-1">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = activeTab === tab.id;
-                  return (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors ${isActive ? "bg-slate-900 text-slate-50 shadow-sm" : "text-gray-700 hover:bg-gray-100"}`}>
-                      <Icon className="w-4 h-4" />
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </nav>
-            </Card>
+        <div className="settingsLayout">
+          <aside className="settingsSidebar">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`settingsTab ${isActive ? "settingsTabActive" : ""}`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </aside>
 
-          <div className="flex-1 space-y-6">
+          <div className="settingsContent">
             {activeTab === "notifications" && (
-              <div className="space-y-6">
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Email Notifications</h3>
+              <div className="settingsSection">
+                <Card className="settingsCard">
+                  {sectionTitle("Email Notifications", "Notifications")}
                   <div className="space-y-4">
-                    {/* notification settings controls */}
-                    <div className="flex items-center justify-between"><div className="space-y-0.5"><label className="text-sm text-gray-900">Email Notifications</label><p className="text-sm text-gray-600">Receive email about your account activity</p></div><Switch checked={notifications.emailNotifications} onCheckedChange={(isChecked: boolean) => setNotifications({ ...notifications, emailNotifications: isChecked })} /></div>
+                    {[
+                      { key: "emailNotifications", title: "Email notifications", desc: "Receive email about your account activity" },
+                      { key: "pushNotifications", title: "Push notifications", desc: "Get push updates about dashboards and alerts" },
+                      { key: "weeklyReport", title: "Weekly report", desc: "Summary of your usage delivered weekly" },
+                      { key: "productUpdates", title: "Product updates", desc: "Announcements about new features" },
+                      { key: "dashboardAlerts", title: "Dashboard alerts", desc: "Alerts when thresholds are exceeded" },
+                      { key: "teamActivity", title: "Team activity", desc: "Mentions, invites, and collaboration events" },
+                      { key: "monthlyNewsletter", title: "Monthly newsletter", desc: "Curated tips and best practices" },
+                    ].map((item) => (
+                      <div key={item.key} className="settingsRow">
+                        <div className="settingsRowText">
+                          <p className="settingsRowTitle">{item.title}</p>
+                          <p className="settingsRowDesc">{item.desc}</p>
+                        </div>
+                        <Switch
+                          checked={(notifications as any)[item.key]}
+                          onCheckedChange={(isChecked: boolean) =>
+                            setNotifications({ ...notifications, [item.key]: isChecked } as NotificationsState)
+                          }
+                        />
+                      </div>
+                    ))}
                     <Separator />
-                    <div className="flex justify-end"><Button onClick={handleSave} disabled={isSaving} className="gap-2">{isSaving ? "Saving..." : <><Save className="w-4 h-4" />Save Preferences</>}</Button></div>
+                    <div className="settingsActions">
+                      <Button onClick={handleSave} disabled={isSaving} className={`${primaryBtn} gap-2`}>
+                        {isSaving ? "Saving..." : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            Save Preferences
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </Card>
               </div>
             )}
 
             {activeTab === "appearance" && (
-              <div className="space-y-6">
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Display Settings</h3>
+              <div className="settingsSection">
+                <Card className="settingsCard">
+                  {sectionTitle("Display Settings", "Appearance")}
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label>Theme</Label>
                       <Select value={appearance.theme} onValueChange={(value: string) => setAppearance({ ...appearance, theme: value })}>
-                        <SelectTrigger>
-                          <SelectValue />
+                        <SelectTrigger className={inputClass}>
+                          <SelectValue placeholder="Select theme" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="light">Light</SelectItem>
@@ -170,19 +229,19 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                           <SelectItem value="system">System</SelectItem>
                         </SelectContent>
                       </Select>
-                      <p className="text-sm text-gray-600">Choose your preferred theme</p>
+                      <p className="settingsHelper">Choose your preferred theme</p>
                     </div>
                   </div>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Localization</h3>
+                <Card className="settingsCard">
+                  {sectionTitle("Localization", "Appearance")}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Language</Label>
                       <Select value={appearance.language} onValueChange={(value: string) => setAppearance({ ...appearance, language: value })}>
-                        <SelectTrigger>
-                          <SelectValue />
+                        <SelectTrigger className={inputClass}>
+                          <SelectValue placeholder="Select language" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="en">English</SelectItem>
@@ -196,8 +255,8 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                     <div className="space-y-2">
                       <Label>Timezone</Label>
                       <Select value={appearance.timezone} onValueChange={(value: string) => setAppearance({ ...appearance, timezone: value })}>
-                        <SelectTrigger>
-                          <SelectValue />
+                        <SelectTrigger className={inputClass}>
+                          <SelectValue placeholder="Select timezone" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="America/Los_Angeles">Pacific Time (PT)</SelectItem>
@@ -213,8 +272,8 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                     <div className="space-y-2">
                       <Label>Date Format</Label>
                       <Select value={appearance.dateFormat} onValueChange={(value: string) => setAppearance({ ...appearance, dateFormat: value })}>
-                        <SelectTrigger>
-                          <SelectValue />
+                        <SelectTrigger className={inputClass}>
+                          <SelectValue placeholder="Select format" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
@@ -224,74 +283,90 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                       </Select>
                     </div>
                   </div>
+                  <div className="settingsActions">
+                    <Button onClick={handleSave} disabled={isSaving} className={`${primaryBtn} gap-2`}>
+                      {isSaving ? "Saving..." : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          Save Preferences
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </Card>
-
-                <div className="flex justify-end">
-                  <Button onClick={handleSave} disabled={isSaving} className="gap-2">
-                    {isSaving ? (
-                      "Saving..."
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        Save Preferences
-                      </>
-                    )}
-                  </Button>
-                </div>
               </div>
             )}
 
             {activeTab === "security" && (
-              <div className="space-y-6">
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Change Password</h3>
-                  <div className="space-y-4 max-w-md">
+              <div className="settingsSection space-y-6">
+                <Card className="settingsCard">
+                  {sectionTitle("Change Password", "Security")}
+                  <div className="space-y-4 max-w-lg">
                     <div className="space-y-2">
                       <Label htmlFor="currentPassword">Current Password</Label>
-                      <Input id="currentPassword" type="password" />
+                      <Input id="currentPassword" type="password" className={inputClass} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="newPassword">New Password</Label>
-                      <Input id="newPassword" type="password" />
+                      <Input id="newPassword" type="password" className={inputClass} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                      <Input id="confirmPassword" type="password" />
+                      <Input id="confirmPassword" type="password" className={inputClass} />
                     </div>
-                    <Button className="gap-2">
-                      <Shield className="w-4 h-4" />
+                    <Button className={`${primaryBtn} gap-2`}>
+                      <KeyRound className="w-4 h-4" />
                       Update Password
                     </Button>
                   </div>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Two-Factor Authentication</h3>
-                  <div className="flex items-start justify-between">
+                <Card className="settingsCard">
+                  {sectionTitle("Two-Factor Authentication", "Security")}
+                  <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
-                      <p className="text-sm text-gray-900">Two-factor authentication adds an extra layer of security</p>
-                      <p className="text-sm text-gray-600">You'll need to enter a code from your phone in addition to your password</p>
+                      <p className="text-sm text-slate-900">Add an extra layer of security to your account.</p>
+                      <p className="text-sm text-slate-600">You'll enter a code from your phone in addition to your password.</p>
                     </div>
-                    <Button variant="outline">Enable 2FA</Button>
+                    <Button variant="ghost" className={`${secondaryBtn} px-4 py-2`}>
+                      <Smartphone className="w-4 h-4 mr-2" />
+                      Enable 2FA
+                    </Button>
                   </div>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Active Sessions</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <Card className="settingsCard">
+                  {sectionTitle("Active Sessions", "Security")}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-4 bg-white/70 border border-slate-200/60 rounded-xl">
                       <div>
-                        <p className="text-sm text-gray-900">MacBook Pro - San Francisco, CA</p>
-                        <p className="text-xs text-gray-600">Current session â€¢ Last active: Now</p>
+                        <p className="text-sm text-slate-900">MacBook Pro - San Francisco, CA</p>
+                        <p className="text-xs text-slate-600">Current session — Last active: Now</p>
                       </div>
                       <Badge className="bg-green-100 text-green-800">Active</Badge>
                     </div>
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between p-4 bg-white/70 border border-slate-200/60 rounded-xl">
                       <div>
-                        <p className="text-sm text-gray-900">iPhone 14 Pro - San Francisco, CA</p>
-                        <p className="text-xs text-gray-600">Last active: 2 hours ago</p>
+                        <p className="text-sm text-slate-900">iPhone 14 Pro - San Francisco, CA</p>
+                        <p className="text-xs text-slate-600">Last active: 2 hours ago</p>
                       </div>
-                      <Button variant="ghost" size="sm">Revoke</Button>
+                      <Button variant="ghost" size="sm" className="rounded-full px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-white">
+                        Revoke
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="settingsCard dangerCard">
+                  <div className="flex items-start gap-4">
+                    <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="text-lg text-red-900 mb-2">Danger Zone</h3>
+                      <p className="text-sm text-red-800 mb-4">Once you delete your account, there is no going back. Please be certain.</p>
+                      <Button className="rounded-full bg-red-600 text-white hover:bg-red-700 px-5 py-2.5 flex items-center gap-2">
+                        <Trash2 className="w-4 h-4" />
+                        Delete Account
+                      </Button>
                     </div>
                   </div>
                 </Card>
@@ -299,63 +374,78 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
             )}
 
             {activeTab === "billing" && (
-              <div className="space-y-6">
-                <Card className="p-6">
+              <div className="settingsSection space-y-6">
+                <Card className="settingsCard">
                   <div className="flex items-start justify-between mb-6">
                     <div>
-                      <h3 className="text-lg text-gray-900 mb-1">Current Plan</h3>
-                      <p className="text-sm text-gray-600">You are currently on the Pro plan</p>
+                      <h3 className="text-lg text-slate-900 font-semibold">Current Plan</h3>
+                      <p className="text-sm text-slate-600">You are currently on the Pro plan</p>
                     </div>
-                    <Badge className="bg-blue-100 text-blue-800">Pro Plan</Badge>
+                    <Badge className="bg-indigo-100 text-indigo-800">Pro Plan</Badge>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-6 mb-4">
+                  <div className="bg-white/70 border border-slate-200/60 rounded-xl p-6 mb-4">
                     <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-3xl text-gray-900">$29</span>
-                      <span className="text-gray-600">/month</span>
+                      <span className="text-3xl text-slate-900">$29</span>
+                      <span className="text-slate-600">/month</span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-4">Billed monthly â€¢ Next billing date: Dec 24, 2024</p>
+                    <p className="text-sm text-slate-600 mb-4">Billed monthly — Next billing date: Dec 24, 2024</p>
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm text-gray-700"><Check className="w-4 h-4 text-green-600" />Unlimited dashboards</div>
-                      <div className="flex items-center gap-2 text-sm text-gray-700"><Check className="w-4 h-4 text-green-600" />Advanced analytics</div>
-                      <div className="flex items-center gap-2 text-sm text-gray-700"><Check className="w-4 h-4 text-green-600" />Priority support</div>
-                      <div className="flex items-center gap-2 text-sm text-gray-700"><Check className="w-4 h-4 text-green-600" />Custom branding</div>
+                      {["Unlimited dashboards", "Advanced analytics", "Priority support", "Custom branding"].map((feat) => (
+                        <div key={feat} className="flex items-center gap-2 text-sm text-slate-800">
+                          <Check className="w-4 h-4 text-green-600" />
+                          {feat}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="flex gap-3">
-                    <Button variant="outline">Change Plan</Button>
-                    <Button variant="outline">Cancel Subscription</Button>
+                  <div className="flex flex-wrap gap-3">
+                    <Button className={primaryBtn}>Change Plan</Button>
+                    <Button className={secondaryBtn}>Cancel Subscription</Button>
                   </div>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Payment Method</h3>
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg mb-4">
+                <Card className="settingsCard">
+                  {sectionTitle("Payment Method", "Billing")}
+                  <div className="flex items-center justify-between p-4 bg-white/70 border border-slate-200/60 rounded-xl mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded flex items-center justify-center">
                         <CreditCard className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <p className="text-sm text-gray-900">â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 4242</p>
-                        <p className="text-xs text-gray-600">Expires 12/2025</p>
+                        <p className="text-sm text-slate-900">•••• •••• •••• 4242</p>
+                        <p className="text-xs text-slate-600">Expires 12/2025</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm">Edit</Button>
+                    <Button variant="ghost" size="sm" className="rounded-full px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-white">
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Add Payment Method</Button>
+                  <Button variant="ghost" size="sm" className="rounded-full px-4 py-2 border border-slate-200 text-slate-700 hover:bg-white">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Payment Method
+                  </Button>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="text-lg text-gray-900 mb-4">Billing History</h3>
+                <Card className="settingsCard">
+                  {sectionTitle("Billing History", "Billing")}
                   <div className="space-y-3">
-                    {[{ date: "Nov 24, 2024", amount: "$29.00", status: "Paid" }, { date: "Oct 24, 2024", amount: "$29.00", status: "Paid" }, { date: "Sep 24, 2024", amount: "$29.00", status: "Paid" }].map((invoice, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    {[
+                      { date: "Nov 24, 2024", amount: "$29.00", status: "Paid" },
+                      { date: "Oct 24, 2024", amount: "$29.00", status: "Paid" },
+                      { date: "Sep 24, 2024", amount: "$29.00", status: "Paid" },
+                    ].map((invoice, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-white/70 border border-slate-200/60 rounded-xl">
                         <div>
-                          <p className="text-sm text-gray-900">{invoice.date}</p>
-                          <p className="text-xs text-gray-600">{invoice.amount}</p>
+                          <p className="text-sm text-slate-900">{invoice.date}</p>
+                          <p className="text-xs text-slate-600">{invoice.amount}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <Badge className="bg-green-100 text-green-800">{invoice.status}</Badge>
-                          <Button variant="ghost" size="sm">Download</Button>
+                          <Button variant="ghost" size="sm" className="rounded-full px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-white">
+                            <Download className="h-4 w-4 mr-1" />
+                            Download
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -363,27 +453,9 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                 </Card>
               </div>
             )}
-
-            {/* Danger Zone */}
-            {activeTab === "security" && (
-              <Card className="border-red-200 bg-red-50/50 p-6 mt-6">
-                <div className="flex items-start gap-4">
-                  <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <h3 className="text-lg text-red-900 mb-2">Danger Zone</h3>
-                    <p className="text-sm text-red-800 mb-4">Once you delete your account, there is no going back. Please be certain.</p>
-                    <Button variant="destructive" className="gap-2"><Trash2 className="w-4 h-4" />Delete Account</Button>
-                  </div>
-                </div>
-              </Card>
-            )}
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-
-
-

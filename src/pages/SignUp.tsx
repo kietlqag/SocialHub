@@ -1,21 +1,19 @@
-﻿import { Button } from "../components/ui/button";
+﻿import { useEffect, useRef, useState } from "react";
+import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Separator } from "../components/ui/separator";
 import { Checkbox } from "../components/ui/checkbox";
 import {
   Mail,
   Lock,
   User,
   ArrowLeft,
-  Sparkles,
   Building2,
   Loader2,
   CheckCircle2,
   ShieldCheck,
   RefreshCw,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { registerUser, verifyEmail, resendVerification } from "../services/auth";
 import { toast } from "sonner@2.0.3";
 
@@ -117,14 +115,14 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex flex-col">
-      <div className="w-full bg-white/95 backdrop-blur-sm border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl text-primary">SocialHub</h1>
+    <div className="login-page">
+      <div className="login-header">
+        <div className="login-header-inner">
+          <div className="login-header-content">
+            <h1 className="login-brand">SocialHub</h1>
             {onBack && (
-              <Button variant="ghost" onClick={onBack}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
+              <Button variant="ghost" onClick={onBack} className="login-back-button">
+                <ArrowLeft className="h-4 w-4" />
                 Back to Home
               </Button>
             )}
@@ -132,23 +130,22 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
-            <h2 className="text-3xl text-gray-900 mb-2">Create your account</h2>
-            <p className="text-gray-600">Start building powerful dashboards today</p>
+      <div className="login-main">
+        <div className="login-card-container">
+          <div className="login-welcome">
+            <h2 className="login-title">Create your SocialHub account</h2>
+            <p className="login-subtitle">Design dashboards with AI-powered automation</p>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-            <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="login-card">
+            <form onSubmit={handleSubmit} className="login-form space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full name</Label>
+                <Label htmlFor="fullName" className="login-label">
+                  Full name
+                </Label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-gray-400" />
+                  <div className="login-icon">
+                    <User className="h-5 w-5" />
                   </div>
                   <Input
                     id="fullName"
@@ -156,7 +153,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                     placeholder="John Doe"
                     value={formData.fullName}
                     onChange={(e) => handleChange("fullName", e.target.value)}
-                    className="pl-10"
+                    className="login-input pl-10"
                     disabled={awaitingVerification}
                     required
                   />
@@ -164,10 +161,12 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Work email</Label>
+                <Label htmlFor="email" className="login-label">
+                  Work email
+                </Label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400" />
+                  <div className="login-icon">
+                    <Mail className="h-5 w-5" />
                   </div>
                   <Input
                     id="email"
@@ -175,7 +174,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                     placeholder="you@company.com"
                     value={formData.email}
                     onChange={(e) => handleChange("email", e.target.value)}
-                    className="pl-10"
+                    className="login-input pl-10"
                     disabled={awaitingVerification}
                     required
                   />
@@ -183,10 +182,12 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="company">Company name (optional)</Label>
+                <Label htmlFor="company" className="login-label">
+                  Company name (optional)
+                </Label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building2 className="h-5 w-5 text-gray-400" />
+                  <div className="login-icon">
+                    <Building2 className="h-5 w-5" />
                   </div>
                   <Input
                     id="company"
@@ -194,7 +195,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                     placeholder="Acme Inc."
                     value={formData.company}
                     onChange={(e) => handleChange("company", e.target.value)}
-                    className="pl-10"
+                    className="login-input pl-10"
                     disabled={awaitingVerification}
                   />
                 </div>
@@ -202,19 +203,22 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer select-none">
+                  <Label htmlFor="password" className="login-label">
+                    Password
+                  </Label>
+                  <label className="login-inline-toggle">
                     <Checkbox
                       id="signup-show-password"
                       checked={showPassword}
                       onCheckedChange={(checked) => setShowPassword(Boolean(checked))}
+                      className="login-checkbox"
                     />
                     <span>Show password</span>
                   </label>
                 </div>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400" />
+                  <div className="login-icon">
+                    <Lock className="h-5 w-5" />
                   </div>
                   <Input
                     id="password"
@@ -222,7 +226,7 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                     placeholder="Create a strong password"
                     value={formData.password}
                     onChange={(e) => handleChange("password", e.target.value)}
-                    className="pl-10"
+                    className="login-input pl-10"
                     disabled={awaitingVerification}
                     required
                   />
@@ -230,10 +234,12 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <Label htmlFor="confirmPassword" className="login-label">
+                  Confirm password
+                </Label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-gray-400" />
+                  <div className="login-icon">
+                    <Lock className="h-5 w-5" />
                   </div>
                   <Input
                     id="confirmPassword"
@@ -241,80 +247,89 @@ export function SignUp({ onBack, onSwitchToLogin }: SignUpProps) {
                     placeholder="Re-enter your password"
                     value={formData.confirmPassword}
                     onChange={(e) => handleChange("confirmPassword", e.target.value)}
-                    className="pl-10"
+                    className="login-input pl-10"
                     disabled={awaitingVerification}
                     required
                   />
                 </div>
               </div>
 
-              <div className="flex items-start space-x-2">
+              <label className="login-inline-toggle items-start">
                 <Checkbox
                   id="terms"
                   checked={agreeToTerms}
                   onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)}
                   disabled={awaitingVerification}
+                  className="login-checkbox"
                   required
                 />
-                <label htmlFor="terms" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
-                  I agree to the{" "}
-                  <a href="#" className="text-primary hover:underline">Terms of Service</a>{" "}
-                  and{" "}
-                  <a href="#" className="text-primary hover:underline">Privacy Policy</a>
-                </label>
-              </div>
+                <span className="text-sm text-white/80 leading-relaxed">
+                  I agree to the <a href="#" className="login-link">Terms of Service</a> and <a href="#" className="login-link">Privacy Policy</a>
+                </span>
+              </label>
 
-              <Button type="submit" className="w-full" disabled={!agreeToTerms || loading || awaitingVerification}>
+              <Button
+                type="submit"
+                className="login-primary-button w-full"
+                disabled={!agreeToTerms || loading || awaitingVerification}
+              >
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Creating...
                   </>
                 ) : (
-                  "Create Account"
+                  "Create account"
                 )}
               </Button>
             </form>
 
             {awaitingVerification && (
-              <div className="mt-6 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
-                <div className="flex items-center text-primary font-medium">
+              <div className="login-reset-panel space-y-3 mt-6">
+                <div className="flex items-center text-white font-medium">
                   <ShieldCheck className="h-5 w-5 mr-2" />
                   Verify your email
                 </div>
-                <p className="text-sm text-gray-700">
-                  We sent a verification code to <span className="font-medium">{pendingEmail}</span>. Enter the code below to activate your account.
+                <p className="login-reset-copy">
+                  We sent a verification code to <span className="font-semibold text-white">{pendingEmail}</span>. Enter it below to activate your
+                  account.
                 </p>
                 <Input
                   placeholder="Enter 6-digit code"
                   value={verificationCode}
                   onChange={(e) => setVerificationCode(e.target.value)}
+                  className="login-input"
                 />
                 <div className="flex gap-3">
-                  <Button type="button" className="flex-1" onClick={handleVerifyCode} disabled={loading}>
+                  <Button type="button" className="login-primary-button flex-1" onClick={handleVerifyCode} disabled={loading}>
                     <ShieldCheck className="h-4 w-4 mr-2" />
                     Verify code
                   </Button>
-                  <Button type="button" variant="ghost" onClick={handleResendCode} disabled={loading}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="login-secondary-button flex-1"
+                    onClick={handleResendCode}
+                    disabled={loading}
+                  >
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Resend
                   </Button>
                 </div>
               </div>
             )}
-
           </div>
 
-          <p className="mt-6 text-center text-gray-600">
+          <p className="login-footer-text">
             Already have an account?{" "}
-            <button onClick={onSwitchToLogin} className="text-primary hover:text-primary/80 transition-colors">Sign in</button>
+            <button onClick={onSwitchToLogin} className="login-link">
+              Sign in
+            </button>
           </p>
 
-          <div className="mt-6 p-4 bg-primary/5 rounded-lg border border-primary/10">
-            <p className="text-sm text-center text-gray-700">
-              Start with a <span className="text-primary">14-day free trial</span> - no credit card required
-            </p>
-          </div>
+          <p className="login-terms">
+            Start with a <span className="login-link">14-day free trial</span> — no credit card required
+          </p>
         </div>
       </div>
 

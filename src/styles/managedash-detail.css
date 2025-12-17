@@ -1,0 +1,342 @@
+.mdDetailPage {
+  position: relative;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 20%, rgba(124, 106, 242, 0.16), transparent 35%),
+    radial-gradient(circle at 80% 0%, rgba(90, 141, 238, 0.18), transparent 35%),
+    linear-gradient(135deg, #f4f3ff, #eef2ff);
+  padding: 24px;
+}
+
+.mdDetailBg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 60%, rgba(124, 106, 242, 0.12), transparent 45%),
+    radial-gradient(circle at 70% 30%, rgba(90, 141, 238, 0.12), transparent 45%);
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+.mdDetailLayout {
+  position: relative;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 18px;
+  max-width: 1400px;
+  margin: 0 auto;
+  z-index: 1;
+}
+
+.mdDetailSidebar {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(124, 106, 242, 0.16);
+  border-radius: 18px;
+  padding: 16px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mdSidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mdAvatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  box-shadow: 0 14px 28px rgba(124, 106, 242, 0.35);
+}
+
+.mdSidebarTitle {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mdSidebarSubtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.mdSidebarSearch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.mdSidebarSearchInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.mdSidebarNav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.mdNavItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid transparent;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.mdNavItem:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+  border-color: rgba(124, 106, 242, 0.18);
+}
+
+.mdNavItem.active {
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  box-shadow: 0 18px 36px rgba(124, 106, 242, 0.28);
+}
+
+.mdNavBadge {
+  font-size: 12px;
+}
+
+.mdSidebarFooter {
+  margin-top: auto;
+}
+
+.mdFooterBtn {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  border-radius: 12px;
+}
+
+.mdDetailMain {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(124, 106, 242, 0.16);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mdMainHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mdMainTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mdMainSubtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.mdMainActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mdGhostBtn {
+  border-radius: 12px;
+  border: 1px solid rgba(124, 106, 242, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.mdContentArea {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.kpiCard {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(124, 106, 242, 0.14);
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.kpiIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 22px rgba(124, 106, 242, 0.3);
+}
+
+.kpiTitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.kpiValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.chartRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.mdChartCard {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(124, 106, 242, 0.14);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.1);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.mdChartIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(124, 106, 242, 0.12);
+  display: grid;
+  place-items: center;
+}
+
+.mdChartTitle {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mdChartSubtitle {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.tableHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tableActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tableCardGlass {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(124, 106, 242, 0.14);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tableList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.tableFieldCard {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.tableEmpty {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(124, 106, 242, 0.24);
+  background: rgba(124, 106, 242, 0.06);
+  color: #475569;
+}
+
+.mdSearch {
+  position: relative;
+  width: 240px;
+}
+
+.mdSearch input {
+  padding-left: 34px;
+}
+
+@media (max-width: 960px) {
+  .mdDetailLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .mdDetailSidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .mdNavItem {
+    flex: 1 1 45%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .mdDetailPage {
+    padding: 18px 12px;
+  }
+
+  .mdDetailSidebar {
+    flex-direction: column;
+  }
+
+  .mdNavItem {
+    justify-content: flex-start;
+  }
+}

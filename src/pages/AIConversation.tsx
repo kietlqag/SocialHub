@@ -30,6 +30,7 @@ import {
   AiMessage,
   ConversationSummary,
 } from "../services/aiConversations";
+import "../styles/ai-chat.css";
 
 const deriveTitleFromMessage = (text: string) => {
   const firstSentence = text.split(/[.!?]/)[0] || text;
@@ -398,198 +399,98 @@ export function AIConversation({ onBack }: { onBack?: () => void }) {
 
   const renderMessages = () => {
     if (!activeConversationId) {
-      return (
-        <div className="flex flex-1 items-center justify-center text-gray-500 dark:text-white">
-          Create a conversation to get started.
-        </div>
-      );
+      return <div className="aiChatEmpty">Create a conversation to get started.</div>;
     }
 
     if (loadingMessages && currentMessages.length === 0) {
-      return (
-        <div className="flex flex-1 items-center justify-center text-gray-500 dark:text-white">
-          Loading messages...
-        </div>
-      );
+      return <div className="aiChatEmpty">Loading messages...</div>;
     }
 
     return (
-      <div className="h-full px-6 py-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          {error && (
-            <div className="px-4 py-3 bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700 rounded-lg text-sm text-red-700 dark:text-red-100">
-              {error}
-            </div>
-          )}
+      <div className="aiChatMessages">
+        {error && <div className="aiChatError">{error}</div>}
 
-          {currentMessages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`flex items-start gap-3 max-w-[85%] ${
-                  message.role === "user" ? "flex-row-reverse" : ""
-                }`}
-              >
-                <Avatar className="h-10 w-10 flex-shrink-0">
-                  <div
-                    className={`h-full w-full rounded-full flex items-center justify-center ${
-                      message.role === "assistant"
-                        ? "bg-primary/10 text-primary"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {message.role === "assistant" ? (
-                      <Sparkles className="h-5 w-5" />
-                    ) : (
-                      <User className="h-5 w-5" />
-                    )}
-                  </div>
-                </Avatar>
+        {currentMessages.map((message) => {
+          const isUser = message.role === "user";
+          return (
+            <div key={message.id} className={`msgRow ${isUser ? "fromUser" : "fromAI"}`}>
+              <div className="msgAvatar">
+                <div className={`msgAvatarInner ${isUser ? "userAvatar" : "aiAvatar"}`}>
+                  {isUser ? <User className="icon-sm" /> : <Sparkles className="icon-sm" />}
+                </div>
+              </div>
+              <div className="msgContent">
                 <div
-                    className={`space-y-2 ${
-                    message.role === "user" ? "text-right" : ""
+                  className={`msgBubble ${isUser ? "msgUser" : "msgAI"} ${
+                    bubbleDensity === "compact" ? "compact" : "comfortable"
                   }`}
                 >
-                  <div
-                    className={`${
-                      bubbleDensity === "compact" ? "px-4 py-2" : "px-5 py-3"
-                    } rounded-2xl ${
-                      message.role === "user"
-                        ? "bg-primary text-white rounded-tr-sm dark:bg-white dark:text-black user-bubble"
-                        : "bg-white text-gray-900 shadow-sm border border-gray-200 rounded-tl-sm dark:bg-slate-700 dark:text-white dark:border-slate-500 assistant-bubble"
-                    }`}
+                  <p className="msgText">{message.content}</p>
+                </div>
+                <div className={`msgMeta ${isUser ? "metaRight" : ""}`}>
+                  <span>{formatTime(message.createdAt)}</span>
+                  <span className="dot" />
+                  <button
+                    type="button"
+                    className="msgAction"
+                    onClick={() => handleCopyMessage(message.id, message.content)}
                   >
-                    <p
-                      className={`whitespace-pre-line text-sm ${
-                        message.role === "user"
-                          ? "text-white dark:text-black"
-                          : "text-gray-900 dark:text-white"
-                      }`}
-                    >
-                      {message.content}
-                    </p>
-                  </div>
-                  <div
-                    className={`flex items-center gap-3 text-xs text-gray-500 dark:text-white ${
-                      message.role === "user" ? "justify-end" : ""
-                    }`}
-                  >
-                    <span>{formatTime(message.createdAt)}</span>
-                    <Separator orientation="vertical" className="h-3" />
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyMessage(message.id, message.content)}
-                        className="hover:text-gray-700 dark:hover:text-gray-200"
-                      >
-                        Copy
-                      </button>
-                      {copiedId === message.id && (
-                        <span className="text-[11px] text-green-500">Copied</span>
-                      )}
+                    {copiedId === message.id ? "Copied" : "Copy"}
+                  </button>
+                  {message.role === "assistant" && (
+                    <div className="msgActions">
+                      {(() => {
+                        const isUp = feedbacks[message.id] === "up";
+                        const isDown = feedbacks[message.id] === "down";
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              aria-label="Like reply"
+                              aria-pressed={isUp}
+                              className={`iconBtn ${isUp ? "active" : ""}`}
+                              onClick={() => handleFeedback(message.id, "up")}
+                            >
+                              <ThumbsUp className="icon-sm" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Dislike reply"
+                              aria-pressed={isDown}
+                              className={`iconBtn ${isDown ? "active" : ""}`}
+                              onClick={() => handleFeedback(message.id, "down")}
+                            >
+                              <ThumbsDown className="icon-sm" />
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
-                    {message.role === "assistant" && (
-                      <>
-                        {(() => {
-                          const isUp = feedbacks[message.id] === "up";
-                          const isDown = feedbacks[message.id] === "down";
-                          return (
-                            <>
-                              <button
-                                type="button"
-                                aria-label="Like reply"
-                                aria-pressed={isUp}
-                                onClick={() => handleFeedback(message.id, "up")}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors cursor-pointer ${
-                                  isUp
-                                    ? themeMode === "dark"
-                                      ? "bg-white text-black"
-                                      : "bg-primary text-white"
-                                    : "text-gray-500 dark:text-gray-300 hover:bg-primary/10 hover:text-primary"
-                                }`}
-                              >
-                                <ThumbsUp
-                                  className="h-3.5 w-3.5"
-                                  style={{
-                                    color: isUp
-                                      ? themeMode === "dark"
-                                        ? "#000000"
-                                        : "#ffffff"
-                                      : undefined,
-                                  }}
-                                />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Dislike reply"
-                                aria-pressed={isDown}
-                                onClick={() => handleFeedback(message.id, "down")}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors cursor-pointer ${
-                                  isDown
-                                    ? themeMode === "dark"
-                                      ? "bg-white text-black"
-                                      : "bg-primary text-white"
-                                    : "text-gray-500 dark:text-gray-300 hover:bg-primary/10 hover:text-primary"
-                                }`}
-                              >
-                                <ThumbsDown
-                                  className="h-3.5 w-3.5"
-                                  style={{
-                                    color: isDown
-                                      ? themeMode === "dark"
-                                        ? "#000000"
-                                        : "#ffffff"
-                                      : undefined,
-                                  }}
-                                />
-                              </button>
-                            </>
-                          );
-                        })()}
-                        <button
-                          type="button"
-                          aria-label="Like reply"
-                          className="hidden"
-                        >
-                          Like
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
-          ))}
+          );
+        })}
 
-          {isSending && (
-            <div className="flex justify-start">
-              <div className="flex items-center gap-3 max-w-[85%]">
-                <Avatar className="h-10 w-10 flex-shrink-0">
-                  <div className="h-full w-full rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                </Avatar>
-                <div className="px-5 py-3 rounded-2xl bg-white dark:bg-slate-700 shadow-sm border border-gray-200 dark:border-slate-600">
-                  <div className="flex space-x-2">
-                    <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" />
-                    <div
-                      className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0.15s" }}
-                    />
-                    <div
-                      className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0.3s" }}
-                    />
-                  </div>
+        {isSending && (
+          <div className="msgRow fromAI">
+            <div className="msgAvatar">
+              <div className="msgAvatarInner aiAvatar">
+                <Sparkles className="icon-sm" />
+              </div>
+            </div>
+            <div className="msgContent">
+              <div className="msgBubble msgAI comfortable">
+                <div className="typing">
+                  <span />
+                  <span />
+                  <span />
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -633,296 +534,203 @@ export function AIConversation({ onBack }: { onBack?: () => void }) {
   };
 
   return (
-    <>
-      <div
-        className={`fixed inset-0 flex overflow-hidden app-shell ${
-          themeMode === "dark" ? "dark ai-dark" : "ai-light"
-        }`}
-      >
-      {/* SIDEBAR */}
-      <div
-        className={`${
-          isSidebarOpen ? "w-64" : "w-0"
-        } border-r sidebar-panel flex flex-col transition-all duration-300 overflow-hidden h-full`}
-      >
-        <div className="p-4 border-b flex-shrink-0 relative sidebar-panel">
-          <div className="flex items-center justify-between mb-4 gap-2">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg text-gray-900 dark:text-white">Conversations</h2>
+    <div className={`aiChatPage ${themeMode === "dark" ? "ai-dark" : "ai-light"}`}>
+      <div className="aiChatBg" />
+      <div className="aiChatContainer">
+        <aside className={`aiChatSidebar ${isSidebarOpen ? "" : "collapsed"}`}>
+          <div className="aiChatSidebarHeader">
+            <div className="title">
+              <Sparkles className="icon-sm" />
+              <span>Conversations</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSidebarOpen(false)}
-                className="md:hidden"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            <button className="iconBtn" onClick={() => setIsSidebarOpen(false)}>
+              <X className="icon-sm" />
+            </button>
           </div>
-
-          <Button onClick={handleNewConversation} className="w-full">
-            <Plus className="h-4 w-4 mr-2" />
+          <button className="aiChatNewChatBtn" onClick={handleNewConversation} disabled={creatingConversation}>
+            <Plus className="icon-sm" />
             New Chat
-          </Button>
-        </div>
-
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {showSidebarPlaceholder && (
-              <p className="text-sm text-gray-500 dark:text-white px-3 py-2">Loading...</p>
-            )}
+          </button>
+          <div className="aiChatConvList">
+            {showSidebarPlaceholder && <p className="muted">Loading...</p>}
             {conversations.map((conv) => (
               <div
                 key={conv.id}
-                className={`group relative p-3 rounded-lg cursor-pointer transition-colors ${
-                  activeConversationId === conv.id
-                    ? "bg-white text-black border border-gray-600 active-conversation"
-                    : "hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
+                className={`aiChatConvItem ${activeConversationId === conv.id ? "isActive" : ""}`}
                 onClick={() => setActiveConversationId(conv.id)}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2 flex-1 min-w-0">
-                    <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0 text-gray-400" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 dark:text-white truncate">
-                        {conv.title}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-white">
-                        {conv.lastMessageAt
-                          ? `Updated ${new Date(
-                              conv.lastMessageAt
-                            ).toLocaleTimeString()}`
-                          : "New conversation"}
-                      </p>
-                    </div>
+                <div className="convTitle">
+                  <MessageSquare className="icon-sm" />
+                  <div>
+                    <p className="line-clamp-1">{conv.title}</p>
+                    <span className="muted">
+                      {conv.lastMessageAt
+                        ? `Updated ${new Date(conv.lastMessageAt).toLocaleTimeString()}`
+                        : "New conversation"}
+                    </span>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="inline-flex items-center justify-center h-6 w-6 rounded-md hover:bg-accent hover:text-accent-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreVertical className="h-3 w-3" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleDeleteConversation(conv.id)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="iconBtn ghost">
+                      <MoreVertical className="icon-sm" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleDeleteConversation(conv.id)}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))}
           </div>
-        </ScrollArea>
-
-        <div className="p-4 border-t flex-shrink-0 sidebar-panel">
-          <Button variant="outline" className="w-full" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+          <button className="secondaryBtn" onClick={onBack}>
+            <ArrowLeft className="icon-sm" />
             Back to Home
-          </Button>
-        </div>
-      </div>
+          </button>
+        </aside>
 
-      {/* MAIN AREA */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        {/* Header */}
-        <div className="border-b px-4 py-3 flex-shrink-0 sticky top-0 z-20 header-bar">
-          <div className="flex items-center justify-between relative">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <h1 className="text-base text-gray-900 dark:text-white">SocialHub AI</h1>
-                  <p className="text-xs text-gray-500 dark:text-white">Always here to help</p>
-                </div>
+        <main className="aiChatMain">
+          <div className="aiChatTopbar">
+            <div className="aiChatTitleBlock">
+              <button className="iconBtn ghost" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+                <Menu className="icon-sm" />
+              </button>
+              <div>
+                <p className="title">SocialHub AI</p>
+                <p className="subtitle">Always here to help</p>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSettingsOpen((v) => !v)}
-                aria-label="Open settings"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            </div>
-
+            <button className="aiChatSettingsBtn iconBtn" onClick={() => setSettingsOpen((v) => !v)} aria-label="Open settings">
+              <Settings className="icon-sm" />
+            </button>
           </div>
-        </div>
 
-        {/* Messages area */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ScrollArea className="h-full">{renderMessages()}</ScrollArea>
-        </div>
+          <div className="aiChatMessagesContainer">
+            <ScrollArea className="aiChatMessagesScroll">{renderMessages()}</ScrollArea>
+          </div>
 
-        {/* Input area */}
-        <div className="border-t px-6 py-4 flex-shrink-0 sticky bottom-0 z-20 input-bar">
-          <div className="max-w-3xl mx-auto flex items-end gap-3">
-            <div className="flex-1">
-              <Input
-                placeholder="Type your message..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                disabled={isSending || !activeConversationId}
-                className="input-field placeholder:text-gray-500 dark:placeholder:text-white"
-              />
-            </div>
-            <Button
-              size="icon"
+          <div className="aiChatComposer">
+            <Input
+              className="composerInput"
+              placeholder="Type your message..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              disabled={isSending || !activeConversationId}
+            />
+            <button
+              className="sendBtn"
               onClick={handleSendMessage}
-              disabled={
-                !inputMessage.trim() || isSending || !activeConversationId
-              }
+              disabled={!inputMessage.trim() || isSending || !activeConversationId}
             >
-              <Send className="h-4 w-4" />
-            </Button>
+              <Send className="icon-sm" />
+            </button>
           </div>
-        </div>
+        </main>
       </div>
-    </div>
 
-    {settingsOpen && (
-      <div className="fixed inset-0 z-[9999] flex justify-end items-start">
-        <div
-          className="absolute inset-0 bg-black/20"
-          onClick={() => setSettingsOpen(false)}
-        />
-        <div className="relative mt-16 mr-6">
-          <div className="w-72 max-h-[80vh] overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-black dark:text-gray-50 shadow-2xl p-3 space-y-3 panel-surface">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-50">Preferences</p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSettingsOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+      {settingsOpen && (
+        <>
+          <div className="prefOverlay" onClick={() => setSettingsOpen(false)} />
+          <div className="prefDrawer">
+            <div className="prefHeader">
+              <p>Preferences</p>
+              <button className="iconBtn ghost" onClick={() => setSettingsOpen(false)}>
+                <X className="icon-sm" />
+              </button>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                AI reply language
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant={replyLanguage === "en" ? "default" : "outline"}
-                  size="sm"
+            <div className="prefSection">
+              <p className="sectionLabel">AI reply language</p>
+              <div className="segmented">
+                <button
+                  className={`segBtn ${replyLanguage === "en" ? "segBtnActive" : ""}`}
                   onClick={() => setReplyLanguage("en")}
                 >
                   English
-                </Button>
-                <Button
-                  variant={replyLanguage === "vi" ? "default" : "outline"}
-                  size="sm"
+                </button>
+                <button
+                  className={`segBtn ${replyLanguage === "vi" ? "segBtnActive" : ""}`}
                   onClick={() => setReplyLanguage("vi")}
                 >
                   Vietnamese
-                </Button>
+                </button>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                Message density
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant={bubbleDensity === "comfortable" ? "default" : "outline"}
-                  size="sm"
+            <div className="prefSection">
+              <p className="sectionLabel">Message density</p>
+              <div className="segmented">
+                <button
+                  className={`segBtn ${bubbleDensity === "comfortable" ? "segBtnActive" : ""}`}
                   onClick={() => setBubbleDensity("comfortable")}
                 >
                   Comfortable
-                </Button>
-                <Button
-                  variant={bubbleDensity === "compact" ? "default" : "outline"}
-                  size="sm"
+                </button>
+                <button
+                  className={`segBtn ${bubbleDensity === "compact" ? "segBtnActive" : ""}`}
                   onClick={() => setBubbleDensity("compact")}
                 >
                   Compact
-                </Button>
+                </button>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                Theme
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant={themeMode === "light" ? "default" : "outline"}
-                  size="sm"
+            <div className="prefSection">
+              <p className="sectionLabel">Theme</p>
+              <div className="segmented">
+                <button
+                  className={`segBtn ${themeMode === "light" ? "segBtnActive" : ""}`}
                   onClick={() => applyTheme("light")}
                 >
                   Light
-                </Button>
-                <Button
-                  variant={themeMode === "dark" ? "default" : "outline"}
-                  size="sm"
+                </button>
+                <button
+                  className={`segBtn ${themeMode === "dark" ? "segBtnActive" : ""}`}
                   onClick={() => applyTheme("dark")}
                 >
                   Dark
-                </Button>
+                </button>
               </div>
             </div>
 
-            <Separator />
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Export</p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
+            <div className="prefSection">
+              <p className="sectionLabel">Export</p>
+              <div className="segmented">
+                <button
+                  className="segBtn"
                   disabled={!activeConversationId || exporting}
                   onClick={() => handleExportConversation("json")}
                 >
                   JSON
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
+                </button>
+                <button
+                  className="segBtn"
                   disabled={!activeConversationId || exporting}
                   onClick={() => handleExportConversation("text")}
                 >
                   Text
-                </Button>
+                </button>
               </div>
-              {exporting && (
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Preparing export...
-                </p>
-              )}
+              {exporting && <p className="muted extra">Preparing export...</p>}
+            </div>
+
+            <div className="prefFooter">
+              <Button variant="ghost" onClick={() => setSettingsOpen(false)}>
+                Close
+              </Button>
             </div>
           </div>
-        </div>
-      </div>
-    )}
-    </>
+        </>
+      )}
+    </div>
   );
 }
-
-
-

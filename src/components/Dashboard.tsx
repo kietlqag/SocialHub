@@ -1,455 +1,378 @@
-﻿import { Card } from "./ui/card";
-import { Button } from "./ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Badge } from "./ui/badge";
-import { Progress } from "./ui/progress";
-import { NotificationDropdown } from "./NotificationDropdown";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  LayoutDashboard,
-  TrendingUp,
-  Users,
-  ShoppingCart,
-  DollarSign,
-  Activity,
-  Package,
-  ArrowUpRight,
-  ArrowDownRight,
-  MoreVertical,
-  Bell,
-  Search,
-  Plus,
-  Calendar,
   BarChart3,
-  Settings,
-  LogOut,
-} from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
+  DollarSign,
   LineChart,
-  Line,
   PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+  Table as TableIcon,
+  Users,
+  User,
+  Calendar,
+  FlaskConical,
+  CreditCard,
+  Search,
+  Clock3,
+  Inbox,
+  Database,
+  Sparkles,
+  Activity,
+  Plus,
+} from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Badge } from "./ui/badge";
+import { NotificationDropdown } from "./NotificationDropdown";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import "../styles/dashboard.css";
 
 interface DashboardProps {
   onLogout?: () => void;
   onSettingsOpen?: () => void;
 }
 
+const navItems = [
+  { key: "overview", label: "Overview", icon: BarChart3 },
+  { key: "insights", label: "Insights", icon: LineChart },
+  { key: "tables", label: "Tables", icon: TableIcon },
+  { key: "patients", label: "Patients", icon: User },
+  { key: "appointments", label: "Appointments", icon: Calendar },
+  { key: "lab", label: "Lab Results", icon: FlaskConical },
+  { key: "billing", label: "Billing", icon: CreditCard },
+];
+
 export function Dashboard({ onLogout, onSettingsOpen }: DashboardProps) {
-  // Mock data for revenue chart
-  const revenueData = [
-    { month: "Jan", revenue: 45000, target: 40000 },
-    { month: "Feb", revenue: 52000, target: 45000 },
-    { month: "Mar", revenue: 48000, target: 48000 },
-    { month: "Apr", revenue: 61000, target: 52000 },
-    { month: "May", revenue: 55000, target: 55000 },
-    { month: "Jun", revenue: 67000, target: 58000 },
-    { month: "Jul", revenue: 72000, target: 62000 },
-  ];
+  const [active, setActive] = useState<string>("overview");
+  const today = useMemo(() => new Date().toLocaleDateString(), []);
 
-  // Mock data for sales by category
-  const salesByCategory = [
-    { name: "Electronics", value: 35, color: "#4f46e5" },
-    { name: "Clothing", value: 25, color: "#7c3aed" },
-    { name: "Food", value: 20, color: "#2563eb" },
-    { name: "Home", value: 15, color: "#0891b2" },
-    { name: "Other", value: 5, color: "#64748b" },
-  ];
+  const MetricCard = ({ icon: Icon, title }: { icon: any; title: string }) => (
+    <div className="dashCard metricCard">
+      <div className="metricIcon">
+        <Icon className="w-5 h-5" />
+      </div>
+      <div className="metricBody">
+        <p className="metricLabel">{title}</p>
+        <p className="metricValue">No data</p>
+      </div>
+    </div>
+  );
 
-  // Mock data for traffic sources
-  const trafficData = [
-    { source: "Organic", visitors: 4500 },
-    { source: "Direct", visitors: 3200 },
-    { source: "Social", visitors: 2800 },
-    { source: "Referral", visitors: 2100 },
-    { source: "Email", visitors: 1800 },
-  ];
+  const EmptyChart = ({ title, subtitle }: { title: string; subtitle: string }) => (
+    <div className="dashCard chartCard">
+      <div className="cardHeader">
+        <div>
+          <h3>{title}</h3>
+          <p>{subtitle}</p>
+        </div>
+        <Badge variant="outline" className="glassBadge">
+          <Clock3 className="w-4 h-4 mr-1" />
+          Last 30 days
+        </Badge>
+      </div>
+      <div className="emptyChart">
+        <Activity className="w-12 h-12 emptyIcon" />
+        <p className="emptyTitle">No data yet</p>
+        <p className="emptySubtitle">Connect a data source to see trends.</p>
+      </div>
+    </div>
+  );
 
-  // Mock data for recent orders
-  const recentOrders = [
-    { id: "ORD-001", customer: "Sarah Johnson", amount: "$1,234", status: "completed", date: "2 mins ago" },
-    { id: "ORD-002", customer: "Michael Chen", amount: "$856", status: "pending", date: "15 mins ago" },
-    { id: "ORD-003", customer: "Emma Davis", amount: "$2,100", status: "completed", date: "1 hour ago" },
-    { id: "ORD-004", customer: "James Wilson", amount: "$432", status: "processing", date: "2 hours ago" },
-    { id: "ORD-005", customer: "Lisa Anderson", amount: "$1,567", status: "completed", date: "3 hours ago" },
-  ];
+  const renderContent = () => {
+    if (active === "overview") {
+      return (
+        <div className="contentGrid">
+          <div className="metricsRow">
+            <MetricCard icon={DollarSign} title="Revenue" />
+            <MetricCard icon={Users} title="Active users" />
+            <MetricCard icon={LineChart} title="Conversion" />
+            <MetricCard icon={PieChart} title="Pending reports" />
+          </div>
 
-  // Mock data for top products
-  const topProducts = [
-    { name: "Wireless Headphones", sales: 234, revenue: "$23,400", trend: 12 },
-    { name: "Smart Watch Pro", sales: 189, revenue: "$56,700", trend: 8 },
-    { name: "Laptop Stand", sales: 167, revenue: "$8,350", trend: -3 },
-    { name: "USB-C Hub", sales: 145, revenue: "$7,250", trend: 15 },
-  ];
+          <div className="gridTwo overviewCharts">
+            <div className="dashCard chartCardLarge">
+              <div className="cardHeader">
+                <div>
+                  <h3>Visitors statistics</h3>
+                  <p>Last 30 days</p>
+                </div>
+                <Badge variant="outline" className="glassBadge">
+                  <Clock3 className="w-4 h-4 mr-1" />
+                  Last 30 days
+                </Badge>
+              </div>
+              <div className="chartPlaceholder">
+                <LineChart className="w-12 h-12 text-indigo-500" />
+                <p className="emptySubtitle">Connect data to view traffic trends.</p>
+              </div>
+            </div>
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-100 text-green-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "processing":
-        return "bg-blue-100 text-blue-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+            <div className="dashCard miniStack">
+              <div className="cardHeader">
+                <div>
+                  <h3>Alerts</h3>
+                  <p>System health</p>
+                </div>
+              </div>
+              <div className="stackList">
+                {[ "Blood cancer patients", "Kidney damage", "Pending labs" ].map((item) => (
+                  <div key={item} className="stackItem">
+                    <div className="stackIcon">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="stackTitle">{item}</p>
+                      <p className="stackSubtitle">No data yet</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="dashCard tableCard">
+            <div className="cardHeader">
+              <div>
+                <h3>Recent patient appointment</h3>
+                <p>Track patient data and other information</p>
+              </div>
+              <div className="headerActions">
+                <div className="searchBox">
+                  <Search className="searchIcon" />
+                  <Input placeholder="Search patient..." className="searchInput" />
+                </div>
+                <Button className="primaryBtn">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add data
+                </Button>
+              </div>
+            </div>
+            <div className="emptyStateRow">
+              <Inbox className="emptyIcon" />
+              <div>
+                <p className="emptyTitle">No appointments</p>
+                <p className="emptySubtitle">Add your first record to see it here.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
     }
+
+    if (active === "insights") {
+      return (
+        <div className="contentGrid">
+          <div className="gridTwo">
+            <EmptyChart title="Activity over time" subtitle="Track usage trends" />
+            <EmptyChart title="Category breakdown" subtitle="See distribution by segment" />
+          </div>
+        </div>
+      );
+    }
+
+    if (active === "tables" || active === "patients") {
+      return (
+        <div className="contentGrid">
+          <div className="dashCard">
+            <div className="cardHeader">
+              <div>
+                <h3>Data tables</h3>
+                <p>Browse your workspace entities</p>
+              </div>
+              <div className="headerActions">
+                <Button className="primaryBtn">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add data
+                </Button>
+              </div>
+            </div>
+
+            <Tabs defaultValue="patients">
+              <TabsList className="pillTabs">
+                <TabsTrigger value="patients">Patients</TabsTrigger>
+                <TabsTrigger value="appointments">Appointments</TabsTrigger>
+                <TabsTrigger value="billing">Billing</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="patients">
+                <div className="infoFields">
+                  {[
+                    { label: "first_name", icon: User, type: "string" },
+                    { label: "last_name", icon: Users, type: "string" },
+                    { label: "date_of_birth", icon: Calendar, type: "date" },
+                    { label: "gender", icon: Users, type: "enum" },
+                  ].map((field) => {
+                    const Icon = field.icon;
+                    return (
+                      <div key={field.label} className="infoCard">
+                        <div className="infoIcon">
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="infoLabel">{field.label}</p>
+                          <p className="infoType">{field.type}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="emptyStateRow">
+                  <Database className="emptyIcon" />
+                  <div>
+                    <p className="emptyTitle">No patient records</p>
+                    <p className="emptySubtitle">Start by adding data to see patient details here.</p>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="appointments">
+                <div className="emptyStateRow">
+                  <Inbox className="emptyIcon" />
+                  <div>
+                    <p className="emptyTitle">No appointments</p>
+                    <p className="emptySubtitle">Add your first appointment to view it here.</p>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="billing">
+                <div className="emptyStateRow">
+                  <Database className="emptyIcon" />
+                  <div>
+                    <p className="emptyTitle">No billing records</p>
+                    <p className="emptySubtitle">Connect billing data to see invoices and payments.</p>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      );
+    }
+
+    if (active === "appointments") {
+      return (
+        <div className="dashCard">
+          <div className="cardHeader">
+            <div>
+              <h3>Appointments</h3>
+              <p>Schedule overview</p>
+            </div>
+            <Badge variant="outline" className="glassBadge">
+              <Calendar className="w-4 h-4 mr-1" />
+              Upcoming
+            </Badge>
+          </div>
+          <div className="emptyStateRow">
+            <Inbox className="emptyIcon" />
+            <div>
+              <p className="emptyTitle">No appointments yet</p>
+              <p className="emptySubtitle">Create or sync your calendar to see bookings.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (active === "lab") {
+      return (
+        <div className="dashCard">
+          <div className="cardHeader">
+            <div>
+              <h3>Lab Results</h3>
+              <p>Clinical data and lab outcomes</p>
+            </div>
+            <Badge variant="outline" className="glassBadge">
+              <FlaskConical className="w-4 h-4 mr-1" />
+              Labs
+            </Badge>
+          </div>
+          <div className="emptyStateRow">
+            <Database className="emptyIcon" />
+            <div>
+              <p className="emptyTitle">No lab data</p>
+              <p className="emptySubtitle">Connect a lab source to view results.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="dashCard">
+        <div className="cardHeader">
+          <div>
+            <h3>Billing</h3>
+            <p>Invoices and payments</p>
+          </div>
+          <Badge variant="outline" className="glassBadge">
+            <DollarSign className="w-4 h-4 mr-1" />
+            Billing
+          </Badge>
+        </div>
+        <div className="emptyStateRow">
+          <Inbox className="emptyIcon" />
+          <div>
+            <p className="emptyTitle">No billing data</p>
+            <p className="emptySubtitle">Connect your payment provider to see invoices.</p>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top Navigation Bar */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <LayoutDashboard className="w-6 h-6 text-primary" />
-              <span className="text-xl font-semibold text-primary">Syntha</span>
+    <div className="dashboardPage">
+      <div className="dashBg" />
+      <div className="dashboardLayout">
+        <aside className="dashboardSidebar">
+          <div className="sidebarHeader">
+            <div className="avatarRing">SH</div>
+            <div>
+              <p className="sidebarTitle">SocialHub</p>
+              <p className="sidebarSubtitle">Dashboard</p>
             </div>
           </div>
-
-          <div className="flex-1 max-w-xl mx-8">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search dashboards, reports, data..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              New Widget
-            </Button>
-            <NotificationDropdown />
-            <Button variant="ghost" size="icon" onClick={onSettingsOpen}>
-              <Settings className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-              <Avatar>
-                <AvatarImage src="" />
-                <AvatarFallback className="bg-primary text-primary-foreground">JD</AvatarFallback>
-              </Avatar>
-              <Button variant="ghost" size="icon" onClick={onLogout}>
-                <LogOut className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="p-6">
-        {/* Dashboard Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl text-gray-900 mb-2">Dashboard Overview</h1>
-          <p className="text-gray-600">Welcome back! Here's what's happening with your business today.</p>
-        </div>
-
-        {/* Key Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Total Revenue */}
-          <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <DollarSign className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="flex items-center gap-1 text-green-600">
-                <ArrowUpRight className="w-4 h-4" />
-                <span className="text-sm">+12.5%</span>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
-              <p className="text-2xl text-gray-900">$72,458</p>
-              <p className="text-xs text-gray-500 mt-1">+$8,240 from last month</p>
-            </div>
-          </Card>
-
-          {/* Total Orders */}
-          <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <ShoppingCart className="w-6 h-6 text-purple-600" />
-              </div>
-              <div className="flex items-center gap-1 text-green-600">
-                <ArrowUpRight className="w-4 h-4" />
-                <span className="text-sm">+8.2%</span>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Orders</p>
-              <p className="text-2xl text-gray-900">1,429</p>
-              <p className="text-xs text-gray-500 mt-1">+108 from last month</p>
-            </div>
-          </Card>
-
-          {/* Total Customers */}
-          <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Users className="w-6 h-6 text-green-600" />
-              </div>
-              <div className="flex items-center gap-1 text-green-600">
-                <ArrowUpRight className="w-4 h-4" />
-                <span className="text-sm">+18.7%</span>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Customers</p>
-              <p className="text-2xl text-gray-900">8,549</p>
-              <p className="text-xs text-gray-500 mt-1">+1,353 new customers</p>
-            </div>
-          </Card>
-
-          {/* Active Products */}
-          <Card className="p-6 hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Package className="w-6 h-6 text-orange-600" />
-              </div>
-              <div className="flex items-center gap-1 text-red-600">
-                <ArrowDownRight className="w-4 h-4" />
-                <span className="text-sm">-2.4%</span>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Active Products</p>
-              <p className="text-2xl text-gray-900">342</p>
-              <p className="text-xs text-gray-500 mt-1">-8 from last month</p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Revenue Overview - Takes 2 columns */}
-          <Card className="p-6 lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg text-gray-900 mb-1">Revenue Overview</h3>
-                <p className="text-sm text-gray-600">Monthly revenue vs target</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Last 7 months
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="month" stroke="#6b7280" />
-                <YAxis stroke="#6b7280" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                  }}
-                />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#4f46e5"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorRevenue)"
-                  name="Revenue"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="target"
-                  stroke="#94a3b8"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  name="Target"
-                  dot={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Sales by Category */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg text-gray-900 mb-1">Sales Distribution</h3>
-                <p className="text-sm text-gray-600">By category</p>
-              </div>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </div>
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={salesByCategory}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
+          <nav className="sidebarNav">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = active === item.key;
+              return (
+                <button
+                  key={item.key}
+                  className={`navItem ${isActive ? "active" : ""}`}
+                  onClick={() => setActive(item.key)}
                 >
-                  {salesByCategory.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-4 space-y-2">
-              {salesByCategory.map((category) => (
-                <div key={category.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: category.color }}></div>
-                    <span className="text-sm text-gray-700">{category.name}</span>
-                  </div>
-                  <span className="text-sm text-gray-900">{category.value}%</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-        {/* Second Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Traffic Sources */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg text-gray-900 mb-1">Traffic Sources</h3>
-                <p className="text-sm text-gray-600">Visitor analytics</p>
-              </div>
-              <Button variant="ghost" size="icon">
-                <MoreVertical className="w-4 h-4" />
+        <main className="dashboardMain">
+          <header className="mainHeader">
+            <div>
+              <p className="mainSubtitle">Updated {today}</p>
+              <h1 className="mainTitle">Care Dashboard</h1>
+            </div>
+            <div className="mainActions">
+              <Button variant="ghost" className="ghostBtn">
+                <Clock3 className="w-4 h-4 mr-2" />
+                Last 30 days
+              </Button>
+              <NotificationDropdown />
+              <Button variant="ghost" size="sm" className="ghostBtn" onClick={onSettingsOpen}>
+                Settings
+              </Button>
+              <Button variant="outline" size="sm" className="ghostBtn" onClick={onLogout}>
+                Logout
               </Button>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={trafficData} layout="horizontal">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" stroke="#6b7280" />
-                <YAxis dataKey="source" type="category" stroke="#6b7280" width={80} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "white",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                  }}
-                />
-                <Bar dataKey="visitors" fill="#4f46e5" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
+          </header>
 
-          {/* Recent Orders - Takes 2 columns */}
-          <Card className="p-6 lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg text-gray-900 mb-1">Recent Orders</h3>
-                <p className="text-sm text-gray-600">Latest transactions</p>
-              </div>
-              <Button variant="outline" size="sm">View All</Button>
-            </div>
-            <div className="space-y-4">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center gap-4">
-                    <Avatar>
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {order.customer.split(" ").map((n) => n[0]).join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm text-gray-900">{order.customer}</p>
-                      <p className="text-xs text-gray-500">{order.id}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm text-gray-900">{order.amount}</p>
-                    <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
-                    <p className="text-xs text-gray-500 w-20 text-right">{order.date}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Top Products */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <Card className="p-6 lg:col-span-2">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg text-gray-900 mb-1">Top Products</h3>
-                <p className="text-sm text-gray-600">Product performance</p>
-              </div>
-              <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4" /></Button>
-            </div>
-            <div className="space-y-4">
-              {topProducts.map((p) => (
-                <div key={p.name} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-100 hover:shadow-sm transition-all">
-                  <div>
-                    <p className="text-sm text-gray-900">{p.name}</p>
-                    <p className="text-xs text-gray-500">{p.sales} sales â€¢ {p.revenue}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className={`text-sm ${p.trend >= 0 ? "text-green-600" : "text-red-600"}`}>{p.trend >= 0 ? `+${p.trend}%` : `${p.trend}%`}</div>
-                    <div className="w-40">
-                      <Progress value={Math.min(Math.abs(p.trend), 100)} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg text-gray-900 mb-1">Activity Feed</h3>
-                <p className="text-sm text-gray-600">Recent product and order activity</p>
-              </div>
-              <Button variant="ghost" size="icon"><MoreVertical className="w-4 h-4" /></Button>
-            </div>
-            <div className="space-y-2 text-sm text-gray-700">
-              <div className="p-3 bg-gray-50 rounded-lg">New order ORD-006 for $420</div>
-              <div className="p-3 bg-gray-50 rounded-lg">Stock alert: Product ID 123 has low inventory</div>
-              <div className="p-3 bg-gray-50 rounded-lg">New customer registered: Alex Kim</div>
-            </div>
-          </Card>
-        </div>
-
+          {renderContent()}
+        </main>
       </div>
     </div>
   );
 }
-
-
-
-

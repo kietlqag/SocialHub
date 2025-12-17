@@ -24,6 +24,8 @@ import {
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MIN_TABLES = 2;
+const MAX_TABLES = 12;
 
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
@@ -175,34 +177,6 @@ const TABLE_LIBRARY = [
     ],
   },
 ];
-
-const ALWAYS_INCLUDED_TABLES = ["customers", "orders", "projects"];
-
-const selectTableTemplates = (description) => {
-  const normalized = (description || "").toString().toLowerCase();
-  const includeKeys = new Set(ALWAYS_INCLUDED_TABLES);
-  TABLE_LIBRARY.forEach((template) => {
-    if (template.keywords.some((keyword) => normalized.includes(keyword))) {
-      includeKeys.add(template.key);
-    }
-  });
-  const selected = [];
-  TABLE_LIBRARY.forEach((template) => {
-    if (includeKeys.has(template.key)) {
-      selected.push(template);
-    }
-  });
-  if (selected.length < 4) {
-    TABLE_LIBRARY.forEach((template) => {
-      if (selected.length >= 4) return;
-      if (!includeKeys.has(template.key)) {
-        selected.push(template);
-        includeKeys.add(template.key);
-      }
-    });
-  }
-  return selected;
-};
 
 const makeFieldId = (tableKey, index) => `${tableKey}-${index}-${randomUUID().slice(0, 6)}`;
 
@@ -468,7 +442,10 @@ const ensureSystemFields = (fields = []) => {
   ];
   const merged = [...fields];
   system.forEach((f) => {
-    if (!existing.has(f.key)) merged.unshift(f);
+    if (!existing.has(f.key)) {
+      merged.unshift({ ...f, required: true });
+      existing.add(f.key);
+    }
   });
   return merged;
 };
@@ -483,6 +460,18 @@ const slugify = (value = "") =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || `key-${randomUUID().slice(0, 6)}`;
+
+const dedupeKey = (candidate, usedSet) => {
+  const base = candidate || `key-${randomUUID().slice(0, 6)}`;
+  let key = base;
+  let counter = 2;
+  while (usedSet.has(key)) {
+    key = `${base}-${counter}`;
+    counter += 1;
+  }
+  usedSet.add(key);
+  return key;
+};
 
 function extractJsonObject(text) {
   if (!text) return null;
@@ -508,42 +497,228 @@ function extractJsonObject(text) {
   }
 }
 
+function validatePlan(rawPlan) {
+  if (!rawPlan || typeof rawPlan !== "object") {
+    throw new HttpError(502, "Invalid AI plan response: missing JSON object");
+  }
+  const complexity = ["low", "medium", "high"].includes(rawPlan.complexity) ? rawPlan.complexity : "medium";
+  const proposedTableKeys = Array.isArray(rawPlan.proposed_table_keys)
+    ? rawPlan.proposed_table_keys
+        .map((k) => k?.toString().trim())
+        .filter(Boolean)
+        .map((k) => slugify(k))
+    : [];
+  const proposedCustomTables = Array.isArray(rawPlan.proposed_custom_tables)
+    ? rawPlan.proposed_custom_tables
+        .map((t) => ({
+          name: t?.name?.toString().slice(0, 120) || "",
+          reason: t?.reason?.toString().slice(0, 200) || "",
+        }))
+        .filter((t) => t.name)
+    : [];
+  const insightGoals = Array.isArray(rawPlan.insight_goals)
+    ? rawPlan.insight_goals.map((g) => g?.toString().slice(0, 200)).filter(Boolean)
+    : [];
+  const confidenceRaw = Number(rawPlan.confidence);
+  const confidence = Number.isFinite(confidenceRaw) ? Math.min(1, Math.max(0, confidenceRaw)) : 0.5;
+  return {
+    domain: rawPlan.domain?.toString().slice(0, 120) || "",
+    complexity,
+    proposed_table_keys: proposedTableKeys,
+    proposed_custom_tables: proposedCustomTables,
+    insight_goals: insightGoals,
+    confidence,
+  };
+}
+
+const BLUEPRINT_JSON_SCHEMA = {
+  name: "dashboard_schema",
+  schema: {
+    type: "object",
+    properties: {
+      tables: {
+        type: "array",
+        minItems: MIN_TABLES,
+        items: {
+          type: "object",
+          properties: {
+            key: { type: "string" },
+            name: { type: "string" },
+            description: { type: "string" },
+            fields: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  key: { type: "string" },
+                  type: {
+                    type: "string",
+                    enum: allowedFieldTypes,
+                  },
+                  required: { type: "boolean" },
+                  options: { type: "array", items: { type: "string" } },
+                  ref: { type: "string" },
+                },
+                required: ["key", "type"],
+              },
+            },
+          },
+          required: ["key", "name", "fields"],
+        },
+      },
+      relationships: { type: "array" },
+      insights: { type: "array" },
+      ui: { type: "object" },
+    },
+    required: ["tables"],
+  },
+};
+
+const PLAN_JSON_SCHEMA = {
+  name: "dashboard_schema",
+  schema: {
+    type: "object",
+    properties: {
+      domain: { type: "string" },
+      complexity: { type: "string", enum: ["low", "medium", "high"] },
+      proposed_table_keys: { type: "array", items: { type: "string" } },
+      proposed_custom_tables: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { name: { type: "string" }, reason: { type: "string" } },
+          required: ["name"],
+        },
+      },
+      insight_goals: { type: "array", items: { type: "string" } },
+      confidence: { type: "number" },
+    },
+    required: ["complexity", "proposed_table_keys"],
+  },
+};
+
+async function callWithRepair({
+  messages,
+  temperature = 0.4,
+  maxTokens = 900,
+  validator,
+  label = "response",
+  jsonSchema = BLUEPRINT_JSON_SCHEMA,
+}) {
+  const client = requireOpenAI();
+  let lastContent = "";
+  let currentMessages = messages;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const completion = await client.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: currentMessages,
+        temperature,
+        max_tokens: maxTokens,
+        response_format: { type: "json_object" },
+      });
+      const choice = completion.choices?.[0];
+      const finish = choice?.finish_reason;
+      const content = choice?.message?.content?.trim() || "";
+      if (finish === "length") {
+        throw new HttpError(502, "AI output truncated (finish_reason=length)");
+      }
+      lastContent = content;
+      try {
+        if (choice?.message?.parsed) {
+          return validator(choice.message.parsed);
+        }
+        const parsed = JSON.parse(content);
+        return validator(parsed);
+      } catch (parseErr) {
+        // Fallback if json_object not honored
+        const fallbackParsed = extractJsonObject(content);
+        return validator(fallbackParsed);
+      }
+    } catch (err) {
+      if (attempt >= 2) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(502, err.message || "AI returned invalid JSON");
+      }
+      currentMessages = [
+        ...currentMessages,
+        {
+          role: "system",
+          content: `Previous ${label} invalid: ${err.message}.\nLast response:\n${lastContent?.slice(
+            0,
+            4000,
+          )}\nReturn ONLY corrected JSON.`,
+        },
+      ];
+    }
+  }
+  throw new HttpError(502, `AI failed to produce valid ${label}`);
+}
+
 function validateBlueprint(rawBlueprint) {
   const errors = [];
   if (!rawBlueprint || typeof rawBlueprint !== "object") {
     throw new HttpError(502, "Invalid AI response: missing JSON object");
   }
 
+  const tableMap = new Map();
+  const tableKeySet = new Set();
+  const tableNameMap = new Map();
+
   const normalizeTable = (table, index) => {
     const name = table?.name?.toString().trim();
-    const key = table?.key?.toString().trim() || (name ? slugify(name) : `table-${index}`);
+    const keyCandidate = table?.key?.toString().trim() || (name ? slugify(name) : `table-${index + 1}`);
+    const key = dedupeKey(keyCandidate, tableKeySet);
     if (!name) errors.push("Table missing name");
     if (!table.fields || !Array.isArray(table.fields)) errors.push(`Table ${name || key} missing fields array`);
     const fieldKeyByName = {};
+    const fieldKeySet = new Set();
     const normalizedFields = Array.isArray(table.fields)
       ? table.fields.map((field, fieldIndex) => {
           const fname = field.fieldName || field.name || field.key || `Field ${fieldIndex + 1}`;
-          const fkey = field.key || (field.name ? slugify(field.name) : slugify(fname));
+          const fkeyCandidate = field.key || (field.name ? slugify(field.name) : slugify(fname));
+          const fkey = dedupeKey(fkeyCandidate, fieldKeySet);
           fieldKeyByName[fname.toString().toLowerCase()] = fkey;
           const ftype = field.type || field.fieldType;
           if (!ftype) errors.push(`Field ${fname} missing type`);
           if (ftype && !allowedFieldTypes.includes(ftype)) errors.push(`Field ${fname} has unsupported type ${ftype}`);
+          const normalizedType = allowedFieldTypes.includes(ftype) ? ftype : "string";
           return {
             ...field,
             key: fkey,
-            type: allowedFieldTypes.includes(ftype) ? ftype : ftype,
+            type: normalizedType,
+            required: Boolean(field.required),
+            options: Array.isArray(field.options) ? field.options.slice(0, 20) : undefined,
+            ref: field.ref || field.reference || undefined,
           };
         })
       : [];
-    return { key, name, fields: ensureSystemFields(normalizedFields), fieldKeyByName };
+    const withSystem = ensureSystemFields(normalizedFields);
+    withSystem.forEach((f) => {
+      if (f.key) {
+        const lower = f.key.toString().toLowerCase();
+        if (!fieldKeyByName[lower]) fieldKeyByName[lower] = f.key;
+        fieldKeySet.add(f.key);
+      }
+    });
+    return {
+      key,
+      name,
+      description: table.description?.toString().slice(0, 300) || "",
+      purpose: table.purpose?.toString().slice(0, 300) || "",
+      fields: withSystem,
+      fieldKeyByName,
+    };
   };
 
-  const tablesRaw = Array.isArray(rawBlueprint.tables) ? rawBlueprint.tables : [];
-  if (tablesRaw.length < 4 || tablesRaw.length > 8) {
-    errors.push("AI schema must include between 4 and 8 tables");
+  let tablesRaw = Array.isArray(rawBlueprint.tables) ? rawBlueprint.tables : [];
+  if (tablesRaw.length < MIN_TABLES) {
+    throw new HttpError(502, `AI returned too few tables (got ${tablesRaw.length}, min ${MIN_TABLES})`);
   }
-  const tableMap = new Map();
-  const tableNameMap = new Map();
+  if (tablesRaw.length > MAX_TABLES) {
+    tablesRaw = tablesRaw.slice(0, MAX_TABLES);
+  }
+
   const normalizedTables = tablesRaw.map((table, idx) => {
     const normalized = normalizeTable(table, idx);
     tableMap.set(normalized.key, normalized);
@@ -551,25 +726,42 @@ function validateBlueprint(rawBlueprint) {
     return normalized;
   });
 
+  const allowedRelationshipTypes = ["one-to-many", "many-to-one", "many-to-many"];
   const relationshipsRaw = Array.isArray(rawBlueprint.relationships) ? rawBlueprint.relationships : [];
   const normalizedRelationships = relationshipsRaw.map((rel, idx) => {
     let fromTableKey = rel.fromTableKey || tableNameMap.get(rel.fromTable?.toString().toLowerCase());
     let toTableKey = rel.toTableKey || tableNameMap.get(rel.toTable?.toString().toLowerCase());
-    const fromTable = tableMap.get(fromTableKey);
-    const toTable = tableMap.get(toTableKey);
     if (!fromTableKey && rel.fromTable) fromTableKey = slugify(rel.fromTable);
     if (!toTableKey && rel.toTable) toTableKey = slugify(rel.toTable);
-
+    const fromTable = fromTableKey ? tableMap.get(fromTableKey) : null;
+    const toTable = toTableKey ? tableMap.get(toTableKey) : null;
     const mapField = (table, fieldKey, fieldName) => {
       if (fieldKey) return fieldKey;
       if (!table || !fieldName) return null;
       return table.fieldKeyByName[fieldName.toString().toLowerCase()] || null;
     };
 
-    const fromFieldKey = mapField(fromTable, rel.fromFieldKey, rel.fromField) || rel.fromFieldKey;
-    const toFieldKey = mapField(toTable, rel.toFieldKey, rel.toField) || rel.toFieldKey;
-    if (!fromTableKey || !fromFieldKey || !toTableKey || !toFieldKey || !rel.type) {
+    const fromFieldKey = mapField(fromTable, rel.fromFieldKey, rel.fromField);
+    const toFieldKey = mapField(toTable, rel.toFieldKey, rel.toField);
+    if (!fromTableKey || !toTableKey || !fromFieldKey || !toFieldKey || !rel.type) {
       errors.push(`Relationship ${idx + 1} is incomplete`);
+    }
+    if (fromTableKey && !tableMap.has(fromTableKey)) {
+      errors.push(`Relationship ${idx + 1} references missing fromTableKey ${fromTableKey}`);
+    }
+    if (toTableKey && !tableMap.has(toTableKey)) {
+      errors.push(`Relationship ${idx + 1} references missing toTableKey ${toTableKey}`);
+    }
+    const fromFieldExists = fromTable?.fields?.some((f) => f.key === fromFieldKey);
+    const toFieldExists = toTable?.fields?.some((f) => f.key === toFieldKey);
+    if (fromTable && fromFieldKey && !fromFieldExists) {
+      errors.push(`Relationship ${idx + 1} references missing fromFieldKey ${fromFieldKey}`);
+    }
+    if (toTable && toFieldKey && !toFieldExists) {
+      errors.push(`Relationship ${idx + 1} references missing toFieldKey ${toFieldKey}`);
+    }
+    if (rel.type && !allowedRelationshipTypes.includes(rel.type)) {
+      errors.push(`Relationship ${idx + 1} has unsupported type ${rel.type}`);
     }
     return { fromTableKey, fromFieldKey, toTableKey, toFieldKey, type: rel.type };
   });
@@ -593,78 +785,204 @@ function validateBlueprint(rawBlueprint) {
     throw new HttpError(502, `Invalid AI response: ${errors.join("; ")}`);
   }
 
-  const ui =
-    rawBlueprint.ui || {
-      defaultTableKey: normalizedTables[0]?.key || "",
-      tableDropdownOrder: normalizedTables.map((t) => t.key),
-      emptyStateText: "No records yet. Click Add record to start.",
-    };
+  const fieldMapByTable = new Map(
+    normalizedTables.map((t) => [t.key, new Set(t.fields.map((f) => f.key))]),
+  );
 
-  return { tables: normalizedTables, relationships: normalizedRelationships, ui };
+  const rawInsights = Array.isArray(rawBlueprint.insights) ? rawBlueprint.insights : [];
+  const allowedInsightKinds = ["kpi", "trend", "breakdown", "table"];
+  const allowedMetrics = ["count", "sum", "avg"];
+  const normalizedInsights = rawInsights
+    .map((insight, idx) => {
+      const sourceTableKey = insight?.source?.tableKey;
+      if (!sourceTableKey || !fieldMapByTable.has(sourceTableKey)) return null;
+      const fieldSet = fieldMapByTable.get(sourceTableKey);
+      const fieldKey = insight?.source?.fieldKey;
+      const groupByFieldKey = insight?.source?.groupByFieldKey;
+      const timeFieldKey = insight?.source?.timeFieldKey;
+      if (fieldKey && !fieldSet.has(fieldKey)) return null;
+      if (groupByFieldKey && !fieldSet.has(groupByFieldKey)) return null;
+      if (timeFieldKey && !fieldSet.has(timeFieldKey)) return null;
+      const id = insight.id?.toString() || `insight-${idx + 1}-${randomUUID().slice(0, 6)}`;
+      const kind = allowedInsightKinds.includes(insight.kind) ? insight.kind : "kpi";
+      const metric = allowedMetrics.includes(insight?.source?.metric) ? insight.source.metric : "count";
+      return {
+        id,
+        title: insight.title?.toString().slice(0, 120) || `Insight ${idx + 1}`,
+        kind,
+        source: {
+          tableKey: sourceTableKey,
+          metric,
+          fieldKey: fieldKey || null,
+          groupByFieldKey: groupByFieldKey || null,
+          timeFieldKey: timeFieldKey || null,
+        },
+        visualization: insight.visualization,
+      };
+    })
+    .filter(Boolean);
+
+  const insightMap = new Map(normalizedInsights.map((insight) => [insight.id, insight]));
+
+  const normalizeWidgets = () => {
+    const allowedWidgetTypes = ["stat_card", "chart", "data_table"];
+    const rawWidgets = Array.isArray(rawBlueprint.ui?.widgets) ? rawBlueprint.ui.widgets : [];
+    return rawWidgets
+      .map((widget, idx) => {
+        const tableKey = widget.tableKey || widget.table || widget.table_id;
+        if (!tableKey || !fieldMapByTable.has(tableKey)) return null;
+        const insightId = widget.insightId || widget.insightID;
+        if (insightId && !insightMap.has(insightId)) return null;
+        const type = allowedWidgetTypes.includes(widget.type) ? widget.type : "data_table";
+        const id = widget.id?.toString() || `widget-${idx + 1}-${randomUUID().slice(0, 6)}`;
+        return {
+          id,
+          type,
+          title: widget.title?.toString().slice(0, 120) || "Widget",
+          tableKey,
+          insightId: insightId || null,
+          fields: Array.isArray(widget.fields) ? widget.fields : undefined,
+          layout: widget.layout || undefined,
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const normalizedWidgets = normalizeWidgets();
+
+  const tableOrderRaw = Array.isArray(rawBlueprint.ui?.tableDropdownOrder) ? rawBlueprint.ui.tableDropdownOrder : [];
+  const dropdownOrder = [...new Set([...tableOrderRaw.filter((k) => tableMap.has(k)), ...normalizedTables.map((t) => t.key)])];
+  const defaultTableKey =
+    rawBlueprint.ui?.defaultTableKey && tableMap.has(rawBlueprint.ui.defaultTableKey)
+      ? rawBlueprint.ui.defaultTableKey
+      : normalizedTables[0]?.key || "";
+
+  const ui = {
+    defaultTableKey,
+    tableDropdownOrder: dropdownOrder,
+    emptyStateText:
+      rawBlueprint.ui?.emptyStateText?.toString().slice(0, 200) || "No records yet. Click Add record to start.",
+    widgets: normalizedWidgets,
+  };
+
+  const tablesForReturn = normalizedTables.map(({ fieldKeyByName, ...rest }) => rest);
+
+  return { tables: tablesForReturn, relationships: normalizedRelationships, insights: normalizedInsights, ui };
 }
 
-async function generateSchemaBlueprint({ name, description, type }) {
-  const client = requireOpenAI();
-  const promptMessages = [
+async function generatePlan({ name, description, type }) {
+  const libraryKeys = TABLE_LIBRARY.map((t) => `${t.key}:${t.name}`).join("; ");
+  const messages = [
     {
       role: "system",
-      content: `You are an AI Database Schema Designer for a dynamic dashboard system.
-User did NOT upload a data file.
-Return ONLY valid JSON with tables (4-8), relationships, and ui.
-Tables: key, name, description, fields[]. Fields: key, type (id|string|number|boolean|date|enum|reference|text), required, options(if enum), ref(if reference).
-Include system fields in every table: _id (id, required), created_at (date, required), updated_at (date, required).
-Relationships: fromTableKey, fromFieldKey, toTableKey, toFieldKey, type(one-to-many|many-to-one|many-to-many).
-UI: defaultTableKey, tableDropdownOrder, emptyStateText.
-Forbidden: sample data, records, widgets, KPIs, charts, UI form configs.`,
+      content: `You are an AI planner for dynamic dashboards. Propose domain context, complexity, relevant table keys from a library, any custom tables, and insight goals.\nTable library keys you can reference: ${libraryKeys}.\nReturn ONLY valid JSON with: { domain, complexity("low"|"medium"|"high"), proposed_table_keys: string[], proposed_custom_tables:[{name, reason}], insight_goals:string[], confidence:number(0..1) }. No markdown/backticks.`,
     },
     {
       role: "user",
       content: `Dashboard name: ${name}\nDashboard type: ${type || ""}\nDescription: ${description}\nReturn JSON only.`,
     },
   ];
-
-  const strictReminder = {
-    role: "system",
-    content: "Return ONLY JSON. No markdown, no backticks, no explanation. Must be JSON.parse() valid.",
-  };
-
-  const callAI = async (messages, attemptLabel) => {
-    const completion = await client.chat.completions.create({
-      model: OPENAI_MODEL,
-      messages,
-      temperature: 0.3,
-      max_tokens: 900,
-    });
-    const aiContent = completion.choices?.[0]?.message?.content?.trim() || null;
-    const parsed = extractJsonObject(aiContent);
-    return validateBlueprint(parsed);
-  };
-
-  try {
-    return await callAI(promptMessages, "attempt-1");
-  } catch (err) {
-    console.error("AI schema generation attempt 1 failed", err.message);
-    try {
-      return await callAI([...promptMessages, strictReminder], "attempt-2");
-    } catch (err2) {
-      console.error("AI schema generation attempt 2 failed", err2.message);
-      throw new HttpError(502, err2.message || "AI returned invalid JSON");
-    }
-  }
+  return callWithRepair({
+    messages,
+    temperature: 0.45,
+    maxTokens: 600,
+    validator: validatePlan,
+    label: "plan JSON",
+    jsonSchema: PLAN_JSON_SCHEMA,
+  });
 }
+
+async function generateSchemaAndInsights({ name, description, type, plan }) {
+  const planJson = JSON.stringify(plan);
+  const libraryKeys = TABLE_LIBRARY.map((t) => `${t.key}:${t.name}`).join("; ");
+  const selectedTemplates = Array.isArray(plan?.proposed_table_keys)
+    ? TABLE_LIBRARY.filter((tpl) => plan.proposed_table_keys.includes(tpl.key))
+    : [];
+  const templateHints = selectedTemplates.map((tpl) => ({
+    key: tpl.key,
+    name: tpl.name,
+    sampleFields: tpl.fields?.slice(0, 6).map((f) => ({ name: f.fieldName, type: f.fieldType })),
+  }));
+  const messages = [
+    {
+      role: "system",
+      content: `You are an AI schema + insight generator for a modern dashboard. Use the provided plan and user description to build data tables, relationships, insights, and UI widget metadata.\nConstraints:\n- Max 10 tables, each max 10 fields (including system fields).\n- Max 8 insights, max 8 widgets.\nRequirements:\n- Return ONLY JSON. No markdown, no backticks, no explanation.\n- Tables: [{ key, name, description, fields:[{ key, type(id|string|number|boolean|date|enum|reference|text), required, options?, ref? }] }]\n- Relationships: [{ fromTableKey, fromFieldKey, toTableKey, toFieldKey, type("one-to-many"|"many-to-one"|"many-to-many") }]\n- Insights: [{ id, title, kind("kpi"|"trend"|"breakdown"|"table"), source:{ tableKey, metric("count"|"sum"|"avg"), fieldKey?, groupByFieldKey?, timeFieldKey? }, visualization?:{ chartType("line"|"bar"|"pie") } }]\n- UI: { defaultTableKey, tableDropdownOrder, emptyStateText, widgets:[{ id, type("stat_card"|"chart"|"data_table"), title, tableKey, insightId?, fields?, layout? }] }\n- Include system fields in every table: _id(id, required), created_at(date, required), updated_at(date, required).\n- Table library keys for inspiration (optional): ${libraryKeys}.`,
+    },
+    {
+      role: "user",
+      content: `Dashboard name: ${name}\nDashboard type: ${type || ""}\nDescription: ${description}\nPlan JSON: ${planJson}\nTable templates (optional to reuse/rename): ${JSON.stringify(
+        templateHints,
+      )}\nReturn JSON only.`,
+    },
+  ];
+
+  return callWithRepair({
+    messages,
+    temperature: 0.35,
+    maxTokens: Math.max(3000, 3000),
+    validator: validateBlueprint,
+    label: "schema JSON",
+    jsonSchema: BLUEPRINT_JSON_SCHEMA,
+  });
+}
+
+const buildDefaultWidgets = (tables = [], insights = []) => {
+  const widgets = [];
+  const tableWidgets = tables.map((table, idx) => ({
+    id: `table-${idx + 1}`,
+    type: "data_table",
+    title: `${table.name || "Table"} data`,
+    tableKey: table.key,
+    fields: Array.isArray(table.fields) ? table.fields.map((f) => f.key) : [],
+  }));
+  widgets.push(...tableWidgets);
+  const insightWidgets = insights
+    .slice(0, 4)
+    .map((insight, idx) => ({
+      id: `insight-${idx + 1}`,
+      type: insight.kind === "kpi" ? "stat_card" : "chart",
+      title: insight.title || `Insight ${idx + 1}`,
+      tableKey: insight.source?.tableKey || tables[0]?.key || "",
+      insightId: insight.id,
+    }))
+    .filter((w) => w.tableKey);
+  const extra = insightWidgets.slice(0, Math.min(4, Math.max(2, insightWidgets.length || 0)));
+  widgets.push(...extra);
+  return widgets;
+};
 
 export async function generateDashboardFields({ name, description, type }) {
   if (!name?.trim() || !description?.trim()) {
     throw new HttpError(400, "Name and description are required");
   }
-  const blueprint = await generateSchemaBlueprint({ name, description, type });
+  const plan = await generatePlan({ name, description, type });
+  const blueprint = await generateSchemaAndInsights({ name, description, type, plan });
+  const tables = blueprint.tables || [];
+  const relationships = blueprint.relationships || [];
+  const insights = blueprint.insights || [];
+  const aiWidgets = Array.isArray(blueprint.ui?.widgets) ? blueprint.ui.widgets : [];
+  const widgets = aiWidgets.length ? aiWidgets : buildDefaultWidgets(tables, insights);
+  const ui = {
+    ...(blueprint.ui || {}),
+    widgets,
+    tableDropdownOrder:
+      Array.isArray(blueprint.ui?.tableDropdownOrder) && blueprint.ui.tableDropdownOrder.length
+        ? blueprint.ui.tableDropdownOrder
+        : tables.map((t) => t.key),
+    defaultTableKey:
+      blueprint.ui?.defaultTableKey && tables.find((t) => t.key === blueprint.ui.defaultTableKey)
+        ? blueprint.ui.defaultTableKey
+        : tables[0]?.key || "",
+    emptyStateText: blueprint.ui?.emptyStateText || "No records yet. Click Add record to start.",
+  };
   return {
     fields: [],
-    tables: blueprint.tables,
-    relationships: blueprint.relationships,
-    widgets: [],
+    tables,
+    relationships,
+    insights,
+    widgets,
     componentCode: "",
-    ui: blueprint.ui,
+    ui,
   };
 }
 
@@ -673,7 +991,13 @@ export async function generateAndPersistDashboard({ name, type, description, ses
     throw new HttpError(400, "sessionId or userId required");
   }
   const blueprint = await generateDashboardFields({ name, description, type });
-  const dashboard = await insertDashboard({ name, type, description, sessionId, userId });
+  const dashboard = await insertDashboard({
+    name,
+    type,
+    description,
+    sessionId,
+    userId,
+  });
   await insertTables(dashboard.id, blueprint.tables);
   await insertRelationships(dashboard.id, blueprint.relationships);
   return {
@@ -683,8 +1007,9 @@ export async function generateAndPersistDashboard({ name, type, description, ses
     description: dashboard.description,
     tables: blueprint.tables,
     relationships: blueprint.relationships,
+    insights: blueprint.insights,
     ui: blueprint.ui,
-    widgets: [],
+    widgets: blueprint.widgets,
   };
 }
 
@@ -721,7 +1046,14 @@ export async function listDashboards({ sessionId, userId }) {
     dashboards.map(async (dash) => {
       const tables = await listTablesByDashboard(dash.id);
       const relationships = await listRelationshipsByDashboard(dash.id);
-      return { ...dash, tables, relationships };
+      const ui = dash.ui || {
+        defaultTableKey: tables[0]?.key || "",
+        tableDropdownOrder: tables.map((t) => t.key),
+        emptyStateText: "No records yet. Click Add record to start.",
+      };
+      const insights = dash.insights || [];
+      const widgets = dash.widgets || ui.widgets || buildDefaultWidgets(tables, insights);
+      return { ...dash, tables, relationships, insights, ui: { ...ui, widgets }, widgets };
     }),
   );
   return withSchema;

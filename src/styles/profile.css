@@ -1,0 +1,41 @@
+:root {
+  --profile-grid-color: rgba(15, 23, 42, 0.04);
+}
+
+.profile-page {
+  background:
+    radial-gradient(circle at 18% 18%, rgba(124, 58, 237, 0.12), transparent 36%),
+    radial-gradient(circle at 82% 12%, rgba(37, 99, 235, 0.12), transparent 32%),
+    radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.08), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f7f9ff 40%, #f3f6ff 100%);
+  position: relative;
+}
+
+.profile-page::before,
+.profile-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.profile-page::before {
+  background:
+    linear-gradient(var(--profile-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--profile-grid-color) 1px, transparent 1px);
+  background-size: 22px 22px, 22px 22px;
+  opacity: 0.05;
+}
+
+.profile-page::after {
+  background: radial-gradient(circle at 30% 20%, rgba(67, 56, 202, 0.12), transparent 35%),
+    radial-gradient(circle at 70% 30%, rgba(99, 102, 241, 0.12), transparent 40%);
+  filter: blur(20px);
+  opacity: 0.6;
+}
+
+.profile-page > * {
+  position: relative;
+  z-index: 1;
+}

@@ -4,6 +4,8 @@ import UserMenu from "./UserMenu";
 import { useState } from "react";
 import { AuthUser } from "../services/auth";
 import { NotificationDropdown } from "./NotificationDropdown";
+import { useLocation } from "react-router-dom";
+import "../styles/headerDropdown.css";
 
 export function Header({
   onProfileOpen,
@@ -24,6 +26,19 @@ export function Header({
   onLogout?: () => void;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const location = useLocation();
+
+  const pathname = location.pathname || "/";
+  const activeKey =
+    pathname === "/" || pathname.startsWith("/home")
+      ? "home"
+      : pathname.startsWith("/managedash") || pathname.startsWith("/dashboard")
+        ? "dashboard"
+        : pathname.startsWith("/chat")
+          ? "chat"
+          : pathname.startsWith("/contact")
+            ? "contact"
+            : "";
 
   return (
     <header className="w-full bg-white/70 backdrop-blur-xl border-b border-white/60 shadow-sm sticky top-0 z-50">
@@ -38,18 +53,18 @@ export function Header({
           {/* Desktop Navigation */}
           <nav className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-8">
-              <a href="/home" className="nav-link">Home</a>
+              <a href="/home" className={`nav-link ${activeKey === "home" ? "active" : ""}`}>Home</a>
               {currentUser && (
                 <button
                   onClick={onManageDash}
-                  className="nav-link text-sm"
+                  className={`nav-link text-sm ${activeKey === "dashboard" ? "active" : ""}`}
                 >
                   Dashboard
                 </button>
               )}
               {/* AI Chat moved into the nav between Testimonials and Contact */}
-              <button onClick={onChatOpen} className="nav-link text-sm">AI Chat</button>
-              <a href="#contact" className="nav-link">Contact</a>
+              <button onClick={onChatOpen} className={`nav-link text-sm ${activeKey === "chat" ? "active" : ""}`}>AI Chat</button>
+              <a href="#contact" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Contact</a>
             </div>
           </nav>
 

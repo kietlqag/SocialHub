@@ -8,7 +8,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { AuthUser, login, requestPasswordReset, resetPassword } from "../services/auth";
 import { toast } from "sonner@2.0.3";
 import { API_URL } from "../services/api";
-import "../styles/pages/LoginPage.css";
+import "../styles/login.css";
 
 export function Login({
   onBack,
