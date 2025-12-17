@@ -41,7 +41,7 @@ export function Header({
             : "";
 
   return (
-    <header className="w-full bg-white/70 backdrop-blur-xl border-b border-white/60 shadow-sm sticky top-0 z-50">
+    <header className="w-full bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
@@ -64,7 +64,7 @@ export function Header({
               )}
               {/* AI Chat moved into the nav between Testimonials and Contact */}
               <button onClick={onChatOpen} className={`nav-link text-sm ${activeKey === "chat" ? "active" : ""}`}>AI Chat</button>
-              <a href="#contact" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Contact</a>
+              <a href="/contact" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Contact</a>
             </div>
           </nav>
 

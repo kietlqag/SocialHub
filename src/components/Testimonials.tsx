@@ -45,7 +45,7 @@ export function Testimonials() {
         <div className="mt-16 grid grid-cols-1 gap-8 lg:grid-cols-3">
           {testimonials.map((testimonial, index) => (
             <Card key={index} className="testimonial-card">
-              <CardContent className="p-7">
+              <CardContent className="testimonial-card__content">
                 <div className="flex items-center mb-4">
                   {[...Array(testimonial.rating)].map((_, i) => (
                     <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />

@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AIDashboardGenerator } from "../components/AIDashboardGenerator";
 import { Button } from "../components/ui/button";
-import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { Badge } from "../components/ui/badge";
 import { Header } from "../components/Header";
+import DashboardCard, { type DashboardCardIconPreset } from "../components/dashboard/DashboardCard";
 import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
   LayoutDashboard,
@@ -13,17 +12,12 @@ import {
   Sparkles,
   Clock,
   Star,
-  ArrowRight,
-  Trash2,
   Loader2,
-  Store,
-  TrendingUp,
-  Users,
-  Package,
   ShoppingCart,
   BarChart3,
+  GraduationCap,
+  HeartPulse,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
 import "../styles/managedash.css";
 
@@ -61,20 +55,36 @@ type DecoratedDashboard = Dashboard & {
   tableCount: number;
   createdLabel: string;
   updatedLabel: string | null;
-  icon: LucideIcon;
-  accentColor: string;
+  domain: DashboardDomain;
+  domainLabel: string;
+  iconPreset: DomainVisual;
+  statusLabel: string;
+  lastViewedLabel: string | null;
+  displayTitle: string;
 };
 
-const iconPool: LucideIcon[] = [LayoutDashboard, Store, TrendingUp, Users, Package, ShoppingCart, BarChart3];
-const accentPalette = [
-  "bg-blue-500",
-  "bg-purple-500",
-  "bg-green-500",
-  "bg-orange-500",
-  "bg-yellow-500",
-  "bg-pink-500",
-  "bg-indigo-500",
-];
+type DashboardDomain = "healthcare" | "commerce" | "analytics" | "education" | "general";
+
+type DomainVisual = DashboardCardIconPreset & {
+  label: string;
+};
+
+const domainVisuals: Record<DashboardDomain, DomainVisual> = {
+  healthcare: { Icon: HeartPulse, toneClass: "tone-healthcare", label: "Healthcare" },
+  commerce: { Icon: ShoppingCart, toneClass: "tone-commerce", label: "Commerce" },
+  analytics: { Icon: BarChart3, toneClass: "tone-analytics", label: "Analytics" },
+  education: { Icon: GraduationCap, toneClass: "tone-education", label: "Education" },
+  general: { Icon: LayoutDashboard, toneClass: "tone-general", label: "Dashboard" },
+};
+
+const detectDashboardDomain = (dashboard: Dashboard): DashboardDomain => {
+  const normalized = `${dashboard.type || ""} ${dashboard.name || ""} ${dashboard.description || ""}`.toLowerCase();
+  if (normalized.includes("health") || normalized.includes("clinic") || normalized.includes("patient")) return "healthcare";
+  if (normalized.includes("commerce") || normalized.includes("shop") || normalized.includes("sale") || normalized.includes("store")) return "commerce";
+  if (normalized.includes("analytics") || normalized.includes("insight") || normalized.includes("kpi") || normalized.includes("finance")) return "analytics";
+  if (normalized.includes("school") || normalized.includes("education") || normalized.includes("student") || normalized.includes("class")) return "education";
+  return "general";
+};
 
 export default function ManageDashList() {
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
@@ -82,6 +92,8 @@ export default function ManageDashList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
@@ -120,6 +132,15 @@ export default function ManageDashList() {
       active = false;
     };
   }, [sessionId, currentUser?.id]);
+
+  useEffect(() => {
+    if (!dashboards.length) return;
+    setFavoriteIds((prev) => {
+      if (prev.size) return prev;
+      const seeded = dashboards.slice(0, 2).map((d) => d.id).filter(Boolean);
+      return new Set(seeded);
+    });
+  }, [dashboards]);
 
   const handleCreateDashboard = async (data: DraftDashboard) => {
     if (!sessionId) return;
@@ -189,27 +210,35 @@ export default function ManageDashList() {
     return draft.tables?.some((t) => Array.isArray(t.sampleRows) && t.sampleRows.length > 0);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!sessionId) return;
-    try {
-      await dashboardApi.delete(id, sessionId, currentUser?.id || undefined);
-      setDashboards((prev) => prev.filter((d) => d.id !== id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete dashboard");
-    }
-  };
-
   const openDashboard = (id: string) => {
     navigate(`/managedash/${id}`);
   };
 
-  const derivedDashboards: DecoratedDashboard[] = dashboards.map((d, index) => {
+  const toggleFavorite = (id: string) => {
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const derivedDashboards: DecoratedDashboard[] = dashboards.map((d) => {
     const tableFields = Array.isArray(d.tables) ? d.tables.flatMap((t) => t.fields || []) : [];
     const fieldCount = d.fields?.length ? d.fields.length : tableFields.length;
     const widgetCount = Array.isArray(d.widgets) ? d.widgets.length : 0;
     const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
     const overviewCount = 4;
     const insightsCount = widgetCount > 0 ? Math.min(widgetCount, 4) : Math.max(1, Math.min(4, tableCount));
+    const domain = detectDashboardDomain(d);
+    const visual = domainVisuals[domain] ?? domainVisuals.general;
+    const createdLabel = d.createdAt ? new Date(d.createdAt).toLocaleString() : "Just now";
+    const updatedLabel = d.updatedAt ? new Date(d.updatedAt).toLocaleString() : null;
+    const statusLabel = (d as any).status || "Active";
+    const displayTitle = d.name?.trim() || visual.label;
     return {
       ...d,
       fieldCount,
@@ -217,16 +246,31 @@ export default function ManageDashList() {
       tableCount,
       overviewCount,
       insightsCount,
-      createdLabel: d.createdAt ? new Date(d.createdAt).toLocaleString() : "Just now",
-      updatedLabel: d.updatedAt ? new Date(d.updatedAt).toLocaleString() : null,
-      icon: iconPool[index % iconPool.length],
-      accentColor: accentPalette[index % accentPalette.length],
+      createdLabel,
+      updatedLabel,
+      domain,
+      domainLabel: visual.label,
+      iconPreset: visual,
+      statusLabel,
+      lastViewedLabel: updatedLabel || createdLabel,
+      displayTitle,
     };
   });
 
   const hasDashboards = derivedDashboards.length > 0;
-  const recentlyViewed = derivedDashboards.slice(0, 3);
-  const favoriteDashboards = derivedDashboards.slice(0, 3);
+  const recentlyViewed = derivedDashboards.slice(0, 4);
+  const favoriteDashboardsSeed = favoriteIds.size
+    ? derivedDashboards.filter((dashboard) => favoriteIds.has(dashboard.id))
+    : derivedDashboards.slice(0, 3);
+  const favoriteDashboards = favoriteDashboardsSeed.length ? favoriteDashboardsSeed : derivedDashboards.slice(0, 3);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredDashboards = normalizedQuery
+    ? derivedDashboards.filter((dashboard) =>
+        [dashboard.displayTitle, dashboard.domainLabel, dashboard.statusLabel]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(normalizedQuery)),
+      )
+    : derivedDashboards;
 
   return (
     <div className="manage-dash-wrapper mdash-surface min-h-screen overflow-y-auto">
@@ -246,13 +290,6 @@ export default function ManageDashList() {
       />
 
       <main className="max-w-7xl mx-auto p-6 sm:p-8 space-y-12 mdash-container">
-        <div className="rounded-2xl mdash-card glass-panel p-4 shadow-md">
-          <div className="relative max-w-3xl mx-auto">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input placeholder="Search dashboards..." className="pl-11 pr-5 mdash-search-input" />
-          </div>
-        </div>
-
         <section className="rounded-3xl mdash-hero-card p-8 md:p-10 shadow-xl">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
             <div className="flex-1 space-y-4">
@@ -294,167 +331,114 @@ export default function ManageDashList() {
           </div>
         ) : (
           <>
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
+            <section className="dashboard-section">
+              <div className="dashboard-section-header">
                 <Clock className="w-5 h-5 text-slate-500" />
                 <h3 className="text-xl font-semibold text-slate-900">Recently viewed</h3>
               </div>
               {hasDashboards ? (
-                <div className="flex gap-4 overflow-x-auto pb-2">
-                  {recentlyViewed.map((item) => {
-                    const IconComponent = item.icon;
-                    return (
-                      <Card
-                        key={item.id}
-                        className="min-w-[280px] p-4 mdash-card hover:shadow-lg transition-all cursor-pointer hover-lift"
-                        onClick={() => openDashboard(item.id)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`accent-pill ${item.accentColor}`}>
-                            <IconComponent className="w-5 h-5 text-white drop-shadow-sm" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                            <p className="text-xs text-slate-500">{item.updatedLabel || item.createdLabel}</p>
-                          </div>
-                          <ArrowRight className="w-4 h-4 text-slate-400" />
-                        </div>
-                      </Card>
-                    );
-                  })}
+                <div className="recent-scroll">
+                  {recentlyViewed.map((dashboard) => (
+                    <DashboardCard
+                      key={dashboard.id}
+                      id={dashboard.id}
+                      title={dashboard.displayTitle}
+                      typeLabel={dashboard.domainLabel}
+                      overviewCount={dashboard.overviewCount}
+                      insightCount={dashboard.insightsCount}
+                      tableCount={dashboard.tableCount}
+                      status={dashboard.statusLabel}
+                      isFavorite={favoriteIds.has(dashboard.id)}
+                      variant="recent"
+                      icon={dashboard.iconPreset}
+                      lastViewed={dashboard.lastViewedLabel}
+                      onOpen={openDashboard}
+                      onToggleFavorite={toggleFavorite}
+                    />
+                  ))}
                 </div>
               ) : (
-                <Card className="p-6 text-center text-slate-500 mdash-card">No dashboards viewed yet — start by generating a dashboard.</Card>
+                <div className="dashboard-empty">No dashboards viewed yet — start by generating one.</div>
               )}
             </section>
 
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
+            <section className="dashboard-section">
+              <div className="dashboard-section-header">
                 <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                 <h3 className="text-xl font-semibold text-slate-900">Favorite dashboards</h3>
               </div>
-              {hasDashboards ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {favoriteDashboards.map((dashboard, index) => {
-                    const IconComponent = dashboard.icon;
-                    const isFavorite = index % 2 === 0;
-                    return (
-                      <Card
-                        key={dashboard.id}
-                        className="p-6 mdash-card hover:shadow-lg hover-lift transition-all cursor-pointer group"
-                        onClick={() => openDashboard(dashboard.id)}
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className={`p-3 ${dashboard.accentColor} rounded-2xl shadow-inner`}>
-                            <IconComponent className="w-6 h-6 text-white drop-shadow" />
-                          </div>
-                          <Star className={`w-5 h-5 ${isFavorite ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} />
-                        </div>
-                        <h4 className="text-lg font-semibold text-slate-900 mb-2">{dashboard.name}</h4>
-                        <p className="text-sm text-slate-600 mb-4 line-clamp-2">{dashboard.description || "Custom dashboard"}</p>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1">Overview</p>
-                            <span className="text-sm text-slate-900">{dashboard.overviewCount}</span>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1">Insights</p>
-                            <span className="text-sm text-slate-900">{dashboard.insightsCount}</span>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1">Tables</p>
-                            <span className="text-sm text-slate-900">{dashboard.tableCount}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between pt-4 border-t border-slate-100 text-xs text-slate-500">
-                          <span>Updated {dashboard.updatedLabel || dashboard.createdLabel}</span>
-                          <Badge className="bg-green-50 text-green-700 border border-green-100">Active</Badge>
-                        </div>
-                        <Button
-                          className="w-full mt-4 gap-2 mdash-ghost-btn"
-                          variant="outline"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openDashboard(dashboard.id);
-                          }}
-                        >
-                          Open dashboard
-                          <ArrowRight className="w-4 h-4" />
-                        </Button>
-                      </Card>
-                    );
-                  })}
+              {favoriteDashboards.length ? (
+                <div className="favorite-stack">
+                  {favoriteDashboards.map((dashboard) => (
+                    <DashboardCard
+                      key={dashboard.id}
+                      id={dashboard.id}
+                      title={dashboard.displayTitle}
+                      typeLabel={dashboard.domainLabel}
+                      overviewCount={dashboard.overviewCount}
+                      insightCount={dashboard.insightsCount}
+                      tableCount={dashboard.tableCount}
+                      status={dashboard.statusLabel}
+                      isFavorite={favoriteIds.has(dashboard.id)}
+                      variant="favorite"
+                      icon={dashboard.iconPreset}
+                      lastViewed={dashboard.lastViewedLabel}
+                      onOpen={openDashboard}
+                      onToggleFavorite={toggleFavorite}
+                    />
+                  ))}
                 </div>
               ) : (
-                <Card className="p-6 text-center text-gray-500">Mark dashboards as favorites to see them here.</Card>
+                <div className="dashboard-empty">Mark dashboards as favorites to see them highlighted here.</div>
               )}
             </section>
 
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
+            <section className="dashboard-section">
+              <div className="dashboard-section-header justify-between">
                 <div className="flex items-center gap-2">
                   <LayoutDashboard className="w-5 h-5 text-slate-500" />
                   <h3 className="text-xl font-semibold text-slate-900">All dashboards</h3>
                 </div>
-                <Button variant="outline" size="sm" className="mdash-ghost-btn">
-                  Sort by: Recent
-                </Button>
+                <div className="dashboard-controls">
+                  <div className="dashboard-search inline-flex items-center gap-2">
+                    <Search className="dashboard-search__icon" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search dashboards"
+                      className="pl-10 pr-4 mdash-search-input"
+                    />
+                  </div>
+                </div>
               </div>
               {hasDashboards ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                  {derivedDashboards.map((dashboard) => {
-                    const IconComponent = dashboard.icon;
-                    return (
-                      <Card key={dashboard.id} className="p-6 flex flex-col gap-4 mdash-card hover:shadow-lg hover-lift transition">
-                        <div className="flex items-start justify-between">
-                          <div className={`p-3 ${dashboard.accentColor} rounded-2xl shadow-inner`}>
-                            <IconComponent className="w-6 h-6 text-white drop-shadow" />
-                          </div>
-                          <Star className="w-5 h-5 text-gray-300" />
-                        </div>
-                        <div>
-                          <h4 className="text-lg font-semibold text-slate-900">{dashboard.name}</h4>
-                          <p className="text-sm text-slate-600 mt-1 line-clamp-2">{dashboard.description || "Generated dashboard"}</p>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1">Overview</p>
-                            <span className="text-sm text-slate-900">{dashboard.overviewCount}</span>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1">Insights</p>
-                            <span className="text-sm text-slate-900">{dashboard.insightsCount}</span>
-                          </div>
-                          <div>
-                            <p className="text-xs text-slate-500 mb-1">Tables</p>
-                            <span className="text-sm text-slate-900">{dashboard.tableCount}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-slate-500 pt-4 border-t border-slate-100">
-                          <div className="flex items-center gap-3">
-                            <span>{dashboard.overviewCount} overview</span>
-                            <span aria-hidden="true">.</span>
-                            <span>{dashboard.insightsCount} insights</span>
-                          </div>
-                          <Badge className="bg-green-50 text-green-700 border border-green-100">Active</Badge>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button className="flex-1 gap-2 mdash-ghost-btn" variant="outline" onClick={() => openDashboard(dashboard.id)}>
-                            Open dashboard
-                            <ArrowRight className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="rounded-lg hover:bg-red-50" onClick={() => handleDelete(dashboard.id)}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </div>
+                filteredDashboards.length ? (
+                  <div className="dashboard-grid">
+                    {filteredDashboards.map((dashboard) => (
+                      <DashboardCard
+                        key={dashboard.id}
+                        id={dashboard.id}
+                        title={dashboard.displayTitle}
+                        typeLabel={dashboard.domainLabel}
+                        overviewCount={dashboard.overviewCount}
+                        insightCount={dashboard.insightsCount}
+                        tableCount={dashboard.tableCount}
+                        status={dashboard.statusLabel}
+                        isFavorite={favoriteIds.has(dashboard.id)}
+                        icon={dashboard.iconPreset}
+                        lastViewed={dashboard.lastViewedLabel}
+                        onOpen={openDashboard}
+                        onToggleFavorite={toggleFavorite}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dashboard-empty">
+                    No dashboards found for "{searchQuery}". Try a different term.
+                  </div>
+                )
               ) : (
-                <Card className="p-6 text-center text-slate-500 mdash-card">
-                  Create your first dashboard to populate this list. Your creations will appear here.
-                </Card>
+                <div className="dashboard-empty">Create your first dashboard to populate this list.</div>
               )}
             </section>
           </>

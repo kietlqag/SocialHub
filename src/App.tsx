@@ -14,6 +14,7 @@ import { NotificationPage } from "./pages/NotificationPage";
 import Profile from "./pages/Profile";
 import ManageDashList from "./pages/ManageDashList";
 import ManageDashDetail from "./pages/ManageDashDetail";
+import Contact from "./pages/Contact";
 import { clearSession, fetchMe, getCurrentSession, type AuthUser } from "./services/auth";
 import "./styles/home.css";
 
@@ -85,6 +86,10 @@ const NotificationsPage = () => {
   return <NotificationPage onBack={() => navigate("/")} />;
 };
 
+const ContactPage = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLogout: () => void }) => {
+  return <Contact currentUser={currentUser} onLogout={onLogout} />;
+};
+
 const RequireAuth = ({ user, children }: { user: AuthUser | null; children: JSX.Element }) => {
   const location = useLocation();
   if (!user) {
@@ -142,6 +147,7 @@ function App() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />
         <Route
           path="/managedash"

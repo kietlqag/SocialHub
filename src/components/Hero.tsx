@@ -46,11 +46,7 @@ export function Hero({ onLoginOpen, onSignUpOpen, isAuthenticated }: HeroProps) 
                   </a>
                 </Button>
               </div>
-              <div className="mt-6">
-                <p className="text-sm text-slate-500">
-                  バ" 14-day free trial &nbsp;&nbsp; バ" No credit card required &nbsp;&nbsp; バ" Cancel anytime
-                </p>
-              </div>
+              <div className="mt-6" />
             </div>
           </div>
           <div className="mt-12 relative sm:max-w-lg sm:mx-auto lg:mt-0 lg:max-w-none lg:mx-0 lg:col-span-6 lg:flex lg:items-center">

@@ -105,7 +105,7 @@ export function Pricing() {
         
         <div className="mt-12 text-center">
           <p className="text-gray-600">
-            Need a custom solution? <a href="#contact" className="text-primary hover:underline">Contact us</a> for enterprise pricing.
+            Need a custom solution? <a href="/contact" className="text-primary hover:underline">Contact us</a> for enterprise pricing.
           </p>
         </div>
       </div>
