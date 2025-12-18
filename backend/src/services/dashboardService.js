@@ -451,6 +451,257 @@ const ensureSystemFields = (fields = []) => {
 };
 
 const allowedFieldTypes = ["id", "string", "number", "boolean", "date", "enum", "reference", "text"];
+const allowedSemanticTypes = ["money", "quantity", "countable_entity", "timestamp", "category", "status", "boolean", "generic"];
+const allowedSemanticRoles = [
+  "transaction_value",
+  "entity_id",
+  "entity_name",
+  "time_dimension",
+  "group_dimension",
+  "state",
+  "generic",
+];
+
+const inferSemantic = (key = "", type = "") => {
+  const lower = key.toLowerCase();
+  if (lower === "_id" || lower === "id") return { semanticType: "countable_entity", semanticRole: "entity_id" };
+  if (type === "date") return { semanticType: "timestamp", semanticRole: "time_dimension" };
+  if (type === "boolean") return { semanticType: "boolean", semanticRole: "state" };
+  if (type === "number") {
+    if (lower.includes("amount") || lower.includes("total") || lower.includes("price") || lower.includes("cost") || lower.includes("revenue")) {
+      return { semanticType: "money", semanticRole: "transaction_value" };
+    }
+    if (lower.includes("quantity") || lower.includes("qty") || lower.includes("count")) {
+      return { semanticType: "quantity", semanticRole: "countable_entity" };
+    }
+  }
+  if (lower.includes("status") || lower.includes("state")) return { semanticType: "status", semanticRole: "state" };
+  if (lower.includes("type") || lower.includes("category")) return { semanticType: "category", semanticRole: "group_dimension" };
+  if (lower.includes("name")) return { semanticType: "countable_entity", semanticRole: "entity_name" };
+  return { semanticType: "generic", semanticRole: "generic" };
+};
+
+const nameIncludesAny = (value = "", tokens = []) => {
+  const lower = value.toLowerCase();
+  return tokens.some((t) => lower.includes(t));
+};
+
+const measureNameHints = ["amount", "total", "revenue", "cost", "price", "paid", "billed", "charge", "value", "qty", "quantity"];
+const statusNameHints = ["status", "state", "stage", "phase", "payment", "shipping"];
+const groupNameHints = ["department", "category", "type", "segment", "class", "group", "owner", "assigned", "doctor", "product", "service"];
+const timeNameHints = ["date", "time", "at", "timestamp"];
+const factTableHints = ["order", "invoice", "billing", "payment", "transaction", "appointment", "admission", "visit", "case", "record", "event", "activity", "sale"];
+const entityTableHints = ["patient", "customer", "user", "doctor", "product", "staff", "employee"];
+
+const isMeasureField = (field) =>
+  field.semanticRole === "transaction_value" ||
+  field.semanticRole === "measure" ||
+  field.semanticType === "money" ||
+  field.semanticType === "quantity" ||
+  nameIncludesAny(field.key || field.name || "", measureNameHints);
+
+const isTimeField = (field) =>
+  field.semanticRole === "time_dimension" ||
+  field.semanticType === "timestamp" ||
+  nameIncludesAny(field.key || field.name || "", timeNameHints);
+
+const isStatusField = (field) =>
+  field.semanticRole === "state" ||
+  field.semanticType === "status" ||
+  nameIncludesAny(field.key || field.name || "", statusNameHints);
+
+const isGroupField = (field) =>
+  field.semanticRole === "group_dimension" ||
+  field.semanticType === "category" ||
+  nameIncludesAny(field.key || field.name || "", groupNameHints);
+
+const looksLikeFactTable = (tableName = "") =>
+  nameIncludesAny(tableName, factTableHints);
+
+const looksLikeEntityTable = (tableName = "") =>
+  nameIncludesAny(tableName, entityTableHints);
+
+const findFactTables = (tables = []) =>
+  tables
+    .map((table) => {
+      const fields = Array.isArray(table.fields) ? table.fields : [];
+      const measures = fields.filter(isMeasureField);
+      const timeFields = fields.filter(isTimeField);
+      const groupFields = fields.filter(isGroupField);
+      const statusFields = fields.filter(isStatusField);
+      const nameLooksFact = looksLikeFactTable(table.name || table.key || "");
+      // If name hints fact but measures/time missing, try to guess:
+      const numericFields = fields.filter((f) => ["number", "integer", "float", "currency"].includes((f.type || "").toLowerCase()));
+      const guessedMeasure = !measures.length && numericFields.length ? [numericFields[0]] : measures;
+      const guessedTime =
+        !timeFields.length && fields.length
+          ? fields.filter((f) => nameIncludesAny(f.key || f.name || "", ["date", "created", "updated", "time"]))
+          : timeFields;
+      if ((guessedMeasure.length && guessedTime.length) || nameLooksFact) {
+        return { table, measures: guessedMeasure.length ? guessedMeasure : measures, timeFields: guessedTime.length ? guessedTime : timeFields, groupFields, statusFields };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+const pickFirst = (arr = []) => (Array.isArray(arr) && arr.length ? arr[0] : undefined);
+
+const generateOverviewWidgetsFromSchema = (dashboardDescription = "", tables = []) => {
+  const widgets = [];
+  const usedIds = new Set();
+  const makeId = (candidate) => {
+    let base = candidate || `widget-${widgets.length + 1}`;
+    let id = base;
+    let n = 2;
+    while (usedIds.has(id)) {
+      id = `${base}-${n}`;
+      n += 1;
+    }
+    usedIds.add(id);
+    return id;
+  };
+
+  const facts = findFactTables(tables);
+
+  if (facts.length === 0) {
+    // fallback: minimal counts for up to 2 key entity tables
+    tables
+      .filter((t) => looksLikeEntityTable(t.name || t.key || ""))
+      .slice(0, 2)
+      .forEach((table) => {
+        widgets.push({
+          id: makeId(`${table.key}-count`),
+          title: `${table.name || table.key} total`,
+          type: "metric",
+          sourceTable: table.key,
+          aggregate: "count",
+          description: `Total records in ${table.name || table.key}`,
+        });
+      });
+    if (!widgets.length && tables.length) {
+      const table = tables[0];
+      widgets.push({
+        id: makeId(`${table.key}-count`),
+        title: `${table.name || table.key} total`,
+        type: "metric",
+        sourceTable: table.key,
+        aggregate: "count",
+        description: `Total records in ${table.name || table.key}`,
+      });
+    }
+    return widgets;
+  }
+
+  facts.forEach(({ table, measures, timeFields, groupFields, statusFields }) => {
+    const timeField = pickFirst(timeFields);
+    const mainMeasure = pickFirst(measures);
+    const groupField = pickFirst(groupFields);
+
+    // Total measure (if any measure found)
+    if (mainMeasure) {
+      widgets.push({
+        id: makeId(`${table.key}-${mainMeasure.key}-total`),
+        title: `Total ${mainMeasure.key.replace(/_/g, " ")}`,
+        type: "metric",
+        sourceTable: table.key,
+        aggregate: "sum",
+        valueField: mainMeasure.key,
+        dateField: timeField?.key,
+        description: `Sum of ${mainMeasure.key} in ${table.name || table.key}`,
+      });
+    }
+
+    // Count of rows (only one per fact table)
+    widgets.push({
+      id: makeId(`${table.key}-total-count`),
+      title: `Total ${table.name || table.key}`,
+      type: "metric",
+      sourceTable: table.key,
+      aggregate: "count",
+      dateField: timeField?.key,
+      description: `Total ${table.name || table.key}`,
+    });
+
+    // Status-specific counts (max 2 per table)
+    if (statusFields.length) {
+      statusFields.slice(0, 1).forEach((statusField) => {
+        const enumVals = Array.isArray(statusField.enumValues) ? statusField.enumValues.slice(0, 2) : [];
+        enumVals.forEach((stateValue, idx) => {
+          widgets.push({
+            id: makeId(`${table.key}-${statusField.key}-state-${idx + 1}`),
+            title: `${stateValue} ${table.name || table.key}`,
+            type: "metric",
+            sourceTable: table.key,
+            aggregate: "count",
+            dateField: timeField?.key,
+            filter: { [statusField.key]: stateValue },
+            description: `Count where ${statusField.key} = ${stateValue}`,
+          });
+        });
+      });
+    }
+
+    // Time series (measure sum if measure, else count)
+    widgets.push({
+      id: makeId(`${table.key}-over-time`),
+      title: mainMeasure ? `${mainMeasure.key.replace(/_/g, " ")} over time` : `${table.name || table.key} over time`,
+      type: "chart",
+      sourceTable: table.key,
+      aggregate: mainMeasure ? "sum" : "count",
+      valueField: mainMeasure ? mainMeasure.key : undefined,
+      groupByField: timeField?.key,
+      dateField: timeField?.key,
+      description: `Trend over time`,
+    });
+
+    // Categorical breakdown
+    if (groupField) {
+      widgets.push({
+        id: makeId(`${table.key}-by-${groupField.key}`),
+        title: `${table.name || table.key} by ${groupField.key}`,
+        type: "chart",
+        sourceTable: table.key,
+        aggregate: mainMeasure ? "sum" : "count",
+        valueField: mainMeasure ? mainMeasure.key : undefined,
+        groupByField: groupField.key,
+        dateField: timeField?.key,
+        description: `Breakdown by ${groupField.key}`,
+      });
+
+      // Top-N style (no limit field in WidgetConfig; aggregation can later add it)
+      if (mainMeasure) {
+        widgets.push({
+          id: makeId(`${table.key}-top-${groupField.key}`),
+          title: `Top ${groupField.key} by ${mainMeasure.key}`,
+          type: "chart",
+          sourceTable: table.key,
+          aggregate: "sum",
+          valueField: mainMeasure.key,
+          groupByField: groupField.key,
+          dateField: timeField?.key,
+          description: `Top ${groupField.key} by ${mainMeasure.key}`,
+        });
+      }
+    }
+  });
+
+  return widgets;
+};
+
+const needsWidgetRegeneration = (widgets = [], tables = []) => {
+  if (!Array.isArray(widgets) || widgets.length === 0) return true;
+  // Detect legacy naive widgets: mostly metric count per table
+  const countMetrics = widgets.filter((w) => w?.type === "metric" && (w?.aggregate === "count" || !w?.aggregate));
+  const allCountLike = countMetrics.length === widgets.length && widgets.length >= tables.length * 0.6;
+  const titlesAreCount = widgets.every((w) => typeof w.title === "string" && w.title.toLowerCase().includes("count"));
+  const descCount =
+    widgets.every(
+      (w) =>
+        typeof w.description === "string" &&
+        (w.description.toLowerCase().includes("total records") || w.description.toLowerCase().includes("count")),
+    );
+  return allCountLike && (titlesAreCount || descCount);
+};
 
 const slugify = (value = "") =>
   value
@@ -673,26 +924,30 @@ function validateBlueprint(rawBlueprint) {
     if (!table.fields || !Array.isArray(table.fields)) errors.push(`Table ${name || key} missing fields array`);
     const fieldKeyByName = {};
     const fieldKeySet = new Set();
-    const normalizedFields = Array.isArray(table.fields)
-      ? table.fields.map((field, fieldIndex) => {
-          const fname = field.fieldName || field.name || field.key || `Field ${fieldIndex + 1}`;
-          const fkeyCandidate = field.key || (field.name ? slugify(field.name) : slugify(fname));
-          const fkey = dedupeKey(fkeyCandidate, fieldKeySet);
-          fieldKeyByName[fname.toString().toLowerCase()] = fkey;
-          const ftype = field.type || field.fieldType;
-          if (!ftype) errors.push(`Field ${fname} missing type`);
-          if (ftype && !allowedFieldTypes.includes(ftype)) errors.push(`Field ${fname} has unsupported type ${ftype}`);
-          const normalizedType = allowedFieldTypes.includes(ftype) ? ftype : "string";
-          return {
-            ...field,
-            key: fkey,
-            type: normalizedType,
-            required: Boolean(field.required),
-            options: Array.isArray(field.options) ? field.options.slice(0, 20) : undefined,
-            ref: field.ref || field.reference || undefined,
-          };
-        })
-      : [];
+      const normalizedFields = Array.isArray(table.fields)
+        ? table.fields.map((field, fieldIndex) => {
+            const fname = field.fieldName || field.name || field.key || `Field ${fieldIndex + 1}`;
+            const fkeyCandidate = field.key || (field.name ? slugify(field.name) : slugify(fname));
+            const fkey = dedupeKey(fkeyCandidate, fieldKeySet);
+            fieldKeyByName[fname.toString().toLowerCase()] = fkey;
+            const ftype = field.type || field.fieldType;
+            if (!ftype) errors.push(`Field ${fname} missing type`);
+            if (ftype && !allowedFieldTypes.includes(ftype)) errors.push(`Field ${fname} has unsupported type ${ftype}`);
+            const normalizedType = allowedFieldTypes.includes(ftype) ? ftype : "string";
+            const semType = allowedSemanticTypes.includes(field.semanticType) ? field.semanticType : inferSemantic(fkey, normalizedType).semanticType;
+            const semRole = allowedSemanticRoles.includes(field.semanticRole) ? field.semanticRole : inferSemantic(fkey, normalizedType).semanticRole;
+            return {
+              ...field,
+              key: fkey,
+              type: normalizedType,
+              required: Boolean(field.required),
+              semanticType: semType,
+              semanticRole: semRole,
+              options: Array.isArray(field.options) ? field.options.slice(0, 20) : undefined,
+              ref: field.ref || field.reference || undefined,
+            };
+          })
+        : [];
     const withSystem = ensureSystemFields(normalizedFields);
     withSystem.forEach((f) => {
       if (f.key) {
@@ -849,6 +1104,7 @@ function validateBlueprint(rawBlueprint) {
   };
 
   const normalizedWidgets = normalizeWidgets();
+  const generatedWidgets = generateOverviewWidgetsFromSchema(description || name || "", normalizedTables);
 
   const tableOrderRaw = Array.isArray(rawBlueprint.ui?.tableDropdownOrder) ? rawBlueprint.ui.tableDropdownOrder : [];
   const dropdownOrder = [...new Set([...tableOrderRaw.filter((k) => tableMap.has(k)), ...normalizedTables.map((t) => t.key)])];
@@ -862,12 +1118,18 @@ function validateBlueprint(rawBlueprint) {
     tableDropdownOrder: dropdownOrder,
     emptyStateText:
       rawBlueprint.ui?.emptyStateText?.toString().slice(0, 200) || "No records yet. Click Add record to start.",
-    widgets: normalizedWidgets,
+    widgets: generatedWidgets.length ? generatedWidgets : normalizedWidgets,
   };
 
   const tablesForReturn = normalizedTables.map(({ fieldKeyByName, ...rest }) => rest);
 
-  return { tables: tablesForReturn, relationships: normalizedRelationships, insights: normalizedInsights, ui };
+  return {
+    tables: tablesForReturn,
+    relationships: normalizedRelationships,
+    insights: normalizedInsights,
+    ui,
+    widgets: generatedWidgets.length ? generatedWidgets : normalizedWidgets,
+  };
 }
 
 async function generatePlan({ name, description, type }) {
@@ -906,7 +1168,7 @@ async function generateSchemaAndInsights({ name, description, type, plan }) {
   const messages = [
     {
       role: "system",
-      content: `You are an AI schema + insight generator for a modern dashboard. Use the provided plan and user description to build data tables, relationships, insights, and UI widget metadata.\nConstraints:\n- Max 10 tables, each max 10 fields (including system fields).\n- Max 8 insights, max 8 widgets.\nRequirements:\n- Return ONLY JSON. No markdown, no backticks, no explanation.\n- Tables: [{ key, name, description, fields:[{ key, type(id|string|number|boolean|date|enum|reference|text), required, options?, ref? }] }]\n- Relationships: [{ fromTableKey, fromFieldKey, toTableKey, toFieldKey, type("one-to-many"|"many-to-one"|"many-to-many") }]\n- Insights: [{ id, title, kind("kpi"|"trend"|"breakdown"|"table"), source:{ tableKey, metric("count"|"sum"|"avg"), fieldKey?, groupByFieldKey?, timeFieldKey? }, visualization?:{ chartType("line"|"bar"|"pie") } }]\n- UI: { defaultTableKey, tableDropdownOrder, emptyStateText, widgets:[{ id, type("stat_card"|"chart"|"data_table"), title, tableKey, insightId?, fields?, layout? }] }\n- Include system fields in every table: _id(id, required), created_at(date, required), updated_at(date, required).\n- Table library keys for inspiration (optional): ${libraryKeys}.`,
+      content: `You are an AI schema + insight generator for a modern dashboard. Use the provided plan and user description to build data tables, relationships, insights, and UI widget metadata.\nConstraints:\n- Max 10 tables, each max 10 fields (including system fields).\n- Max 8 insights, max 8 widgets.\nRequirements:\n- Return ONLY JSON. No markdown, no backticks, no explanation.\n- Tables: [{ key, name, description, fields:[{ key, type(id|string|number|boolean|date|enum|reference|text), required, options?, ref?, semanticType?(money|quantity|countable_entity|timestamp|category|status|boolean|generic), semanticRole?(transaction_value|entity_id|entity_name|time_dimension|group_dimension|state|generic) }] }]\n- Relationships: [{ fromTableKey, fromFieldKey, toTableKey, toFieldKey, type("one-to-many"|"many-to-one"|"many-to-many") }]\n- Insights: [{ id, title, kind("kpi"|"trend"|"breakdown"|"table"), source:{ tableKey, metric("count"|"sum"|"avg"), fieldKey?, groupByFieldKey?, timeFieldKey? }, visualization?:{ chartType("line"|"bar"|"pie") } }]\n- UI: { defaultTableKey, tableDropdownOrder, emptyStateText, widgets:[{ id, type("stat_card"|"chart"|"data_table"), title, tableKey, insightId?, fields?, layout? }] }\n- Include system fields in every table: _id(id, required), created_at(date, required), updated_at(date, required).\n- Table library keys for inspiration (optional): ${libraryKeys}.`,
     },
     {
       role: "user",
@@ -960,11 +1222,17 @@ export async function generateDashboardFields({ name, description, type }) {
   const tables = blueprint.tables || [];
   const relationships = blueprint.relationships || [];
   const insights = blueprint.insights || [];
-  const aiWidgets = Array.isArray(blueprint.ui?.widgets) ? blueprint.ui.widgets : [];
-  const widgets = aiWidgets.length ? aiWidgets : buildDefaultWidgets(tables, insights);
+  const aiWidgets = Array.isArray(blueprint.widgets)
+    ? blueprint.widgets
+    : Array.isArray(blueprint.ui?.widgets)
+      ? blueprint.ui.widgets
+      : [];
+  const widgets = aiWidgets.length ? aiWidgets : generateOverviewWidgetsFromSchema(description, tables);
   const ui = {
     ...(blueprint.ui || {}),
-    widgets,
+    widgets: needsWidgetRegeneration(widgets, tables)
+      ? generateOverviewWidgetsFromSchema(description, tables)
+      : widgets,
     tableDropdownOrder:
       Array.isArray(blueprint.ui?.tableDropdownOrder) && blueprint.ui.tableDropdownOrder.length
         ? blueprint.ui.tableDropdownOrder
@@ -991,12 +1259,18 @@ export async function generateAndPersistDashboard({ name, type, description, ses
     throw new HttpError(400, "sessionId or userId required");
   }
   const blueprint = await generateDashboardFields({ name, description, type });
+  const widgets = needsWidgetRegeneration(blueprint.widgets, blueprint.tables)
+    ? generateOverviewWidgetsFromSchema(description, blueprint.tables)
+    : blueprint.widgets;
   const dashboard = await insertDashboard({
     name,
     type,
     description,
     sessionId,
     userId,
+    widgets: widgets || [],
+    insights: blueprint.insights || [],
+    ui: blueprint.ui || {},
   });
   await insertTables(dashboard.id, blueprint.tables);
   await insertRelationships(dashboard.id, blueprint.relationships);
@@ -1008,8 +1282,8 @@ export async function generateAndPersistDashboard({ name, type, description, ses
     tables: blueprint.tables,
     relationships: blueprint.relationships,
     insights: blueprint.insights,
-    ui: blueprint.ui,
-    widgets: blueprint.widgets,
+    ui: { ...blueprint.ui, widgets },
+    widgets,
   };
 }
 
@@ -1052,12 +1326,20 @@ export async function listDashboards({ sessionId, userId }) {
         emptyStateText: "No records yet. Click Add record to start.",
       };
       const insights = dash.insights || [];
-      const widgets = dash.widgets || ui.widgets || buildDefaultWidgets(tables, insights);
+      let widgets =
+        dash.widgets && dash.widgets.length
+          ? dash.widgets
+          : ui.widgets && ui.widgets.length
+            ? ui.widgets
+            : generateOverviewWidgetsFromSchema(dash.description || dash.name || "", tables);
+      if (needsWidgetRegeneration(widgets, tables)) {
+        widgets = generateOverviewWidgetsFromSchema(dash.description || dash.name || "", tables);
+      }
       return { ...dash, tables, relationships, insights, ui: { ...ui, widgets }, widgets };
     }),
   );
-  return withSchema;
-}
+    return withSchema;
+  }
 
 export async function removeDashboard(id, { sessionId, userId }) {
   if (!sessionId && !userId) {
@@ -1116,4 +1398,148 @@ export async function listDashboardRecords({ dashboardId, tableKey, sessionId, u
   }
   const records = await listRecordsByDashboard({ dashboardId, tableKey });
   return records || [];
+}
+
+export async function getDashboardData({ dashboardId, sessionId, userId, from, to }) {
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  if (!sessionId && !userId) throw new HttpError(400, "sessionId or userId required");
+  const dashboards = await listDashboardsForOwner({ sessionId, userId });
+  const dashboard = dashboards.find((d) => d.id === dashboardId);
+  if (!dashboard) {
+    return { dashboardId, widgets: [] };
+  }
+  const tables = await listTablesByDashboard(dashboardId);
+  const tableKeySet = new Set(tables.map((t) => t.key));
+  const widgets =
+    dashboard.widgets && dashboard.widgets.length
+      ? dashboard.widgets
+      : generateOverviewWidgetsFromSchema(dashboard.description || dashboard.name || "", tables);
+  const finalWidgets = generateOverviewWidgetsFromSchema(dashboard.description || dashboard.name || "", tables);
+  const rawRecords = await listRecordsByDashboard({ dashboardId });
+  const recordsByTable = rawRecords.reduce((acc, row) => {
+    const key = row.tableKey;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(row.record || row);
+    return acc;
+  }, {});
+
+  const dateRange =
+    from || to
+      ? {
+          from: from ? new Date(from) : undefined,
+          to: to ? new Date(to) : undefined,
+        }
+      : undefined;
+
+    const results = finalWidgets.map((widget) => evaluateWidget(widget, recordsByTable, tableKeySet, dateRange));
+    return { dashboardId, widgets: results };
+}
+
+function evaluateWidget(widget, recordsByTable, tableKeySet, dateRange) {
+  if (!widget || !widget.sourceTable || !tableKeySet.has(widget.sourceTable)) {
+    return { id: widget?.id || "unknown", type: widget?.type || "metric", hasData: false, error: "table not found" };
+  }
+  const rows = recordsByTable[widget.sourceTable] || [];
+  const filtered = rows.filter((row) => applyWidgetFilter(row, widget, dateRange));
+  const aggregate = widget.aggregate || "count";
+
+  if (widget.type === "table") {
+    return {
+      id: widget.id,
+      type: widget.type,
+      hasData: filtered.length > 0,
+      rows: filtered.slice(0, 50),
+    };
+  }
+
+  if (widget.type === "chart") {
+    return evaluateChartWidget(widget, filtered);
+  }
+
+  // metric
+  let value = 0;
+  if (aggregate === "count") {
+    value = filtered.length;
+  } else {
+    const vals = filtered.map((row) => Number(row?.[widget.valueField] ?? 0)).filter((v) => !Number.isNaN(v));
+    if (!vals.length) {
+      return { id: widget.id, type: widget.type, hasData: false, value: 0 };
+    }
+    if (aggregate === "sum") value = vals.reduce((a, b) => a + b, 0);
+    if (aggregate === "avg") value = vals.reduce((a, b) => a + b, 0) / vals.length;
+    if (aggregate === "min") value = Math.min(...vals);
+    if (aggregate === "max") value = Math.max(...vals);
+  }
+  return { id: widget.id, type: widget.type, hasData: filtered.length > 0, value };
+}
+
+function aggregateValue(row, field, aggregate) {
+  if (aggregate === "count") return 1;
+  const val = Number(row?.[field]);
+  if (Number.isNaN(val)) return 0;
+  return val;
+}
+
+function evaluateChartWidget(widget, filteredRows) {
+  const aggregate = widget.aggregate || "count";
+  const groupBy = widget.groupByField;
+  const buildSeries = (name, extraFilter) => {
+    const subset = filteredRows.filter((row) => {
+      if (!extraFilter) return true;
+      return Object.entries(extraFilter).every(([k, v]) => row?.[k] === v);
+    });
+    const buckets = new Map();
+    subset.forEach((row) => {
+      const key = groupBy ? row?.[groupBy] ?? "Unknown" : "All";
+      const current = buckets.get(key) || { total: 0, count: 0, min: undefined, max: undefined };
+      const val = aggregate === "count" ? 1 : Number(row?.[widget.valueField] ?? 0);
+      if (aggregate === "count") {
+        current.total += 1;
+      } else if (!Number.isNaN(val)) {
+        current.total += val;
+        current.count += 1;
+        current.min = current.min === undefined ? val : Math.min(current.min, val);
+        current.max = current.max === undefined ? val : Math.max(current.max, val);
+      }
+      buckets.set(key, current);
+    });
+    const points = Array.from(buckets.entries())
+      .map(([x, stats]) => {
+        let y = 0;
+        if (aggregate === "count") y = stats.total;
+        if (aggregate === "sum") y = stats.total;
+        if (aggregate === "avg") y = stats.count ? stats.total / stats.count : 0;
+        if (aggregate === "min") y = stats.min ?? 0;
+        if (aggregate === "max") y = stats.max ?? 0;
+        return { x, y };
+      })
+      .sort((a, b) => (a.x > b.x ? 1 : -1));
+    return { name, points };
+  };
+
+  const series = Array.isArray(widget.seriesConfig) && widget.seriesConfig.length
+    ? widget.seriesConfig.map((s, idx) => buildSeries(s.name || `Series ${idx + 1}`, s.filter))
+    : [buildSeries(widget.title || "Series", null)];
+
+  const hasData = series.some((s) => s.points.length > 0 && s.points.some((p) => p.y !== 0));
+  return { id: widget.id, type: widget.type, hasData, series };
+}
+
+function applyWidgetFilter(row, widget, dateRange) {
+  if (!row) return false;
+  if (widget.filter && typeof widget.filter === "object") {
+    const keys = Object.keys(widget.filter);
+    for (const key of keys) {
+      if (row[key] !== widget.filter[key]) return false;
+    }
+  }
+  if (widget.dateField && dateRange && (dateRange.from || dateRange.to)) {
+    const val = row[widget.dateField];
+    if (!val) return false;
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) return false;
+    if (dateRange.from && d < dateRange.from) return false;
+    if (dateRange.to && d > dateRange.to) return false;
+  }
+  return true;
 }

@@ -7,6 +7,7 @@ import {
   deleteDashboard,
   createDashboardRecord,
   getDashboardRecords,
+  getDashboardData,
 } from "../controllers/dashboardController.js";
 
 const router = Router();
@@ -18,5 +19,6 @@ router.delete("/dashboards/:id", asyncHandler(deleteDashboard));
 router.post("/dashboards/:id/records", asyncHandler(createDashboardRecord));
 router.post("/dashboards/records", asyncHandler(createDashboardRecord));
 router.get("/records", asyncHandler(getDashboardRecords));
+router.get("/dashboards/:id/data", asyncHandler(getDashboardData));
 
 export default router;

@@ -337,7 +337,7 @@ export default function ManageDashList() {
                 <h3 className="text-xl font-semibold text-slate-900">Recently viewed</h3>
               </div>
               {hasDashboards ? (
-                <div className="recent-scroll">
+                <div className="dashboard-grid">
                   {recentlyViewed.map((dashboard) => (
                     <DashboardCard
                       key={dashboard.id}
@@ -368,7 +368,7 @@ export default function ManageDashList() {
                 <h3 className="text-xl font-semibold text-slate-900">Favorite dashboards</h3>
               </div>
               {favoriteDashboards.length ? (
-                <div className="favorite-stack">
+                <div className="dashboard-grid">
                   {favoriteDashboards.map((dashboard) => (
                     <DashboardCard
                       key={dashboard.id}
@@ -394,21 +394,21 @@ export default function ManageDashList() {
             </section>
 
             <section className="dashboard-section">
-              <div className="dashboard-section-header justify-between">
+              <div className="dashboard-section-header">
                 <div className="flex items-center gap-2">
                   <LayoutDashboard className="w-5 h-5 text-slate-500" />
                   <h3 className="text-xl font-semibold text-slate-900">All dashboards</h3>
                 </div>
-                <div className="dashboard-controls">
-                  <div className="dashboard-search inline-flex items-center gap-2">
-                    <Search className="dashboard-search__icon" />
-                    <Input
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search dashboards"
-                      className="pl-10 pr-4 mdash-search-input"
-                    />
-                  </div>
+              </div>
+              <div className="dashboard-controls below">
+                <div className="dashboard-search inline-flex items-center gap-2">
+                  <Search className="dashboard-search__icon" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search dashboards"
+                    className="pl-10 pr-4 mdash-search-input"
+                  />
                 </div>
               </div>
               {hasDashboards ? (

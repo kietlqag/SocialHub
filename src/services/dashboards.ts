@@ -1,24 +1,20 @@
 import { api } from "./api";
+import type {
+  Dashboard as SharedDashboard,
+  FieldDefinition,
+  WidgetConfig,
+  WidgetResult,
+} from "../../shared/types/dashboard";
 
-export type DashboardField = {
+export type DashboardWidget = WidgetConfig;
+
+export type DashboardField = FieldDefinition & {
   id?: string;
-  key?: string;
   name?: string;
   fieldName?: string;
   fieldType?: string;
-  type?: string;
   description?: string;
   sampleData?: string;
-  required?: boolean;
-};
-
-export type DashboardWidget = {
-  fieldId: string;
-  title: string;
-  fieldType: string;
-  dataKey: string;
-  description?: string;
-  codeSnippet: string;
 };
 
 export type DashboardTable = {
@@ -34,12 +30,9 @@ export type DashboardTable = {
   sampleRows?: Record<string, any>[];
 };
 
-export type Dashboard = {
+export type Dashboard = SharedDashboard & {
   id: string;
-  name: string;
-  description?: string;
   fields?: DashboardField[];
-  widgets?: DashboardWidget[];
   tables?: DashboardTable[];
   componentCode?: string;
   type?: string;
@@ -81,6 +74,11 @@ export type GeneratedDashboardStructure = {
   componentCode?: string;
 };
 
+export type DashboardDataResponse = {
+  dashboardId: string;
+  widgets: WidgetResult[];
+};
+
 type InferredSchema = {
   fileName: string;
   fileType: "csv" | "excel";
@@ -109,7 +107,7 @@ export const dashboardApi = {
     fileProvided?: boolean;
     inferredSchema?: InferredSchema;
   }) =>
-    api.post<GeneratedDashboardStructure>("/dashboards/generate", payload),
+    api.post<GeneratedDashboardStructure>("/api/dashboards/generate", payload),
   create: (payload: {
     name: string;
     description: string;
@@ -120,18 +118,18 @@ export const dashboardApi = {
     tables?: DashboardTable[];
     componentCode?: string;
     type?: string;
-  }) => api.post<{ dashboard: Dashboard }>("/dashboards", payload),
+  }) => api.post<{ dashboard: Dashboard }>("/api/dashboards", payload),
   list: (sessionId: string, userId?: string | null) =>
-    api.get<{ dashboards: Dashboard[] }>(`/dashboards${withOwnerParams(sessionId, userId || undefined)}`),
+    api.get<{ dashboards: Dashboard[] }>(`/api/dashboards${withOwnerParams(sessionId, userId || undefined)}`),
   delete: (id: string, sessionId: string, userId?: string | null) =>
-    api.delete<{ success: boolean }>(`/dashboards/${id}${withOwnerParams(sessionId, userId || undefined)}`),
+    api.delete<{ success: boolean }>(`/api/dashboards/${id}${withOwnerParams(sessionId, userId || undefined)}`),
   listRecords: (params: { dashboardId: string; tableKey: string; sessionId?: string; userId?: string | null }) => {
     const query = new URLSearchParams();
     query.set("dashboardId", params.dashboardId);
     query.set("tableKey", params.tableKey);
     if (params.sessionId) query.set("sessionId", params.sessionId);
     if (params.userId) query.set("userId", params.userId);
-    return api.get<{ records: Record<string, any>[] }>(`/records?${query.toString()}`);
+    return api.get<{ records: Record<string, any>[] }>(`/api/records?${query.toString()}`);
   },
   addRecord: (payload: {
     dashboardId: string;
@@ -141,7 +139,52 @@ export const dashboardApi = {
     userId?: string | null;
   }) =>
     api.post<{ record: { id: string; tableKey: string; record: Record<string, any> } }>(
-      `/dashboards/${payload.dashboardId}/records`,
+      `/api/dashboards/${payload.dashboardId}/records`,
       payload,
     ),
+  createDashboardRecord: (dashboardId: string, tableKey: string, record: Record<string, any>, sessionId?: string, userId?: string | null) => {
+    const query = new URLSearchParams();
+    if (sessionId) query.set("sessionId", sessionId);
+    if (userId) query.set("userId", userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    const body = {
+      tableKey,
+      table: tableKey,
+      record,
+      data: record,
+    };
+    return api.post<{ record: Record<string, any> }>(`/api/dashboards/${dashboardId}/records${queryString}`, body);
+  },
+  updateDashboardRecord: (
+    dashboardId: string,
+    tableKey: string,
+    recordId: string,
+    record: Record<string, any>,
+    sessionId?: string,
+    userId?: string | null,
+  ) => {
+    const query = new URLSearchParams();
+    if (sessionId) query.set("sessionId", sessionId);
+    if (userId) query.set("userId", userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.put<{ record: Record<string, any> }>(
+      `/api/tables/${tableKey}/records/${recordId}${queryString}`,
+      { record },
+    );
+  },
+  deleteDashboardRecord: (dashboardId: string, tableKey: string, recordId: string, sessionId?: string, userId?: string | null) => {
+    const query = new URLSearchParams();
+    if (sessionId) query.set("sessionId", sessionId);
+    if (userId) query.set("userId", userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.delete<{ success: boolean }>(`/api/tables/${tableKey}/records/${recordId}${queryString}`);
+  },
+  getDashboardData: (dashboardId: string, params: { sessionId?: string; userId?: string | null; from?: string; to?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    if (params.from) query.set("from", params.from);
+    if (params.to) query.set("to", params.to);
+    return api.get<DashboardDataResponse>(`/api/dashboards/${dashboardId}/data${query.toString() ? `?${query.toString()}` : ""}`);
+  },
 };

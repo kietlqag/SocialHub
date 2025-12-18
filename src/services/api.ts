@@ -1,4 +1,6 @@
-﻿export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const RAW_API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// Normalize to host/base only; strip any trailing "/api" so paths can add it explicitly.
+export const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/, "");
 
 type HttpMethod = "GET" | "POST" | "DELETE" | "PATCH";
 
@@ -14,7 +16,10 @@ async function request<T>(path: string, options: { method?: HttpMethod; body?: a
   const data = await res.json().catch(() => undefined);
   if (!res.ok) {
     const msg = data?.error || res.statusText || "Request failed";
-    throw new Error(msg);
+    const error: any = new Error(msg);
+    error.status = res.status;
+    error.data = data;
+    throw error;
   }
   return data as T;
 }
@@ -25,7 +30,3 @@ export const api = {
   patch: <T>(path: string, body?: any, token?: string) => request<T>(path, { method: "PATCH", body, token }),
   delete: <T>(path: string, token?: string) => request<T>(path, { method: "DELETE", token }),
 };
-
-
-
-

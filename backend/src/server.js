@@ -7,6 +7,7 @@ import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import { getDashboardData } from "./controllers/dashboardController.js";
 import { initDb } from "./db.js";
 import { initMongo, getSocialhubDb } from "./mongo.js";
 import { HttpError } from "./utils/httpError.js";
@@ -46,7 +47,9 @@ app.use(orgRoutes);
 app.use("/notifications", notificationRoutes);
 // Profile endpoints
 app.use("/profile", profileRoutes);
-app.use(dashboardRoutes);
+// Direct mount for dashboard data (in addition to router) to avoid 404s
+app.get("/api/dashboards/:id/data", asyncHandler(getDashboardData));
+app.use("/api", dashboardRoutes);
 
 // Basic error handler
 // eslint-disable-next-line no-unused-vars

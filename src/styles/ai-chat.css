@@ -621,3 +621,117 @@
 .ai-dark {
   color: #e5e7eb;
 }
+
+.ai-dark .aiChatBg {
+  background: linear-gradient(135deg, #0f172a, #111c44, #1e1b4b);
+}
+
+.ai-dark .aiChatBg::after {
+  background:
+    radial-gradient(circle at 20% 25%, rgba(129, 140, 248, 0.25), transparent 40%),
+    radial-gradient(circle at 75% 15%, rgba(59, 130, 246, 0.22), transparent 38%),
+    radial-gradient(circle at 60% 75%, rgba(236, 72, 153, 0.18), transparent 32%);
+}
+
+.ai-dark .aiChatSidebar,
+.ai-dark .aiChatMain,
+.ai-dark .prefDrawer,
+.ai-dark .prefSection {
+  background: rgba(15, 23, 42, 0.86);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.65);
+}
+
+.ai-dark .aiChatSidebarHeader .title,
+.ai-dark .aiChatTitleBlock .title,
+.ai-dark .prefSection .sectionLabel {
+  color: #e0e7ff;
+}
+
+.ai-dark .aiChatTitleBlock .subtitle,
+.ai-dark .muted,
+.ai-dark .muted.extra {
+  color: rgba(226, 232, 240, 0.7);
+}
+
+.ai-dark .aiChatConvItem {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.ai-dark .aiChatConvItem.isActive {
+  border-color: rgba(129, 140, 248, 0.4);
+  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.25);
+}
+
+.ai-dark .iconBtn {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #a5b4fc;
+}
+
+.ai-dark .iconBtn.ghost {
+  color: rgba(226, 232, 240, 0.65);
+}
+
+.ai-dark .aiChatSettingsBtn {
+  background: rgba(79, 70, 229, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+}
+
+.ai-dark .msgBubble {
+  background: rgba(23, 31, 51, 0.95);
+  border-color: rgba(148, 163, 184, 0.15);
+  color: #f1f5f9;
+}
+
+.ai-dark .msgUser {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.25));
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+.ai-dark .msgAI {
+  background: rgba(15, 23, 42, 0.88);
+}
+
+.ai-dark .msgMeta {
+  color: rgba(203, 213, 225, 0.65);
+}
+
+.ai-dark .msgMeta .dot {
+  background: rgba(226, 232, 240, 0.5);
+}
+
+.ai-dark .aiChatComposer {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.ai-dark .composerInput {
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.ai-dark .composerInput::placeholder {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.ai-dark .prefOverlay {
+  background: rgba(2, 6, 23, 0.6);
+}
+
+.ai-dark .segBtn {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+}
+
+.ai-dark .segBtnActive {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.ai-dark .prefDrawer {
+  border-left-color: rgba(255, 255, 255, 0.04);
+}

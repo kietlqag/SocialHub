@@ -543,8 +543,18 @@ export function AIConversation({ onBack }: { onBack?: () => void }) {
               <Sparkles className="icon-sm" />
               <span>Conversations</span>
             </div>
-            <button className="iconBtn" onClick={() => setIsSidebarOpen(false)}>
-              <X className="icon-sm" />
+            <button
+              className="iconBtn"
+              onClick={() => {
+                if (onBack) {
+                  onBack();
+                } else {
+                  setIsSidebarOpen(false);
+                }
+              }}
+              aria-label="Back to home"
+            >
+              <ArrowLeft className="icon-sm" />
             </button>
           </div>
           <button className="aiChatNewChatBtn" onClick={handleNewConversation} disabled={creatingConversation}>
@@ -586,10 +596,6 @@ export function AIConversation({ onBack }: { onBack?: () => void }) {
               </div>
             ))}
           </div>
-          <button className="secondaryBtn" onClick={onBack}>
-            <ArrowLeft className="icon-sm" />
-            Back to Home
-          </button>
         </aside>
 
         <main className="aiChatMain">

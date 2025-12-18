@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { Button } from "./ui/button";
@@ -23,6 +23,11 @@ import {
   Plus,
   Trash2,
   Database,
+  LayoutDashboard,
+  FileText,
+  UploadCloud,
+  Lightbulb,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "./ui/utils";
 import {
@@ -31,6 +36,7 @@ import {
   type DashboardTable,
   type DashboardWidget,
 } from "../services/dashboards";
+import "../styles/ai-dashboard-modal.css";
 
 interface AIDashboardGeneratorProps {
   isOpen: boolean;
@@ -390,7 +396,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
   const fileInfo = useMemo(() => {
     if (!dataFile) return "";
     const sizeKb = dataFile.size / 1024;
-    return `${dataFile.name} • ${sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + " MB" : sizeKb.toFixed(1) + " KB"}`;
+    return `${dataFile.name} - ${sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + " MB" : sizeKb.toFixed(1) + " KB"}`;
   }, [dataFile]);
 
   const inferValueType = (value: any): "number" | "string" | "date" | "boolean" | "mixed" => {
@@ -465,7 +471,7 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
     };
 
     return {
-      fileName: dataFile?.name || "uploaded.csv",
+      fileName: dataFile?.name || "Uploaded data",
       fileType: "csv",
       tables: [table],
       totalColumns: columns.length,
@@ -724,141 +730,206 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
   };
 
   const contentSizeClass = step === "describe"
-    ? "w-full sm:w-auto max-w-[92vw] sm:max-w-lg lg:max-w-xl max-h-[80vh]"
-    : "w-full max-w-[min(1180px,95vw)] min-w-[min(920px,95vw)] h-[90vh] max-h-[90vh]";
+    ? "aiDashDialogContent"
+    : "aiDashDialogContent review";
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <DialogContent className={cn("w-full overflow-hidden p-0", contentSizeClass)}>
+      <DialogContent className={cn("aiDashContent", contentSizeClass)}>
         {step === "describe" ? (
-          <div className="p-8">
-            <DialogHeader className="mb-6">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Sparkles className="w-6 h-6 text-primary" />
-                </div>
-                <DialogTitle className="text-2xl">Describe Your Dashboard</DialogTitle>
-              </div>
-              <DialogDescription className="text-base">
-                Tell our AI what kind of dashboard you want to create. Be specific about the data fields,
-                metrics, and information you need to track.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <label className="text-sm text-gray-700">Dashboard Name</label>
-                <Input
-                  placeholder="e.g., Customer Management, Sales Tracking, Inventory Dashboard"
-                  value={dashboardName}
-                  onChange={(e) => setDashboardName((e.target as HTMLInputElement).value)}
-                  className="text-base"
-                />
-              </div>
-
-              <div className="space-y-2">
-              <label className="text-sm text-gray-700 flex items-center justify-between">
-                <span>Upload sample data (optional)</span>
-                <span className="text-xs text-gray-500">CSV, XLS, XLSX • Max 10MB</span>
-              </label>
-              <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.xls,.xlsx"
-                  className="hidden"
-                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
-                />
-                <div
-                  className="flex flex-wrap items-center justify-between gap-3 cursor-pointer"
-                  onClick={triggerFileSelect}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const f = e.dataTransfer.files?.[0];
-                    if (f) handleFileSelect(f);
-                  }}
-                >
-                  <div className="text-sm text-gray-600">
-                    {fileInfo ? <span>{fileInfo}</span> : <span>Drop a CSV/Excel file or click to browse.</span>}
+          <div className="ai-modal-overlay" onClick={() => handleClose()}>
+            <div className="ai-modal-card" onClick={(e) => e.stopPropagation()}>
+              <header className="ai-modal-header aiDashHeader">
+                <div className="aiDashTitleRow">
+                  <div className="aiDashTitleLeft">
+                    <div className="aiDashIcon">
+                      <LayoutGrid className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <DialogTitle className="aiDashTitle">Design your next dashboard</DialogTitle>
+                      <DialogDescription className="aiDashSubtitle">
+                        Blend your data story with AI. Provide context, sample files, and the outcomes you care about.
+                      </DialogDescription>
+                    </div>
                   </div>
-                  <Button variant="outline" size="sm" type="button">Choose file</Button>
+                  <Badge className="aiDashBadge">Premium workspace</Badge>
                 </div>
-                {parsedSchema && (
-                  <div className="mt-3 text-xs text-gray-600 space-y-1">
-                    {parsedSchema.fileType === "csv" ? (
-                      <>
-                        <div>Detected columns: {parsedSchema.tables[0]?.columns.length ?? 0}</div>
-                        <div>
-                          Numeric fields: {parsedSchema.tables[0]?.numericFields.slice(0, 6).join(", ") || "None"}
-                          {parsedSchema.tables[0] && parsedSchema.tables[0].numericFields.length > 6 ? "..." : ""}
+              </header>
+
+              <div className="ai-modal-body">
+                <div className="aiDashBody">
+                  <div className="aiDashMain">
+                    <div className="aiField">
+                      <label className="aiFieldLabel">
+                        <LayoutDashboard className="w-4 h-4" />
+                        Dashboard Name
+                      </label>
+                      <Input
+                        placeholder="e.g., Customer Intelligence, Revenue Command Center"
+                        value={dashboardName}
+                        onChange={(e) => setDashboardName((e.target as HTMLInputElement).value)}
+                        className="aiInput"
+                      />
+                    </div>
+
+                    <div className="aiField">
+                      <div className="aiFieldLabel row">
+                        <span className="flex items-center gap-2">
+                          <UploadCloud className="w-4 h-4" />
+                          Upload sample data (optional)
+                        </span>
+                        <span className="aiFormatText">CSV, XLS, XLSX - 10MB</span>
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".csv,.xls,.xlsx"
+                        className="hidden"
+                        onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
+                      />
+                      <div
+                        className="aiDropzone"
+                        onClick={triggerFileSelect}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const f = e.dataTransfer.files?.[0];
+                          if (f) handleFileSelect(f);
+                        }}
+                      >
+                        <div className="aiDropIcon">
+                          <UploadCloud className="w-6 h-6" />
                         </div>
-                        <div>Sample rows: {parsedSchema.tables[0]?.sampleRows.length ?? 0}</div>
-                      </>
+                        <div className="aiDropText">{fileInfo ? "File ready" : "Drag & drop your data or browse CSV / Excel file"}</div>
+                        <p className="aiDropSub">{fileInfo || "Drop a file here or click to pick one"}</p>
+                      </div>
+                      {parsedSchema && (
+                        <div className="aiSchemaCard">
+                          {parsedSchema.fileType === "csv" ? (
+                            <div className="grid gap-1 text-sm text-slate-700">
+                              <span className="font-semibold text-slate-900">{parsedSchema.fileName}</span>
+                              <span>Columns detected: {parsedSchema.tables[0]?.columns.length ?? 0}</span>
+                              <span>
+                                Numeric fields: {parsedSchema.tables[0]?.numericFields.slice(0, 6).join(", ") || "None"}
+                                {parsedSchema.tables[0] && parsedSchema.tables[0].numericFields.length > 6 ? "..." : ""}
+                              </span>
+                              <span>Sample rows: {parsedSchema.tables[0]?.sampleRows.length ?? 0}</span>
+                            </div>
+                          ) : (
+                            <div className="grid gap-1 text-sm text-slate-700">
+                              <span className="font-semibold text-slate-900">{parsedSchema.fileName}</span>
+                              <span>Sheets detected: {parsedSchema.tables.length}</span>
+                              <span>Total columns: {parsedSchema.totalColumns}</span>
+                              <span>
+                                Numeric fields: {parsedSchema.tables.flatMap((t) => t.numericFields).slice(0, 6).join(", ") || "None"}
+                                {parsedSchema.tables.flatMap((t) => t.numericFields).length > 6 ? "..." : ""}
+                              </span>
+                              <span>
+                                Sample rows / sheet: {parsedSchema.tables.length ? Math.min(10, Math.max(...parsedSchema.tables.map((t) => t.sampleRows.length || 0))) : 0}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="aiField">
+                      <label className="aiFieldLabel">
+                        <FileText className="w-4 h-4" />
+                        Describe your dashboard
+                      </label>
+                      <Textarea
+                        placeholder="Example: Track revenue per channel, open pipeline value, customer segments, and alert me when churn risk exceeds 4% for any tier..."
+                        value={description}
+                        onChange={(e) => setDescription((e.target as HTMLTextAreaElement).value)}
+                        className="aiTextarea"
+                      />
+                      <p className="aiHelper">Call out the KPIs, tables, or alerts you expect. Mention data sources or CSV headers for best results.</p>
+                    </div>
+
+                    {error && <p className="aiErrorText">{error}</p>}
+                  </div>
+
+                  <div className="aiDashAside">
+                    <div className="aiAsideCard">
+                      <div className="aiAsideHeader">
+                        <div>
+                          <p className="aiAsideTitle">Smart templates</p>
+                          <p className="aiAsideSubtitle">Start from a proven layout and tweak it with AI.</p>
+                        </div>
+                        <Badge className="aiDashPill">AI Suggested</Badge>
+                      </div>
+
+                      <div className="aiTipCard">
+                        <p className="aiTipTitle">Tips for great prompts</p>
+                        <ul className="aiTipList">
+                          <li>Mention 2-3 KPIs and which table they come from</li>
+                          <li>Share CSV headers so AI aligns fields</li>
+                          <li>Add alerts (e.g., notify when churn &gt; 4%)</li>
+                        </ul>
+                      </div>
+
+                      <div className="aiAsideCard muted">
+                        <p className="aiAsideTitle">What AI will generate</p>
+                        <ul className="aiTipList">
+                          <li className="flex items-start gap-2">
+                            <Check className="w-4 h-4 text-green-500 mt-[2px]" />
+                            <span>Tables with fields, types, and sample rows</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <Check className="w-4 h-4 text-green-500 mt-[2px]" />
+                            <span>Recommended KPIs and insight cards</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <Check className="w-4 h-4 text-green-500 mt-[2px]" />
+                            <span>Relationship suggestions between tables</span>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <footer className="ai-modal-footer">
+                <p className="aiFooterInfo">
+                  <Sparkles className="w-4 h-4" />
+                  Provide at least two goals for a richer AI draft.
+                </p>
+                <div className="aiFooterActions">
+                  <Button variant="outline" onClick={handleClose} className="aiSecondaryBtn">
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={!description.trim() || !dashboardName.trim() || isGenerating}
+                    className="aiPrimaryBtn"
+                  >
+                    {isGenerating ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generating...
+                      </span>
                     ) : (
-                      <>
-                        <div>Detected sheets: {parsedSchema.tables.length}</div>
-                        <div>Total columns: {parsedSchema.totalColumns}</div>
-                        <div>
-                          Numeric fields:{" "}
-                          {parsedSchema.tables
-                            .flatMap((t) => t.numericFields)
-                            .slice(0, 6)
-                            .join(", ") || "None"}
-                          {parsedSchema.tables.flatMap((t) => t.numericFields).length > 6 ? "..." : ""}
-                        </div>
-                        <div>
-                          Sample rows per sheet:{" "}
-                          {parsedSchema.tables.length
-                            ? Math.min(10, Math.max(...parsedSchema.tables.map((t) => t.sampleRows.length || 0)))
-                            : 0}
-                        </div>
-                        <div>
-                          Sheets:{" "}
-                          {parsedSchema.tables
-                            .slice(0, 3)
-                            .map((t) => t.name)
-                            .join(", ")}
-                          {parsedSchema.tables.length > 3 ? "..." : ""}
-                        </div>
-                      </>
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        Generate Dashboard
+                      </span>
                     )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-              <div className="space-y-3">
-                <label className="text-sm text-gray-700">Describe your dashboard</label>
-                <Textarea
-                  placeholder="Example: I need a customer relationship management dashboard that tracks customer information including their name, email, phone number, company, deal value, last contact date, and current status in the sales pipeline..."
-                  value={description}
-                    onChange={(e) => setDescription((e.target as HTMLTextAreaElement).value)}
-                    className="min-h-[200px] text-base resize-none"
-                  />
-                  <p className="text-xs text-gray-500">The more details you provide, the better we can structure your dashboard</p>
-              </div>
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-                <Button variant="outline" onClick={handleClose}>Cancel</Button>
-                <Button
-                  onClick={handleGenerate}
-                  disabled={!description.trim() || !dashboardName.trim() || isGenerating}
-                  className="gap-2 min-w-[160px]"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      Generate Dashboard
-                    </>
-                  )}
-                </Button>
-              </div>
-              {error && <p className="text-sm text-red-600">{error}</p>}
+                  </Button>
+                </div>
+              </footer>
             </div>
           </div>
         ) : (

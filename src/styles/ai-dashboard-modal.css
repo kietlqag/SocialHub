@@ -1,0 +1,410 @@
+.aiDashContent {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  height: auto !important;
+  max-height: none !important;
+}
+
+.aiDashDialogContent {
+  width: min(1040px, 96vw);
+  max-height: 82vh !important;
+  height: auto !important;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.aiDashDialogContent.review {
+  max-width: min(1180px, 96vw);
+  max-height: 90vh !important;
+  height: 90vh !important;
+}
+
+.ai-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 30, 0.4);
+  backdrop-filter: blur(12px);
+  z-index: 70;
+  padding: 16px;
+}
+
+.ai-modal-card {
+  width: 100%;
+  max-width: 1120px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+.ai-modal-header {
+  padding: 32px 40px 18px;
+  flex-shrink: 0;
+}
+
+.ai-modal-body {
+  padding: 0 40px 22px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ai-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+.ai-modal-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(124, 106, 242, 0.35), rgba(90, 141, 238, 0.35));
+  border-radius: 999px;
+}
+.ai-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ai-modal-footer {
+  padding: 18px 40px 28px;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(226, 232, 255, 0.6);
+  background: linear-gradient(to top, rgba(248, 250, 255, 0.9), rgba(248, 250, 255, 0.6));
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.ai-modal-body {
+  padding-bottom: 40px;
+}
+
+.aiDashCard {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(18px);
+  padding: 20px 22px;
+  max-height: 100%;
+}
+
+.aiDashHeader {
+  padding: 0;
+}
+
+.aiDashTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.aiDashTitleLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aiDashIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #7c6af2, #5a8dee);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 14px 32px rgba(124, 106, 242, 0.25);
+}
+
+.aiDashTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.aiDashSubtitle {
+  font-size: 14px;
+  color: #5b6476;
+}
+
+.aiDashBadge {
+  background: rgba(255, 255, 255, 0.7);
+  color: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  padding: 6px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.aiDashBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr);
+  gap: 18px;
+}
+
+.aiDashMain,
+.aiDashAside {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aiField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.aiFieldLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b5563;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.aiFieldLabel.row {
+  justify-content: space-between;
+}
+
+.aiInput,
+.aiTextarea,
+.aiSelect {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.aiInput {
+  height: 48px;
+  padding: 0 14px;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.aiTextarea {
+  min-height: 140px;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.aiInput:focus,
+.aiTextarea:focus,
+.aiSelect:focus-visible {
+  outline: none;
+  border-color: rgba(124, 106, 242, 0.7);
+  box-shadow: 0 0 0 4px rgba(124, 106, 242, 0.15);
+}
+
+.aiFormatText {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.aiDropzone {
+  margin-top: 4px;
+  border: 1px dashed rgba(124, 106, 242, 0.6);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(242, 244, 255, 0.92));
+  padding: 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.aiDropzone:hover {
+  border-color: rgba(90, 141, 238, 0.7);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 235, 255, 0.95));
+  box-shadow: 0 14px 32px rgba(90, 141, 238, 0.12);
+}
+
+.aiDropIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(124, 106, 242, 0.12);
+  color: #5a6fe9;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 10px;
+}
+
+.aiDropText {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.aiDropSub {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.aiSchemaCard {
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.aiHelper {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.aiErrorText {
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.aiAsideCard {
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 14px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aiAsideCard.muted {
+  background: rgba(247, 248, 255, 0.9);
+}
+
+.aiAsideHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.aiAsideTitle {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.aiAsideSubtitle {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.aiDashPill {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #e0e7ff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+
+.aiTipCard {
+  border-radius: 14px;
+  border: 1px dashed rgba(124, 106, 242, 0.5);
+  background: rgba(124, 106, 242, 0.05);
+  padding: 12px;
+}
+
+.aiTipTitle {
+  font-weight: 700;
+  color: #4338ca;
+  margin-bottom: 6px;
+}
+
+.aiTipList {
+  font-size: 13px;
+  color: #475569;
+  display: grid;
+  gap: 6px;
+}
+
+.aiDashFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.aiFooterInfo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.aiFooterActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.aiPrimaryBtn {
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6d5afc, #5aa5ff);
+  color: #fff;
+  padding: 10px 16px;
+  font-weight: 700;
+  box-shadow: 0 16px 40px rgba(90, 165, 255, 0.35);
+}
+
+.aiSecondaryBtn {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+}
+
+@media (max-width: 1024px) {
+  .aiDashBody {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .ai-modal-card {
+    margin: 0 6px;
+    max-height: 92vh;
+    border-radius: 16px;
+  }
+
+  .ai-modal-header {
+    padding: 16px;
+  }
+
+  .ai-modal-body {
+    padding: 0 16px 12px;
+  }
+
+  .ai-modal-footer {
+    padding: 14px 16px 18px;
+  }
+
+  .aiDashTitle {
+    font-size: 20px;
+  }
+}
