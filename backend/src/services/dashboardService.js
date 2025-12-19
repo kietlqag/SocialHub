@@ -1585,7 +1585,29 @@ export async function listDashboards({ sessionId, userId }) {
   const dashboards = await listDashboardsForOwner({ sessionId, userId });
   const withSchema = await Promise.all(
     dashboards.map(async (dash) => {
-      const tables = await listTablesByDashboard(dash.id);
+      const tablesRaw = await listTablesByDashboard(dash.id);
+      const tables = tablesRaw.map((table) => {
+        const fields = Array.isArray(table.fields) ? table.fields.map((f) => {
+          const baseType = (f.type || f.fieldType || "").toString().toLowerCase();
+          const options = f.options || f.enumValues || f.enum || f.choices;
+          const hasEnum = Array.isArray(options) && options.length > 0;
+          const normalizedType = hasEnum && (!baseType || baseType === "string") ? "enum" : baseType || "string";
+          return {
+            ...f,
+            type: normalizedType,
+            enumValues: hasEnum ? options : undefined,
+            options: hasEnum ? options : f.options,
+          };
+        }) : [];
+        return { ...table, fields };
+      });
+      if (process.env.NODE_ENV !== "production") {
+        const ordersSchema = tables.find((t) => t.key === "orders" || t.name?.toLowerCase?.().includes("order"));
+        if (ordersSchema) {
+          // eslint-disable-next-line no-console
+          console.log("DEBUG Orders schema fields:", JSON.stringify(ordersSchema, null, 2));
+        }
+      }
       const relationships = await listRelationshipsByDashboard(dash.id);
       const ui = dash.ui || {
         defaultTableKey: tables[0]?.key || "",

@@ -23,6 +23,9 @@ import {
   X,
   Settings2,
   MoreHorizontal,
+  Layers3,
+  ChartBar,
+  BarChartHorizontal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardTable, type DashboardField } from "../services/dashboards";
@@ -115,6 +118,20 @@ type MetricIcon = "money" | "analytics" | "trend" | "cart" | "users" | "star";
 
 type ChartType = "line" | "bar" | "pie" | "horizontal-bar";
 
+type ChartTemplateConfig = {
+  id: string;
+  label: string;
+  description: string;
+  config: {
+    title?: string;
+    chartType?: ChartType | "table";
+    metric?: "count" | "sum" | "average" | "min" | "max";
+    metricField?: string;
+    groupByField?: string;
+    timeBucket?: "day" | "week" | "month" | "year";
+  };
+};
+
 type ChartCardProps = {
   title: string;
   description?: string;
@@ -122,6 +139,9 @@ type ChartCardProps = {
   dataset?: Array<{ label: string; value: number }>;
   unit?: string;
   isLoading?: boolean;
+  valueLabel?: string;
+  onChangeType?: (next: ChartType) => void;
+  onRemove?: () => void;
 };
 
 type AddWidgetFormState = {
@@ -188,9 +208,29 @@ const pickMetricIcon = (title: string, icon?: MetricIcon) => {
 const formatValueWithUnit = (value: number, unit?: string) => {
   if (!Number.isFinite(value)) return "0";
   if (unit?.toLowerCase() === "vnd") {
-    return `${new Intl.NumberFormat("vi-VN").format(value)} ?`;
+    return `${new Intl.NumberFormat("vi-VN").format(value)} ₫`;
   }
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+};
+
+const isNumericField = (field: any) => (field?.type || "").toLowerCase() === "number";
+const isDateField = (field: any) => {
+  const name = ((field?.name || field?.key || "") as string).toLowerCase();
+  return (field?.type || "").toLowerCase() === "date" || /date|created_at|createdat|time|timestamp/.test(name);
+};
+const isStatusOrCategoryField = (field: any) => {
+  const name = ((field?.name || field?.key || "") as string).toLowerCase();
+  const type = (field?.type || "").toLowerCase();
+  return ["string", "boolean", "enum"].includes(type) && /status|state|category|type|tag/.test(name);
+};
+const isForeignKeyField = (field: any) => {
+  const name = ((field?.name || field?.key || "") as string);
+  const lower = name.toLowerCase();
+  return ["string", "number"].includes((field?.type || "").toLowerCase()) && /(_id$|id$)/i.test(name) && lower !== "_id";
+};
+const looksLikeMoneyField = (field: any) => {
+  const name = ((field?.name || field?.key || "") as string).toLowerCase();
+  return isNumericField(field) && /(amount|total|price|revenue|cost|payment|bill|salary)/.test(name);
 };
 
 const mapAggregationForMetricType = (metricType: MetricType): MetricAggregation => {
@@ -217,7 +257,8 @@ const getIconStyle = (icon?: MetricIcon) => {
 const CHART_CARD_HEIGHT = 240;
 const CHART_BODY_MIN_HEIGHT = 200;
 
-const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData }: ChartCardProps) => {
+const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData, valueLabel, onChangeType, onRemove }: ChartCardProps) => {
+  const [menuOpen, setMenuOpen] = useState(false);
   const data = (dataset || [])
     .map((d) => ({
       label: d.label || "Unknown",
@@ -233,9 +274,11 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
       className="mdChartCard modernChartCard"
       style={{
         minHeight: CHART_CARD_HEIGHT,
+        height: CHART_CARD_HEIGHT,
         display: "flex",
         flexDirection: "column",
         transition: "transform 150ms ease, box-shadow 150ms ease",
+        position: "relative",
       }}
     >
       <div className="mdChartHeader">
@@ -243,17 +286,92 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
           <p className="mdChartTitle">{title}</p>
           {description ? <p className="mdChartSubtitle">{description}</p> : null}
         </div>
-        <button type="button" className="insightCloseBtn" aria-label="More">
-          <MoreHorizontal className="w-4 h-4 text-slate-500" />
-        </button>
+        <div />
       </div>
+      <button
+        type="button"
+        className="insightCloseBtn"
+        aria-label="More"
+        onClick={() => setMenuOpen((p) => !p)}
+        style={{ position: "absolute", top: 10, right: 10 }}
+      >
+        <MoreHorizontal className="w-4 h-4 text-slate-500" />
+      </button>
+      {menuOpen && (
+        <div
+          className="tableCardGlass"
+          style={{
+            position: "absolute",
+            top: 36,
+            right: 12,
+            minWidth: 170,
+            padding: 6,
+            zIndex: 20,
+            boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+            borderRadius: 12,
+          }}
+        >
+          <p className="mdMainSubtitle" style={{ marginBottom: 6, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 }}>Chart type</p>
+          {([
+            { key: "bar", icon: ChartBar },
+            { key: "line", icon: LineChart },
+            { key: "pie", icon: PieChart },
+            { key: "horizontal-bar", icon: BarChartHorizontal },
+          ] as { key: ChartType; icon: LucideIcon }[]).map(({ key, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onChangeType?.(key);
+              }}
+              className="mdGhostBtn"
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "6px 8px",
+                borderRadius: 10,
+                color: key === type ? "#4f46e5" : "#0f172a",
+                fontWeight: key === type ? 700 : 500,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+              }}
+            >
+              <Icon className="w-4 h-4" />
+              {beautifyLabel(key)}
+            </button>
+          ))}
+          <div className="mt-2 border-t border-slate-200 pt-2">
+            <button
+              type="button"
+              className="mdGhostBtn text-red-600"
+              style={{ width: "100%", textAlign: "left", padding: "6px 8px", fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
+              onClick={() => {
+                setMenuOpen(false);
+                onRemove?.();
+              }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Remove chart
+            </button>
+          </div>
+        </div>
+      )}
       <div
         style={{
           flex: 1,
           padding: "8px 12px 16px 0",
           width: "100%",
           minHeight: CHART_BODY_MIN_HEIGHT,
+          height: CHART_BODY_MIN_HEIGHT,
           position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          paddingLeft: 12,
+          paddingRight: 12,
         }}
         className="fade-in"
       >
@@ -301,7 +419,7 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
               <ReYAxis type="category" dataKey="label" width={90} />
               <ReTooltip formatter={(v: any) => formatValueWithUnit(Number(v), unit)} />
               <ReLegend />
-              <ReBar dataKey="value" radius={[6, 6, 6, 6]} fill={colors[0]} animationDuration={400} />
+              <ReBar name={valueLabel || "Value"} dataKey="value" radius={[6, 6, 6, 6]} fill={colors[0]} animationDuration={400} />
             </ReBarChart>
           </ReResponsiveContainer>
         ) : type === "line" ? (
@@ -312,7 +430,7 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
               <ReYAxis tickFormatter={(v) => formatValueWithUnit(Number(v), unit)} />
               <ReTooltip formatter={(v: any) => formatValueWithUnit(Number(v), unit)} />
               <ReLegend />
-              <ReLine type="monotone" dataKey="value" stroke={colors[0]} strokeWidth={2.2} dot={{ r: 3 }} />
+              <ReLine name={valueLabel || "Value"} type="monotone" dataKey="value" stroke={colors[0]} strokeWidth={2.2} dot={{ r: 3 }} />
             </ReLineChart>
           </ReResponsiveContainer>
         ) : (
@@ -323,7 +441,7 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
               <ReYAxis tickFormatter={(v) => formatValueWithUnit(Number(v), unit)} />
               <ReTooltip formatter={(v: any) => formatValueWithUnit(Number(v), unit)} />
               <ReLegend />
-              <ReBar dataKey="value" radius={[6, 6, 0, 0]} fill={colors[0]} animationDuration={400} />
+              <ReBar name={valueLabel || "Value"} dataKey="value" radius={[6, 6, 0, 0]} fill={colors[0]} animationDuration={400} />
             </ReBarChart>
           </ReResponsiveContainer>
         )}
@@ -810,11 +928,13 @@ type AddInsightModalProps = {
   onClose: () => void;
   tables: DashboardTable[];
   tableSchemas: TableSchema[];
+  recordsByTable: Record<string, any[]>;
+  onSaved?: () => void;
   onSave: (data: InsightForm) => Promise<void>;
   saving: boolean;
 };
 
-const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }: AddInsightModalProps) => {
+const AddInsightModal = ({ open, onClose, tables, tableSchemas, recordsByTable, onSave, onSaved, saving }: AddInsightModalProps) => {
   const defaultTable = tables[0]?.key || tables[0]?.id || "";
   const [form, setForm] = useState<InsightForm>({
     title: "",
@@ -832,6 +952,12 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
   const [customMetricField, setCustomMetricField] = useState("");
   const [customGroupField, setCustomGroupField] = useState("");
   const [metricError, setMetricError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<ChartTemplateConfig[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState<string>("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<Array<{ label: string; value: number }>>([]);
+  const previewTimer = useRef<NodeJS.Timeout | null>(null);
 
   const currentSchema = useMemo(() => {
     return tableSchemas.find((s) => {
@@ -852,7 +978,7 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
 
   const groupFieldOptions = useMemo(() => {
     return (currentSchema?.fields || [])
-      .filter((f) => ["string", "boolean", "date"].includes(f.type))
+      .filter((f) => ["string", "boolean", "date", "enum"].includes(f.type))
       .map((f) => {
         const value = (f as any).name || (f as any).key || "";
         return value ? { value, label: beautifyLabel(value) } : null;
@@ -900,42 +1026,257 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const canSave = Boolean(form.title && form.sourceTable && !saving);
-
-  if (!open) return null;
-
   const resolvedMetricField = customMetricField || selectedMetricField || form.metricField || "";
   const resolvedGroupField = customGroupField || selectedGroupField || form.groupByField || "";
+  const canSave = Boolean(form.title && form.sourceTable && !saving);
+  const groupFieldMeta = useMemo(() => {
+    if (!currentSchema || !resolvedGroupField) return null;
+    return (currentSchema.fields || []).find(
+      (f) => (f as any).name === resolvedGroupField || (f as any).key === resolvedGroupField,
+    ) || null;
+  }, [currentSchema, resolvedGroupField]);
+  const metricLabel = useMemo(() => {
+    if (resolvedMetricField) return beautifyLabel(resolvedMetricField);
+    if (form.metricOp === "count") return "Count";
+    if (form.metricOp === "sum") return "Sum";
+    if (form.metricOp === "avg") return "Average";
+    if (form.metricOp === "min") return "Min";
+    if (form.metricOp === "max") return "Max";
+    return "Value";
+  }, [form.metricOp, resolvedMetricField]);
 
-  const applyTemplate = (template: string) => {
-    if (!currentSchema) return;
-    const firstNumeric = metricFieldOptions[0]?.value || "";
-    const groupByStatus =
-      groupFieldOptions.find((f) => f.value.toLowerCase().includes("status"))?.value || groupFieldOptions[0]?.value || "";
-    const firstDate = (currentSchema.fields || []).find((f) => f.type === "date");
-
-    if (template === "count_records") {
-      setForm((prev) => ({ ...prev, metricOp: "count", timeBucket: undefined }));
-      setSelectedMetricField("");
-      setSelectedGroupField("");
-    } else if (template === "count_status") {
-      setForm((prev) => ({ ...prev, metricOp: "count", timeBucket: undefined }));
-      setSelectedMetricField("");
-      setSelectedGroupField(groupByStatus);
-    } else if (template === "revenue_month") {
-      setForm((prev) => ({ ...prev, metricOp: "sum", timeBucket: "month" }));
-      setSelectedMetricField(firstNumeric);
-      setSelectedGroupField(firstDate ? (firstDate as any).key || (firstDate as any).name || "" : "");
-    } else if (template === "orders_day") {
-      setForm((prev) => ({ ...prev, metricOp: "count", timeBucket: "day" }));
-      setSelectedMetricField("");
-      setSelectedGroupField(firstDate ? (firstDate as any).key || (firstDate as any).name || "" : "");
-    } else {
-      // custom
-      setForm((prev) => ({ ...prev }));
+  const computePreview = useCallback(() => {
+    if (!form.sourceTable) {
+      setPreviewData([]);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
     }
-    setMetricError(null);
-  };
+    const needsNumeric = ["sum", "avg", "min", "max"].includes(form.metricOp);
+    if (needsNumeric && !resolvedMetricField) {
+      setPreviewData([]);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
+    const rows = recordsByTable[form.sourceTable] || [];
+    if (!rows.length) {
+      setPreviewData([]);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const buckets = new Map<string, { total: number; count: number; min?: number; max?: number }>();
+      const bucketizeDate = (val: any) => {
+        const dt = val ? new Date(val) : null;
+        if (!dt || Number.isNaN(dt.getTime())) return "(No date)";
+        const y = dt.getFullYear();
+        const m = `${dt.getMonth() + 1}`.padStart(2, "0");
+        const d = `${dt.getDate()}`.padStart(2, "0");
+        if (form.timeBucket === "year") return `${y}`;
+        if (form.timeBucket === "month") return `${y}-${m}`;
+        if (form.timeBucket === "week") {
+          const oneJan = new Date(dt.getFullYear(), 0, 1);
+          const numberOfDays = Math.floor((dt.valueOf() - oneJan.valueOf()) / 86400000);
+          const week = Math.ceil((dt.getDay() + 1 + numberOfDays) / 7);
+          return `${y}-W${String(week).padStart(2, "0")}`;
+        }
+        return `${y}-${m}-${d}`;
+      };
+      const normalizeGroupLabel = (raw: any) => {
+        const groupKeyMissing = raw === null || raw === undefined || raw === "";
+        const isDateGrouping = Boolean(form.timeBucket) || groupFieldMeta?.type === "date";
+        if (!groupKeyMissing) return raw;
+        if (isDateGrouping) return "(No date)";
+        if ((resolvedGroupField || "").toLowerCase().match(/customer|user/)) return "(No value)";
+        return "(Unspecified)";
+      };
+
+      rows.forEach((r: any) => {
+        const row = r && typeof r === "object" && "record" in r ? r.record : r;
+        let groupKeyRaw = resolvedGroupField ? row?.[resolvedGroupField] : "All";
+        if (resolvedGroupField && form.timeBucket) {
+          groupKeyRaw = bucketizeDate(row?.[resolvedGroupField]);
+        }
+        const groupKey = normalizeGroupLabel(groupKeyRaw);
+        let val = 1;
+        if (form.metricOp !== "count") {
+          const raw = row?.[resolvedMetricField];
+          const num = Number(raw);
+          if (raw === null || raw === undefined || Number.isNaN(num)) return;
+          val = num;
+        }
+        const current = buckets.get(groupKey ?? "Unknown") || { total: 0, count: 0, min: undefined, max: undefined };
+        current.total += val;
+        current.count += 1;
+        current.min = current.min === undefined ? val : Math.min(current.min, val);
+        current.max = current.max === undefined ? val : Math.max(current.max, val);
+        buckets.set(groupKey ?? "Unknown", current);
+      });
+      const dataset = Array.from(buckets.entries()).map(([label, stats]) => {
+        let value = 0;
+        if (form.metricOp === "count") value = stats.total;
+        else if (form.metricOp === "sum") value = stats.total;
+        else if (form.metricOp === "avg") value = stats.count ? stats.total / stats.count : 0;
+        else if (form.metricOp === "min") value = stats.min ?? 0;
+        else if (form.metricOp === "max") value = stats.max ?? 0;
+        const safeLabel = normalizeGroupLabel(label);
+        return { label: safeLabel?.toString?.() || "(Unspecified)", value };
+      });
+      setPreviewData(dataset);
+      setPreviewError(null);
+    } catch (err) {
+      setPreviewError("Could not load preview. Please check your configuration or try again.");
+      setPreviewData([]);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [form.metricOp, form.sourceTable, form.timeBucket, recordsByTable, resolvedGroupField, resolvedMetricField, groupFieldMeta]);
+
+  const triggerPreview = useCallback(() => {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      computePreview();
+    }, 450);
+  }, [computePreview]);
+
+  useEffect(() => {
+    if (!open) return;
+    triggerPreview();
+    return () => {
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+    };
+  }, [
+    open,
+    form.sourceTable,
+    form.chartType,
+    form.metricOp,
+    form.timeBucket,
+    form.limit,
+    resolvedMetricField,
+    resolvedGroupField,
+    triggerPreview,
+  ]);
+
+  const buildTemplates = useCallback((): ChartTemplateConfig[] => {
+    if (!currentSchema) return [{ id: "custom", label: "Custom chart", description: "Configure manually", config: {} }];
+    const fields = currentSchema.fields || [];
+    const tableName = tables.find((t) => (t.key || t.id) === form.sourceTable)?.name || form.sourceTable || "Records";
+    const numeric = fields.filter(isNumericField);
+    const dateField = fields.find(isDateField);
+    const statusField = fields.find(isStatusOrCategoryField);
+    const moneyField = fields.find(looksLikeMoneyField) || numeric.find(looksLikeMoneyField);
+
+    const list: ChartTemplateConfig[] = [];
+    list.push({
+      id: "count_records",
+      label: "Count records",
+      description: "Total rows",
+      config: { title: `${tableName} count`, metric: "count", chartType: "bar" },
+    });
+
+    if (statusField) {
+      const key = (statusField as any).name || (statusField as any).key || "";
+      list.push({
+        id: "count_status",
+        label: "Count by status",
+        description: "Group by status/category",
+        config: { title: `${tableName} by status`, metric: "count", groupByField: key, chartType: "bar" },
+      });
+    }
+
+    if (moneyField && dateField) {
+      const moneyKey = (moneyField as any).name || (moneyField as any).key || "";
+      const dateKey = (dateField as any).name || (dateField as any).key || "";
+      list.push({
+        id: "revenue_month",
+        label: "Revenue by month",
+        description: "Sum revenue over months",
+        config: {
+          title: `${tableName} revenue by month`,
+          metric: "sum",
+          metricField: moneyKey,
+          groupByField: dateKey,
+          timeBucket: "month",
+          chartType: "line",
+        },
+      });
+    }
+
+    if (dateField) {
+      const dateKey = (dateField as any).name || (dateField as any).key || "";
+      list.push({
+        id: "records_day",
+        label: "Records by day",
+        description: "Count per day",
+        config: {
+          title: `${tableName} by day`,
+          metric: "count",
+          groupByField: dateKey,
+          timeBucket: "day",
+          chartType: "line",
+        },
+      });
+    }
+
+    list.push({ id: "custom", label: "Custom chart", description: "Configure manually", config: {} });
+    return list;
+  }, [currentSchema, form.sourceTable, tables]);
+
+  const applyTemplateToForm = useCallback(
+    (tpl: ChartTemplateConfig) => {
+      if (!tpl) return;
+      setActiveTemplateId(tpl.id);
+      const cfg = tpl.config || {};
+      const metricOp =
+        cfg.metric === "average"
+          ? "avg"
+          : cfg.metric === "min"
+            ? "min"
+            : cfg.metric === "max"
+              ? "max"
+              : cfg.metric === "sum"
+                ? "sum"
+                : "count";
+      const safeMetricField =
+        cfg.metricField && metricFieldOptions.some((o) => o.value === cfg.metricField) ? cfg.metricField : "";
+      const safeGroupField =
+        cfg.groupByField && groupFieldOptions.some((o) => o.value === cfg.groupByField) ? cfg.groupByField : "";
+      setForm((prev) => ({
+        ...prev,
+        title: cfg.title ?? prev.title,
+        chartType: (cfg.chartType as InsightForm["chartType"]) || prev.chartType,
+        metricOp: metricOp as InsightForm["metricOp"],
+        timeBucket: cfg.timeBucket || prev.timeBucket,
+      }));
+      setSelectedMetricField(safeMetricField);
+      setSelectedGroupField(safeGroupField);
+      setCustomMetricField("");
+      setCustomGroupField("");
+      setMetricError(null);
+    },
+    [groupFieldOptions, metricFieldOptions],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const tpl = buildTemplates();
+    const ensured = tpl.length ? tpl : [{ id: "custom", label: "Custom chart", description: "Configure manually", config: {} }];
+    setTemplates(ensured);
+    const first = ensured[0];
+    if (first) applyTemplateToForm(first);
+  }, [open, form.sourceTable, buildTemplates, applyTemplateToForm]);
+
+  useEffect(() => {
+    if (!open) return;
+    // if tables change while modal is open, realign sourceTable and templates
+    if (!form.sourceTable && defaultTable) {
+      setForm((prev) => ({ ...prev, sourceTable: defaultTable }));
+    }
+  }, [defaultTable, form.sourceTable, open]);
 
   const nlPreview = () => {
     const metricText =
@@ -949,239 +1290,320 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
               ? "Min"
               : "Max";
     const tableName = tables.find((t) => (t.key || t.id) === form.sourceTable)?.name || form.sourceTable || "records";
-    const metricFieldLabel = resolvedMetricField ? ` of ${beautifyLabel(resolvedMetricField)}` : "";
-    const groupLabel = resolvedGroupField ? ` grouped by ${beautifyLabel(resolvedGroupField)}` : "";
-    const timeLabel = form.timeBucket ? ` per ${beautifyLabel(form.timeBucket)}` : "";
-    return `${metricText}${metricFieldLabel} of ${tableName}${groupLabel}${timeLabel}.`;
+    const metricFieldLabel = resolvedMetricField ? beautifyLabel(resolvedMetricField) : metricText;
+    const groupLabel = resolvedGroupField ? beautifyLabel(resolvedGroupField) : "";
+    const timeLabel = form.timeBucket ? beautifyLabel(form.timeBucket) : "";
+    const groupPart = groupLabel ? ` grouped by ${groupLabel}` : "";
+    const timePart = groupLabel && timeLabel ? ` per ${timeLabel}` : "";
+    return `${metricFieldLabel} of ${tableName}${groupPart}${timePart}`;
   };
+  const handleClose = () => {
+    onClose();
+  };
+
+  const handleSave = async () => {
+    try {
+      await onSave({
+        ...form,
+        metricField: resolvedMetricField || undefined,
+        groupByField: resolvedGroupField || undefined,
+      });
+      onSaved?.();
+      onClose();
+    } catch (err) {
+      const message = (err as any)?.message || "Failed to save chart";
+      toast.error(message);
+    }
+  };
+
+  if (!open) return null;
 
   return (
     <div className="mdModalOverlay">
-      <div className="mdModal">
-        <div className="mdModalHeader">
+      <div className="mdModal" style={{ display: "flex", flexDirection: "column", maxHeight: "80vh" }}>
+        <div className="mdModalHeader" style={{ position: "sticky", top: 0, zIndex: 2, background: "rgba(255,255,255,0.9)" }}>
           <h3 className="mdModalTitle">Add chart</h3>
-          <Button variant="ghost" className="mdGhostBtn" onClick={onClose}>
+          <Button type="button" variant="ghost" className="mdGhostBtn" onClick={handleClose}>
             Close
           </Button>
         </div>
-        <div className="mdModalBody">
-          <div className="mdField" style={{ marginBottom: 12 }}>
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("count_records")}>
-                Count records
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("count_status")}>
-                Count by status
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("revenue_month")}>
-                Revenue by month
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("orders_day")}>
-                Orders by day
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("custom")}>
-                Custom chart
-              </Button>
+        <div className="mdModalBody" style={{ overflowY: "auto", flex: 1 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0,1fr) minmax(0,2fr)",
+              gap: 16,
+            }}
+          >
+            <div className="mdField" style={{ alignSelf: "start" }}>
+              <p className="mdLabel" style={{ marginBottom: 8 }}>
+                Chart templates
+              </p>
+              <div className="flex flex-col gap-2">
+                {(templates.length ? templates : buildTemplates()).map((tpl) => {
+                  const active = tpl.id === activeTemplateId;
+                  return (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => applyTemplateToForm(tpl)}
+                      className={active ? "mdSelect activeTemplate" : "mdSelect mdGhostBtn"}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        border: active ? "1px solid #7c3aed" : "1px solid #e5e7eb",
+                        background: active ? "linear-gradient(135deg,#ede9fe,#e0f2fe)" : "transparent",
+                        borderRadius: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{tpl.label}</div>
+                      <div style={{ fontSize: 12, color: "#6b7280" }}>{tpl.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-          <div className="mdField">
-            <label className="mdLabel">Title</label>
-            <Input value={form.title} onChange={(e) => handleChange("title", e.target.value)} placeholder="Orders by status" />
-          </div>
-          <div className="mdField">
-            <label className="mdLabel">Source table</label>
-            <Select value={form.sourceTable} onValueChange={(v) => handleChange("sourceTable", v)}>
-              <SelectTrigger className="mdSelect">
-                <SelectValue placeholder="Select table" />
-              </SelectTrigger>
-              <SelectContent position="popper" className="mdSelectContent">
-                {tables.map((table) => (
-                  <SelectItem key={table.key || table.id} value={table.key || table.id || ""}>
-                    {table.name || table.key}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mdField">
-            <label className="mdLabel">Chart type</label>
-            <Select value={form.chartType} onValueChange={(v) => handleChange("chartType", v as InsightForm["chartType"])}>
-              <SelectTrigger className="mdSelect">
-                <SelectValue placeholder="Chart type" />
-              </SelectTrigger>
-              <SelectContent position="popper" className="mdSelectContent">
-                <SelectItem value="bar">Bar</SelectItem>
-                <SelectItem value="line">Line</SelectItem>
-                <SelectItem value="pie">Pie</SelectItem>
-                <SelectItem value="table">Table</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mdGridTwo">
-            <div className="mdField">
-              <label className="mdLabel">Metric</label>
-              <Select
-                value={form.metricOp}
-                onValueChange={(v) => {
-                  setMetricError(null);
-                  handleChange("metricOp", v as InsightForm["metricOp"]);
-                  if (v === "count") setSelectedMetricField("");
-                }}
-              >
-                <SelectTrigger className="mdSelect">
-                  <SelectValue placeholder="Select metric" />
-                </SelectTrigger>
-                <SelectContent position="popper" className="mdSelectContent">
-                  <SelectItem value="count">Count</SelectItem>
-                  <SelectItem value="sum">Sum</SelectItem>
-                  <SelectItem value="avg">Average</SelectItem>
-                  <SelectItem value="min">Min</SelectItem>
-                  <SelectItem value="max">Max</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {form.metricOp !== "count" && (
+
+            <div className="mdField" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="mdField">
-                <label className="mdLabel">Metric field</label>
-                <Select
-                  value={selectedMetricField || "__none__"}
-                  onValueChange={(v) => {
-                    const next = v === "__none__" ? "" : v;
-                    setSelectedMetricField(next);
-                    if (["sum", "avg", "min", "max"].includes(form.metricOp) && next) {
-                      const isNumeric = metricFieldOptions.some((opt) => opt.value === next);
-                      setMetricError(isNumeric ? null : "Field must be numeric");
-                    } else {
-                      setMetricError(null);
-                    }
-                  }}
-                >
+                <label className="mdLabel">Title</label>
+                <Input value={form.title} onChange={(e) => handleChange("title", e.target.value)} placeholder="Orders by status" />
+              </div>
+              <div className="mdField">
+                <label className="mdLabel">Source table</label>
+                <Select value={form.sourceTable} onValueChange={(v) => handleChange("sourceTable", v)}>
                   <SelectTrigger className="mdSelect">
-                    <SelectValue placeholder="Select metric field" />
+                    <SelectValue placeholder="Select table" />
                   </SelectTrigger>
                   <SelectContent position="popper" className="mdSelectContent">
-                    <SelectItem value="__none__">None</SelectItem>
-                    {metricFieldOptions.length === 0 ? (
-                      <SelectItem value="__loading__" disabled>
-                        Loading...
+                    {tables.map((table) => (
+                      <SelectItem key={table.key || table.id} value={table.key || table.id || ""}>
+                        {table.name || table.key}
                       </SelectItem>
-                    ) : (
-                      metricFieldOptions.map((opt) => (
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="mdField">
+                <label className="mdLabel">Chart type</label>
+                <Select value={form.chartType} onValueChange={(v) => handleChange("chartType", v as InsightForm["chartType"])}>
+                  <SelectTrigger className="mdSelect">
+                    <SelectValue placeholder="Chart type" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="mdSelectContent">
+                    <SelectItem value="bar">Bar</SelectItem>
+                    <SelectItem value="line">Line</SelectItem>
+                    <SelectItem value="pie">Pie</SelectItem>
+                    <SelectItem value="table">Table</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mdGridTwo">
+                <div className="mdField">
+                  <label className="mdLabel">Metric</label>
+                  <Select
+                    value={form.metricOp}
+                    onValueChange={(v) => {
+                      setMetricError(null);
+                      handleChange("metricOp", v as InsightForm["metricOp"]);
+                      if (v === "count") setSelectedMetricField("");
+                    }}
+                  >
+                    <SelectTrigger className="mdSelect">
+                      <SelectValue placeholder="Select metric" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="mdSelectContent">
+                      <SelectItem value="count">Count</SelectItem>
+                      <SelectItem value="sum">Sum</SelectItem>
+                      <SelectItem value="avg">Average</SelectItem>
+                      <SelectItem value="min">Min</SelectItem>
+                      <SelectItem value="max">Max</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.metricOp !== "count" && (
+                  <div className="mdField">
+                    <label className="mdLabel">Metric field</label>
+                    <Select
+                      value={selectedMetricField || "__none__"}
+                      onValueChange={(v) => {
+                        const next = v === "__none__" ? "" : v;
+                        setSelectedMetricField(next);
+                        if (["sum", "avg", "min", "max"].includes(form.metricOp) && next) {
+                          const isNumeric = metricFieldOptions.some((opt) => opt.value === next);
+                          setMetricError(isNumeric ? null : "Field must be numeric");
+                        } else {
+                          setMetricError(null);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="mdSelect">
+                        <SelectValue placeholder="Select metric field" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" className="mdSelectContent">
+                        <SelectItem value="__none__">None</SelectItem>
+                        {metricFieldOptions.length === 0 ? (
+                          <SelectItem value="__loading__" disabled>
+                            Loading...
+                          </SelectItem>
+                        ) : (
+                          metricFieldOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {metricError ? <p className="text-xs text-red-500 mt-1">{metricError}</p> : null}
+                  </div>
+                )}
+              </div>
+
+              <div className="mdGridTwo">
+                <div className="mdField">
+                  <label className="mdLabel">Group by field (optional)</label>
+                  <Select
+                    value={selectedGroupField || "__none__"}
+                    onValueChange={(v) => setSelectedGroupField(v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger className="mdSelect">
+                      <SelectValue placeholder="Select group field" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="mdSelectContent">
+                      <SelectItem value="__none__">None</SelectItem>
+                      {groupFieldOptions.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
                         </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {metricError ? <p className="text-xs text-red-500 mt-1">{metricError}</p> : null}
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedGroupField && (
+                  <div className="mdField">
+                    <label className="mdLabel">Group by time</label>
+                    <Select value={form.timeBucket || "day"} onValueChange={(v) => handleChange("timeBucket", v as InsightForm["timeBucket"])}>
+                      <SelectTrigger className="mdSelect">
+                        <SelectValue placeholder="Time bucket" />
+                      </SelectTrigger>
+                      <SelectContent position="popper" className="mdSelectContent">
+                        <SelectItem value="day">Day</SelectItem>
+                        <SelectItem value="week">Week</SelectItem>
+                        <SelectItem value="month">Month</SelectItem>
+                        <SelectItem value="year">Year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="mdGridTwo">
-            <div className="mdField">
-              <label className="mdLabel">Group by field (optional)</label>
-              <Select
-                value={selectedGroupField || "__none__"}
-                onValueChange={(v) => setSelectedGroupField(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger className="mdSelect">
-                  <SelectValue placeholder="Select group field" />
-                </SelectTrigger>
-                <SelectContent position="popper" className="mdSelectContent">
-                  <SelectItem value="__none__">None</SelectItem>
-                  {groupFieldOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {selectedGroupField && (
-              <div className="mdField">
-                <label className="mdLabel">Group by time</label>
-                <Select value={form.timeBucket || "day"} onValueChange={(v) => handleChange("timeBucket", v as InsightForm["timeBucket"])}>
-                  <SelectTrigger className="mdSelect">
-                    <SelectValue placeholder="Time bucket" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" className="mdSelectContent">
-                    <SelectItem value="day">Day</SelectItem>
-                    <SelectItem value="week">Week</SelectItem>
-                    <SelectItem value="month">Month</SelectItem>
-                    <SelectItem value="year">Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <div className="mdField" style={{ marginTop: 4 }}>
-            <Button
-              variant="ghost"
-              className="mdGhostBtn"
-              onClick={() =>
-                setShowAdvanced((prev) => {
-                  if (prev) {
-                    setCustomMetricField("");
-                    setCustomGroupField("");
+
+              <div className="mdField" style={{ marginTop: 4 }}>
+                <Button
+                  variant="ghost"
+                  className="mdGhostBtn"
+                  onClick={() =>
+                    setShowAdvanced((prev) => {
+                      if (prev) {
+                        setCustomMetricField("");
+                        setCustomGroupField("");
+                      }
+                      return !prev;
+                    })
                   }
-                  return !prev;
-                })
-              }
-            >
-              {showAdvanced ? "Hide advanced options" : "Advanced options (for power users)"}
-            </Button>
-          </div>
-          {showAdvanced && (
-            <div className="mdGridTwo">
+                >
+                  {showAdvanced ? "Hide advanced options" : "Advanced options (for power users)"}
+                </Button>
+              </div>
+              {showAdvanced && (
+                <div className="mdGridTwo">
+                  <div className="mdField">
+                    <label className="mdLabel">Metric field (custom)</label>
+                    <Input
+                      value={customMetricField}
+                      onChange={(e) => setCustomMetricField(e.target.value)}
+                      placeholder="custom_metric_column"
+                    />
+                  </div>
+                  <div className="mdField">
+                    <label className="mdLabel">Group by field (custom)</label>
+                    <Input
+                      value={customGroupField}
+                      onChange={(e) => setCustomGroupField(e.target.value)}
+                      placeholder="custom_group_column"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="mdField">
-                <label className="mdLabel">Metric field (custom)</label>
+                <label className="mdLabel">Limit (optional)</label>
                 <Input
-                  value={customMetricField}
-                  onChange={(e) => setCustomMetricField(e.target.value)}
-                  placeholder="custom_metric_column"
+                  type="number"
+                  value={form.limit ?? ""}
+                  onChange={(e) => handleChange("limit", e.target.value ? Number(e.target.value) : undefined)}
+                  placeholder="5"
                 />
               </div>
+
               <div className="mdField">
-                <label className="mdLabel">Group by field (custom)</label>
-                <Input
-                  value={customGroupField}
-                  onChange={(e) => setCustomGroupField(e.target.value)}
-                  placeholder="custom_group_column"
-                />
+                <p className="mdMainSubtitle">This chart will show:</p>
+                <p className="mdChartTitle" style={{ fontSize: 14 }}>{nlPreview()}</p>
+              </div>
+              <div className="mdField">
+                <p className="mdLabel">Preview</p>
+                <p className="mdMainSubtitle">See how this chart will look before saving.</p>
+                <div className="tableCardGlass" style={{ padding: 12, minHeight: 300 }}>
+                  {previewLoading ? (
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <div className="animate-spin h-4 w-4 border-2 border-slate-300 border-t-slate-500 rounded-full" />
+                      <span>Loading preview...</span>
+                    </div>
+                  ) : previewError ? (
+                    <div className="flex flex-col gap-2 text-red-500">
+                      <span>{previewError}</span>
+                      <Button variant="outline" className="mdGhostBtn" onClick={() => computePreview()}>
+                        Refresh preview
+                      </Button>
+                    </div>
+                  ) : previewData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center text-slate-500 gap-2" style={{ height: 240 }}>
+                      <div className="h-12 w-12 rounded-full border border-dashed border-slate-300 flex items-center justify-center">
+                        <BarChart2 className="w-5 h-5 opacity-70" />
+                      </div>
+                      <p className="text-sm text-center">Select a source table and valid metric options to see a preview.</p>
+                      <Button variant="outline" className="mdGhostBtn" onClick={() => computePreview()}>
+                        Refresh preview
+                      </Button>
+                    </div>
+                  ) : (
+                    <div style={{ height: 280 }}>
+                  <ChartCard
+                    title={form.title || "Chart preview"}
+                    description={nlPreview()}
+                    type={form.chartType as ChartType}
+                    dataset={previewData}
+                    unit={undefined}
+                    isLoading={false}
+                    valueLabel={metricLabel}
+                  />
+                </div>
+              )}
+            </div>
               </div>
             </div>
-          )}
-          <div className="mdField">
-            <label className="mdLabel">Limit (optional)</label>
-            <Input
-              type="number"
-              value={form.limit ?? ""}
-              onChange={(e) => handleChange("limit", e.target.value ? Number(e.target.value) : undefined)}
-              placeholder="5"
-            />
-          </div>
-          <div className="mdField">
-            <p className="mdMainSubtitle">This chart will show:</p>
-            <p className="mdChartTitle" style={{ fontSize: 14 }}>{nlPreview()}</p>
           </div>
         </div>
-        <div className="mdModalFooter">
-          <Button variant="outline" onClick={onClose} className="mdGhostBtn">
+        <div className="mdModalFooter" style={{ position: "sticky", bottom: 0, zIndex: 2, background: "rgba(255,255,255,0.9)" }}>
+          <Button type="button" variant="outline" onClick={handleClose} className="mdGhostBtn">
             Cancel
           </Button>
           <Button
             className="primaryBtn"
-            disabled={!canSave}
-            onClick={async () => {
-              const metricFieldValue = resolvedMetricField || undefined;
-              const groupFieldValue = resolvedGroupField || undefined;
-              await onSave({
-                ...form,
-                metricField: metricFieldValue,
-                groupByField: groupFieldValue,
-              });
-            }}
+            disabled={!canSave || saving}
+            onClick={handleSave}
           >
             {saving ? "Saving..." : "Save chart"}
           </Button>
@@ -1561,6 +1983,20 @@ export default function ManageDashDetail() {
   const [confirmInsight, setConfirmInsight] = useState<InsightWidget | null>(null);
   const [isEditSchemaOpen, setIsEditSchemaOpen] = useState(false);
   const [schemaTargetKey, setSchemaTargetKey] = useState<string | null>(null);
+  const WIDGETS_PER_PAGE = 8;
+  const CHARTS_PER_PAGE = 4;
+  const [widgetPage, setWidgetPage] = useState(1);
+  const [chartPage, setChartPage] = useState(1);
+
+  // Reset modals when navigating to a different dashboard or landing
+  useEffect(() => {
+    setIsAddInsightOpen(false);
+    setIsAddWidgetOpen(false);
+    setIsEditOpen(false);
+    setIsDeleteOpen(false);
+    setIsViewOpen(false);
+    setIsAddOpen(false);
+  }, [dashId]);
 
   useEffect(() => {
     const session = getCurrentSession();
@@ -1675,6 +2111,17 @@ export default function ManageDashDetail() {
     // show all, but keep custom charts first
     return [...custom, ...auto];
   }, [chartConfigs]);
+  const dataDrivenMetrics: any[] = useMemo(() => [], []);
+  const metricWidgets = effectiveWidgets.filter((w) => w.type === "metric");
+  const chartWidgets = effectiveWidgets.filter((w) => w.type === "chart");
+  const renderedWidgetList = metricWidgets.length ? metricWidgets : dataDrivenMetrics.length ? dataDrivenMetrics : overviewKpis;
+  const totalWidgets = renderedWidgetList.length;
+  const totalWidgetPages = Math.max(1, Math.ceil(totalWidgets / WIDGETS_PER_PAGE));
+  const pagedWidgets = renderedWidgetList.slice((widgetPage - 1) * WIDGETS_PER_PAGE, widgetPage * WIDGETS_PER_PAGE);
+  const renderedChartList = chartWidgets.length ? chartWidgets : visibleInsights;
+  const totalCharts = renderedChartList.length;
+  const totalChartPages = Math.max(1, Math.ceil(totalCharts / CHARTS_PER_PAGE));
+  const pagedCharts = renderedChartList.slice((chartPage - 1) * CHARTS_PER_PAGE, chartPage * CHARTS_PER_PAGE);
   const totalInsights = useMemo(() => chartConfigs.filter((i) => !i.hidden).length, [chartConfigs]);
 
   const tableOptions = useMemo(
@@ -1963,8 +2410,6 @@ export default function ManageDashDetail() {
       }, {} as Record<string, WidgetResult>),
     [widgetResults],
   );
-
-  const dataDrivenMetrics: any[] = useMemo(() => [], []);
 
   const tableRecords = useMemo(() => {
     if (!activeTable) return [];
@@ -2500,10 +2945,33 @@ export default function ManageDashDetail() {
     [recordsByTable, mergedTables],
   );
 
+  const handleUpdateInsightType = async (insight: InsightWidget, nextType: ChartType) => {
+    if (!dashId) return;
+    try {
+      const backendType: InsightWidget["chartType"] = nextType === "horizontal-bar" ? "bar" : (nextType as any);
+      await dashboardApi.updateInsight(dashId, insight.id, { chartType: backendType }, { sessionId, userId: currentUser?.id });
+      setChartConfigs((prev) =>
+        prev.map((i) => (i.id === insight.id ? { ...i, chartType: backendType } : i)),
+      );
+    } catch (err) {
+      toast.error((err as any)?.message || "Failed to update chart type");
+    }
+  };
+
+  useEffect(() => {
+    if (widgetPage > totalWidgetPages) {
+      setWidgetPage(totalWidgetPages);
+    }
+  }, [totalWidgetPages, widgetPage]);
+
+  useEffect(() => {
+    if (chartPage > totalChartPages) {
+      setChartPage(totalChartPages);
+    }
+  }, [totalChartPages, chartPage]);
+
   const renderContent = () => {
     if (activeSection === "overview") {
-      const metricWidgets = effectiveWidgets.filter((w) => w.type === "metric");
-      const chartWidgets = effectiveWidgets.filter((w) => w.type === "chart");
       const renderChart = (widget: WidgetConfig) => {
         const result = widgetResultMap[widget.id];
         const records = widget.sourceTable ? recordsByTable[widget.sourceTable] || [] : [];
@@ -2566,6 +3034,29 @@ export default function ManageDashDetail() {
                 <p className="mdMainSubtitle">Key metrics and analytics</p>
               </div>
               <div className="tableActions">
+                {totalWidgetPages > 1 && (
+                  <div className="flex items-center gap-2 mr-2 text-sm text-slate-600">
+                    <span>Page {widgetPage} of {totalWidgetPages}</span>
+                    <Button
+                      variant="outline"
+                      className="mdGhostBtn"
+                      size="sm"
+                      disabled={widgetPage === 1}
+                      onClick={() => setWidgetPage((p) => Math.max(1, p - 1))}
+                    >
+                      &lt;
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="mdGhostBtn"
+                      size="sm"
+                      disabled={widgetPage === totalWidgetPages}
+                      onClick={() => setWidgetPage((p) => Math.min(totalWidgetPages, p + 1))}
+                    >
+                      &gt;
+                    </Button>
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   className="mdGhostBtn"
@@ -2588,7 +3079,7 @@ export default function ManageDashDetail() {
               </div>
             </div>
             <div className="overviewSectionGrid overviewMetricsGrid">
-            {(metricWidgets.length ? metricWidgets : dataDrivenMetrics.length ? dataDrivenMetrics : overviewKpis).map((item, idx) => {
+            {pagedWidgets.map((item, idx) => {
               const isWidget = (item as WidgetConfig).type !== undefined;
               if (isWidget) {
                 const widget = item as WidgetConfig;
@@ -2631,6 +3122,29 @@ export default function ManageDashDetail() {
                 <h4 className="overviewSectionTitle">Detailed charts</h4>
               </div>
               <div className="tableActions">
+                {totalChartPages > 1 && (
+                  <div className="flex items-center gap-2 mr-2 text-sm text-slate-600">
+                    <span>Page {chartPage} of {totalChartPages}</span>
+                    <Button
+                      variant="outline"
+                      className="mdGhostBtn"
+                      size="sm"
+                      disabled={chartPage === 1}
+                      onClick={() => setChartPage((p) => Math.max(1, p - 1))}
+                    >
+                      &lt;
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="mdGhostBtn"
+                      size="sm"
+                      disabled={chartPage === totalChartPages}
+                      onClick={() => setChartPage((p) => Math.min(totalChartPages, p + 1))}
+                    >
+                      &gt;
+                    </Button>
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   className="mdGhostBtn"
@@ -2652,7 +3166,7 @@ export default function ManageDashDetail() {
               </div>
             </div>
             <div className="overviewSectionGrid overviewInsightsGrid">
-              {(chartWidgets.length ? chartWidgets : visibleInsights).map((c, idx) => {
+              {pagedCharts.map((c, idx) => {
                 const isWidget = (c as WidgetConfig).type !== undefined;
                 const insight = c as InsightWidget;
                 const result = isWidget ? widgetResultMap[(c as WidgetConfig).id] : null;
@@ -2693,6 +3207,20 @@ export default function ManageDashDetail() {
 
                 const isLoading = isWidget ? result === undefined && !dataset.length : false;
 
+                const handleChangeType = (next: ChartType) => {
+                  if (!isWidget) {
+                    handleUpdateInsightType(insight, next);
+                  }
+                };
+
+                const handleRemove = () => {
+                  if (isWidget) {
+                    setConfirmWidgetId((c as WidgetConfig).id || "");
+                  } else {
+                    setConfirmInsight(insight);
+                  }
+                };
+
                 return (
                   <ChartCard
                     key={(c as any).id || idx}
@@ -2702,6 +3230,8 @@ export default function ManageDashDetail() {
                     dataset={dataset}
                     unit={undefined}
                     isLoading={isLoading}
+                    onChangeType={handleChangeType}
+                    onRemove={handleRemove}
                   />
                 );
               })}
@@ -3011,6 +3541,7 @@ export default function ManageDashDetail() {
         open={isAddInsightOpen}
         onClose={() => setIsAddInsightOpen(false)}
         tables={mergedTables as DashboardTable[]}
+        recordsByTable={recordsByTable}
         tableSchemas={tableSchemas}
         onSave={handleSaveInsight}
         saving={savingInsight}
