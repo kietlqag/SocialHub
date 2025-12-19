@@ -1,5 +1,7 @@
 export type WidgetType = "metric" | "chart" | "table";
 
+export type FieldType = "string" | "number" | "boolean" | "date" | "enum" | "reference" | "id";
+
 export interface ChartSeriesConfig {
   name: string;
   filter?: Record<string, any>;
@@ -58,27 +60,39 @@ export type SemanticRole =
   | "state"
   | "generic";
 
-export interface FieldDefinition {
+export interface FieldConfig {
+  id?: string;
   key: string;
-  type: string;
+  label?: string;
+  type: FieldType;
   required?: boolean;
+  visibleInTable?: boolean;
+  options?: string[];
+  referenceTable?: string;
+  displayField?: string;
+  system?: boolean;
+  systemField?: boolean;
   enumValues?: string[];
   semanticType?: SemanticType;
   semanticRole?: SemanticRole;
 }
 
-export interface TableDefinition {
+export interface FieldDefinition extends FieldConfig {}
+
+export interface TableConfig {
   key: string;
   name: string;
   description?: string;
-  fields: FieldDefinition[];
+  fields: FieldConfig[];
   sampleRows?: Record<string, any>[];
 }
+
+export interface TableDefinition extends TableConfig {}
 
 export interface Dashboard {
   _id: string;
   name: string;
   description?: string;
   widgets: WidgetConfig[];
-  tables?: TableDefinition[];
+  tables?: TableConfig[];
 }

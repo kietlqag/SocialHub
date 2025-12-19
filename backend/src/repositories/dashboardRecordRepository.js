@@ -30,3 +30,49 @@ export async function listRecordsByDashboard({ dashboardId, tableKey }) {
     updatedAt: row.updatedAt,
   }));
 }
+
+export async function findRecordById({ dashboardId, tableKey, recordId }) {
+  if (!dashboardId || !recordId) return null;
+  if (!ObjectId.isValid(recordId)) return null;
+  const filter = { _id: new ObjectId(recordId), dashboardId: new ObjectId(dashboardId) };
+  if (tableKey) filter.tableKey = tableKey;
+  const row = await collection().findOne(filter);
+  if (!row) return null;
+  return {
+    id: row._id.toString(),
+    tableKey: row.tableKey,
+    record: row.record,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export async function updateRecordById({ dashboardId, tableKey, recordId, record }) {
+  if (!dashboardId || !recordId || !record || typeof record !== "object") return null;
+  if (!ObjectId.isValid(recordId)) return null;
+  const filter = { _id: new ObjectId(recordId), dashboardId: new ObjectId(dashboardId) };
+  if (tableKey) filter.tableKey = tableKey;
+  const now = new Date();
+  const res = await collection().findOneAndUpdate(
+    filter,
+    { $set: { record, updatedAt: now } },
+    { returnDocument: "after" },
+  );
+  if (!res.value) return null;
+  return {
+    id: res.value._id.toString(),
+    tableKey: res.value.tableKey,
+    record: res.value.record,
+    createdAt: res.value.createdAt,
+    updatedAt: res.value.updatedAt,
+  };
+}
+
+export async function deleteRecordById({ dashboardId, tableKey, recordId }) {
+  if (!dashboardId || !recordId) return false;
+  if (!ObjectId.isValid(recordId)) return false;
+  const filter = { _id: new ObjectId(recordId), dashboardId: new ObjectId(dashboardId) };
+  if (tableKey) filter.tableKey = tableKey;
+  const res = await collection().deleteOne(filter);
+  return res.deletedCount > 0;
+}

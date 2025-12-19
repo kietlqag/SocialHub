@@ -8,9 +8,15 @@ import {
   generateAndPersistDashboard,
   addDashboardRecord,
   listDashboardRecords,
+  getDashboardRecord,
+  updateDashboardRecordService,
+  deleteDashboardRecordService,
   listDashboardWidgets,
   addManualWidget,
   removeWidget,
+  addInsight,
+  removeInsight,
+  updateInsight,
 } from "../services/dashboardService.js";
 import { getSocialhubDb } from "../mongo.js";
 
@@ -80,6 +86,47 @@ export async function getDashboardRecords(req, res) {
   res.json({ records });
 }
 
+export async function getDashboardRecordController(req, res) {
+  const owner = parseOwner(req);
+  const { id: dashboardId, tableKey, recordId } = req.params;
+  const record = await getDashboardRecord({
+    dashboardId,
+    tableKey,
+    recordId,
+    sessionId: owner.sessionId,
+    userId: owner.userId,
+  });
+  res.json({ record });
+}
+
+export async function updateDashboardRecordController(req, res) {
+  const owner = parseOwner(req);
+  const { id: dashboardId, tableKey, recordId } = req.params;
+  const { record } = req.body || {};
+  const updated = await updateDashboardRecordService({
+    dashboardId,
+    tableKey,
+    recordId,
+    record,
+    sessionId: owner.sessionId,
+    userId: owner.userId,
+  });
+  res.json({ record: updated });
+}
+
+export async function deleteDashboardRecordController(req, res) {
+  const owner = parseOwner(req);
+  const { id: dashboardId, tableKey, recordId } = req.params;
+  await deleteDashboardRecordService({
+    dashboardId,
+    tableKey,
+    recordId,
+    sessionId: owner.sessionId,
+    userId: owner.userId,
+  });
+  res.json({ success: true });
+}
+
 export async function getDashboardData(req, res) {
   console.log("getDashboardData hit", req.params.id, "query", req.query);
   const owner = parseOwner(req);
@@ -147,6 +194,26 @@ export async function hideWidget(req, res) {
   const owner = parseOwner(req);
   const { widgetKey } = req.body;
   await removeWidget(req.params.id, owner, widgetKey);
+  res.json({ success: true });
+}
+
+export async function createInsight(req, res) {
+  const owner = parseOwner(req);
+  const insight = await addInsight(req.params.id, owner, req.body || {});
+  res.status(201).json({ insight });
+}
+
+export async function deleteInsight(req, res) {
+  const owner = parseOwner(req);
+  await removeInsight(req.params.id, owner, req.params.insightId);
+  res.json({ success: true });
+}
+
+export async function patchInsight(req, res) {
+  const owner = parseOwner(req);
+  const { insightId } = req.params;
+  const { hidden } = req.body || {};
+  await updateInsight(req.params.id, owner, insightId, { hidden: Boolean(hidden) });
   res.json({ success: true });
 }
 

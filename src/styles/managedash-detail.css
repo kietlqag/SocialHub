@@ -119,6 +119,8 @@
 
 .mdNavBadge {
   font-size: 12px;
+  margin-left: auto;
+  color: #475569;
 }
 
 .mdSidebarFooter {
@@ -197,7 +199,7 @@
 }
 
 .overviewInsightsGrid {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   align-items: start;
 }
 
@@ -240,29 +242,29 @@
 
 .metricDeleteBtn {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(15, 23, 42, 0.06);
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.9);
   color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  width: 24px;
-  height: 24px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1;
-  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  transition: background 0.15s ease, transform 0.15s ease, opacity 0.2s ease;
   display: grid;
   place-items: center;
-  opacity: 0.12;
+  opacity: 0.2;
   pointer-events: none;
   z-index: 2;
 }
 
 .metricDeleteBtn:hover {
-  background: rgba(239, 68, 68, 0.12);
-  transform: scale(1.05);
+  background: rgba(239, 68, 68, 0.08);
+  transform: scale(1.04);
 }
 
 .kpiCard:hover .metricDeleteBtn {
@@ -313,6 +315,7 @@
   display: flex;
   gap: 12px;
   align-items: center;
+  position: relative;
 }
 
 .mdChartIcon {
@@ -332,6 +335,35 @@
 .mdChartSubtitle {
   font-size: 13px;
   color: #64748b;
+}
+
+.insightCloseBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #475569;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mdChartCard:hover .insightCloseBtn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.insightCloseBtn:hover {
+  background: rgba(15, 23, 42, 0.06);
+  transform: scale(1.03);
 }
 
 .tableHeader {
@@ -741,5 +773,108 @@
 
   .mdNavItem {
     justify-content: flex-start;
+  }
+}
+
+.schemaModal {
+  width: min(1100px, 90vw);
+}
+
+.schemaList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.schemaRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  position: relative;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.schemaRow.dragging {
+  opacity: 0.9;
+  border-color: #a5b4fc;
+}
+
+.schemaDragHandle {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  cursor: grab;
+  margin-top: 4px;
+}
+
+.schemaGrid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.schemaToggles .schemaToggleGroup {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.schemaSubSection {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed #e5e7eb;
+  background: #f8fafc;
+}
+
+.schemaSubHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.schemaOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.optionRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.schemaActions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.schemaFooter {
+  justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .schemaGrid {
+    grid-template-columns: 1fr;
+  }
+  .schemaRow {
+    flex-direction: column;
   }
 }

@@ -42,8 +42,8 @@ export function DashboardCard({
 }: DashboardCardProps) {
   const { Icon, toneClass } = icon;
   const metaChips = [
-    { label: "Overview", value: overviewCount },
-    { label: "Insights", value: insightCount },
+    { label: "Key metrics", value: overviewCount },
+    { label: "Charts", value: insightCount },
     { label: "Tables", value: tableCount },
   ];
 

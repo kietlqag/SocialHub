@@ -10,6 +10,7 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import { getDashboardData, listWidgets, createWidget, deleteWidget, hideWidget } from "./controllers/dashboardController.js";
 import { initDb } from "./db.js";
 import { initMongo, getSocialhubDb } from "./mongo.js";
+import { initMongoose } from "./mongoose.js";
 import { HttpError } from "./utils/httpError.js";
 import { login } from "./controllers/authController.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
@@ -73,6 +74,7 @@ app.use((err, req, res, next) => {
 });
 
 async function start() {
+  await initMongoose();
   await initMongo();
   await initDb();
   app.listen(PORT, () => {

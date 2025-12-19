@@ -229,10 +229,13 @@ export default function ManageDashList() {
   const derivedDashboards: DecoratedDashboard[] = dashboards.map((d) => {
     const tableFields = Array.isArray(d.tables) ? d.tables.flatMap((t) => t.fields || []) : [];
     const fieldCount = d.fields?.length ? d.fields.length : tableFields.length;
-    const widgetCount = Array.isArray(d.widgets) ? d.widgets.length : 0;
+    const widgets = Array.isArray(d.widgets) ? d.widgets : [];
+    const widgetCount = widgets.length;
+    const metricCount = widgets.filter((w: any) => (w as any)?.type === "metric").length;
+    const chartCount = widgets.filter((w: any) => (w as any)?.type === "chart").length;
     const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
-    const overviewCount = 4;
-    const insightsCount = widgetCount > 0 ? Math.min(widgetCount, 4) : Math.max(1, Math.min(4, tableCount));
+    const insightsCount = Array.isArray((d as any).insights) ? (d as any).insights.length : chartCount;
+    const overviewCount = metricCount || widgetCount || Math.max(1, tableCount || 1);
     const domain = detectDashboardDomain(d);
     const visual = domainVisuals[domain] ?? domainVisuals.general;
     const createdLabel = d.createdAt ? new Date(d.createdAt).toLocaleString() : "Just now";

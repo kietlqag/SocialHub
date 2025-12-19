@@ -2,7 +2,7 @@ const RAW_API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 // Normalize to host/base only; strip any trailing "/api" so paths can add it explicitly.
 export const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/, "");
 
-type HttpMethod = "GET" | "POST" | "DELETE" | "PATCH";
+type HttpMethod = "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
 
 async function request<T>(path: string, options: { method?: HttpMethod; body?: any; token?: string } = {}): Promise<T> {
   const { method = "GET", body, token } = options;
@@ -28,5 +28,6 @@ export const api = {
   get: <T>(path: string, token?: string) => request<T>(path, { method: "GET", token }),
   post: <T>(path: string, body?: any, token?: string) => request<T>(path, { method: "POST", body, token }),
   patch: <T>(path: string, body?: any, token?: string) => request<T>(path, { method: "PATCH", body, token }),
+  put: <T>(path: string, body?: any, token?: string) => request<T>(path, { method: "PUT", body, token }),
   delete: <T>(path: string, token?: string) => request<T>(path, { method: "DELETE", token }),
 };
