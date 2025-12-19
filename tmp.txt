@@ -1,4 +1,4 @@
-ï»¿import type { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
@@ -11,7 +11,6 @@ import {
   DollarSign,
   Filter,
   LineChart,
-  ShoppingCart,
   PieChart,
   Plus,
   Eye,
@@ -22,7 +21,6 @@ import {
   Users,
   X,
   Settings2,
-  MoreHorizontal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardTable, type DashboardField } from "../services/dashboards";
@@ -39,9 +37,6 @@ import {
   Legend as ReLegend,
   BarChart as ReBarChart,
   Bar as ReBar,
-  PieChart as RePieChart,
-  Pie as RePie,
-  Cell as ReCell,
 } from "recharts";
 import { DeleteConfirmDialog } from "../components/DeleteConfirmDialog";
 import { generateDetailedInsights, type InsightWidget, type TableSchema } from "../dashboard/insightGenerator";
@@ -111,18 +106,7 @@ type WidgetCondition = {
   value2?: string | number;
 };
 
-type MetricIcon = "money" | "analytics" | "trend" | "cart" | "users" | "star";
-
-type ChartType = "line" | "bar" | "pie" | "horizontal-bar";
-
-type ChartCardProps = {
-  title: string;
-  description?: string;
-  type: ChartType;
-  dataset?: Array<{ label: string; value: number }>;
-  unit?: string;
-  isLoading?: boolean;
-};
+type MetricIcon = "money" | "analytics";
 
 type AddWidgetFormState = {
   tableKey: string;
@@ -174,164 +158,11 @@ const formatMetricValue = (value: number | null | undefined, formatted?: string 
   return Number.isFinite(value) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value) : "No data yet";
 };
 
-const pickMetricIcon = (title: string, icon?: MetricIcon) => {
-  if (icon === "money") return DollarSign;
-  if (icon === "analytics") return BarChart2;
-  if (icon === "trend" || icon === "star") return LineChart;
-  if (icon === "cart") return ShoppingCart;
-  if (icon === "users") return Users;
+const pickMetricIcon = (title: string) => {
   const lower = title.toLowerCase();
   const moneyHints = ["revenue", "amount", "price", "cost", "payment", "billing", "bill", "invoice", "sale", "sales"];
   return moneyHints.some((hint) => lower.includes(hint)) ? DollarSign : BarChart2;
 };
-
-const formatValueWithUnit = (value: number, unit?: string) => {
-  if (!Number.isFinite(value)) return "0";
-  if (unit?.toLowerCase() === "vnd") {
-    return `${new Intl.NumberFormat("vi-VN").format(value)} ?`;
-  }
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
-};
-
-const mapAggregationForMetricType = (metricType: MetricType): MetricAggregation => {
-  if (metricType === "average" || metricType === "average_conditional") return "avg";
-  if (metricType === "min") return "min";
-  if (metricType === "max") return "max";
-  if (metricType === "count" || metricType === "count_conditional") return "count";
-  return "sum";
-};
-
-const getIconStyle = (icon?: MetricIcon) => {
-  const palette: Record<MetricIcon, { bg: string; shadow: string }> = {
-    money: { bg: "linear-gradient(135deg, #0ea5e9, #38bdf8)", shadow: "0 12px 22px rgba(14, 165, 233, 0.35)" },
-    analytics: { bg: "linear-gradient(135deg, #6366f1, #8b5cf6)", shadow: "0 12px 22px rgba(99, 102, 241, 0.3)" },
-    trend: { bg: "linear-gradient(135deg, #10b981, #34d399)", shadow: "0 12px 22px rgba(16, 185, 129, 0.3)" },
-    cart: { bg: "linear-gradient(135deg, #f59e0b, #facc15)", shadow: "0 12px 22px rgba(245, 158, 11, 0.35)" },
-    users: { bg: "linear-gradient(135deg, #8b5cf6, #a855f7)", shadow: "0 12px 22px rgba(139, 92, 246, 0.35)" },
-    star: { bg: "linear-gradient(135deg, #f97316, #fb923c)", shadow: "0 12px 22px rgba(249, 115, 22, 0.35)" },
-  };
-  const found = icon ? palette[icon] : undefined;
-  return found || palette.analytics;
-};
-
-const CHART_CARD_HEIGHT = 240;
-const CHART_BODY_MIN_HEIGHT = 200;
-
-const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData }: ChartCardProps) => {
-  const data = (dataset || [])
-    .map((d) => ({
-      label: d.label || "Unknown",
-      value: Number.isFinite(d.value) ? d.value : 0,
-    }))
-    .filter((d) => Number.isFinite(d.value));
-
-  const showEmpty = !isLoading && !data.length;
-  const colors = ["#6366F1", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0EA5E9", "#F97316"];
-
-  return (
-    <div
-      className="mdChartCard modernChartCard"
-      style={{
-        minHeight: CHART_CARD_HEIGHT,
-        display: "flex",
-        flexDirection: "column",
-        transition: "transform 150ms ease, box-shadow 150ms ease",
-      }}
-    >
-      <div className="mdChartHeader">
-        <div>
-          <p className="mdChartTitle">{title}</p>
-          {description ? <p className="mdChartSubtitle">{description}</p> : null}
-        </div>
-        <button type="button" className="insightCloseBtn" aria-label="More">
-          <MoreHorizontal className="w-4 h-4 text-slate-500" />
-        </button>
-      </div>
-      <div
-        style={{
-          flex: 1,
-          padding: "8px 12px 16px 0",
-          width: "100%",
-          minHeight: CHART_BODY_MIN_HEIGHT,
-          position: "relative",
-        }}
-        className="fade-in"
-      >
-        {isLoading ? (
-          <div className="h-full w-full rounded-lg bg-slate-100 animate-pulse p-3 space-y-3">
-            <div className="h-3 w-2/3 rounded bg-slate-200" />
-            <div className="h-3 w-1/2 rounded bg-slate-200" />
-            <div className="h-3 w-5/6 rounded bg-slate-200" />
-            <div className="h-3 w-1/3 rounded bg-slate-200" />
-          </div>
-        ) : showEmpty ? (
-          <div className="flex h-full items-center justify-center flex-col text-slate-500 fade-in">
-            <div className="h-12 w-12 rounded-full border border-dashed border-slate-300 flex items-center justify-center mb-3">
-              <BarChart2 className="w-5 h-5 opacity-70" />
-            </div>
-            <p className="text-sm">No data yet for this period</p>
-          </div>
-        ) : type === "pie" ? (
-          <ReResponsiveContainer width="100%" height={CHART_BODY_MIN_HEIGHT}>
-            <RePieChart>
-              <RePie
-                data={data}
-                dataKey="value"
-                nameKey="label"
-                innerRadius={55}
-                outerRadius={75}
-                paddingAngle={2}
-              >
-                {data.map((_, idx) => (
-                  <ReCell key={`cell-${idx}`} fill={colors[idx % colors.length]} />
-                ))}
-              </RePie>
-              <ReTooltip
-                formatter={(v: any) => formatValueWithUnit(Number(v), unit)}
-                labelFormatter={(label: any) => String(label)}
-              />
-              <ReLegend verticalAlign="bottom" height={24} />
-            </RePieChart>
-          </ReResponsiveContainer>
-        ) : type === "horizontal-bar" ? (
-          <ReResponsiveContainer width="100%" height={CHART_BODY_MIN_HEIGHT}>
-            <ReBarChart data={data} layout="vertical" margin={{ left: 18, right: 12, top: 8, bottom: 8 }}>
-              <ReCartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <ReXAxis type="number" tickFormatter={(v) => formatValueWithUnit(Number(v), unit)} />
-              <ReYAxis type="category" dataKey="label" width={90} />
-              <ReTooltip formatter={(v: any) => formatValueWithUnit(Number(v), unit)} />
-              <ReLegend />
-              <ReBar dataKey="value" radius={[6, 6, 6, 6]} fill={colors[0]} animationDuration={400} />
-            </ReBarChart>
-          </ReResponsiveContainer>
-        ) : type === "line" ? (
-          <ReResponsiveContainer width="100%" height={CHART_BODY_MIN_HEIGHT}>
-            <ReLineChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 8 }}>
-              <ReCartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <ReXAxis dataKey="label" />
-              <ReYAxis tickFormatter={(v) => formatValueWithUnit(Number(v), unit)} />
-              <ReTooltip formatter={(v: any) => formatValueWithUnit(Number(v), unit)} />
-              <ReLegend />
-              <ReLine type="monotone" dataKey="value" stroke={colors[0]} strokeWidth={2.2} dot={{ r: 3 }} />
-            </ReLineChart>
-          </ReResponsiveContainer>
-        ) : (
-          <ReResponsiveContainer width="100%" height={CHART_BODY_MIN_HEIGHT}>
-            <ReBarChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 8 }}>
-              <ReCartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-              <ReXAxis dataKey="label" />
-              <ReYAxis tickFormatter={(v) => formatValueWithUnit(Number(v), unit)} />
-              <ReTooltip formatter={(v: any) => formatValueWithUnit(Number(v), unit)} />
-              <ReLegend />
-              <ReBar dataKey="value" radius={[6, 6, 0, 0]} fill={colors[0]} animationDuration={400} />
-            </ReBarChart>
-          </ReResponsiveContainer>
-        )}
-      </div>
-    </div>
-  );
-};
-
 
 const normalizeFields = (fields: any[] = []): NormalizedField[] =>
   fields
@@ -432,27 +263,23 @@ const MetricCard = ({
   onDelete,
   deletable,
   className = "",
-  iconKey,
-}: MetricCardProps & { iconKey?: MetricIcon }) => {
-  const iconStyle = getIconStyle(iconKey);
-  return (
-    <div className={`kpiCard relative ${className}`}>
-      {deletable && onDelete && (
-        <button className="metricDeleteBtn" title="Remove widget" aria-label="Remove widget" onClick={onDelete}>
-          Ã—
-        </button>
-      )}
-      <div className="kpiIcon" style={{ background: iconStyle.bg, boxShadow: iconStyle.shadow }}>
-        <Icon className="w-4 h-4" />
-      </div>
-      <div>
-        <p className="kpiTitle">{title}</p>
-        <p className="kpiValue">{value}</p>
-        <p className="mdMainSubtitle">{description}</p>
-      </div>
+}: MetricCardProps) => (
+  <div className={`kpiCard relative ${className}`}>
+    {deletable && onDelete && (
+      <button className="metricDeleteBtn" title="Remove widget" aria-label="Remove widget" onClick={onDelete}>
+        ×
+      </button>
+    )}
+    <div className="kpiIcon">
+      <Icon className="w-4 h-4" />
     </div>
-  );
-};
+    <div>
+      <p className="kpiTitle">{title}</p>
+      <p className="kpiValue">{value}</p>
+      <p className="mdMainSubtitle">{description}</p>
+    </div>
+  </div>
+);
 
 const numericFieldTypes = ["number", "integer", "int", "float", "double", "decimal", "currency", "money", "amount", "numeric"];
 const looksNumericField = (field: any) => numericFieldTypes.includes((field?.type || field?.fieldType || "").toString().toLowerCase());
@@ -477,14 +304,6 @@ type AddWidgetModalProps = {
 const isConditionalMetric = (metricType: MetricType) => metricType.includes("conditional");
 
 const AddWidgetModal = ({ open, onClose, tables, onSave, saving, maxReached }: AddWidgetModalProps) => {
-  const iconOptions: { value: MetricIcon; label: string; color: string }[] = [
-    { value: "money", label: "Money", color: "#0ea5e9" },
-    { value: "analytics", label: "Analytics", color: "#6366f1" },
-    { value: "trend", label: "Trend", color: "#10b981" },
-    { value: "cart", label: "Cart", color: "#f59e0b" },
-    { value: "users", label: "Users", color: "#8b5cf6" },
-    { value: "star", label: "Star", color: "#f97316" },
-  ];
   const [form, setForm] = useState<AddWidgetFormState>({
     tableKey: tables[0]?.key || tables[0]?.id || "",
     columnKey: "",
@@ -624,7 +443,7 @@ const AddWidgetModal = ({ open, onClose, tables, onSave, saving, maxReached }: A
               onValueChange={(v) => {
                 const next = v as MetricType;
                 handleChange("metricType", next);
-                handleChange("aggregation", mapAggregationForMetricType(next));
+                handleChange("aggregation", next === "average" || next === "average_conditional" ? "avg" : "sum");
                 if (!next.includes("conditional")) {
                   handleChange("conditionField", "");
                   handleChange("conditionOperator", undefined);
@@ -729,28 +548,8 @@ const AddWidgetModal = ({ open, onClose, tables, onSave, saving, maxReached }: A
                 <SelectValue placeholder="Icon" />
               </SelectTrigger>
               <SelectContent position="popper" className="mdSelectContent">
-                {iconOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: "999px",
-                          background: opt.color,
-                          display: "inline-block",
-                        }}
-                      />
-                      {opt.label}
-                    </span>
-                  </SelectItem>
-                ))}
+                <SelectItem value="money">Money</SelectItem>
+                <SelectItem value="analytics">Analytics</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -798,10 +597,10 @@ type InsightForm = {
   title: string;
   chartType: "line" | "bar" | "pie" | "table";
   sourceTable: string;
-  metricOp: "sum" | "count" | "avg" | "min" | "max";
-  metricField?: string;
-  groupByField?: string;
-  timeBucket?: "day" | "week" | "month" | "year";
+  metricOp: "sum" | "count" | "avg";
+  metricField: string;
+  groupByField: string;
+  timeBucket?: "day" | "week" | "month";
   limit?: number;
 };
 
@@ -809,12 +608,11 @@ type AddInsightModalProps = {
   open: boolean;
   onClose: () => void;
   tables: DashboardTable[];
-  tableSchemas: TableSchema[];
   onSave: (data: InsightForm) => Promise<void>;
   saving: boolean;
 };
 
-const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }: AddInsightModalProps) => {
+const AddInsightModal = ({ open, onClose, tables, onSave, saving }: AddInsightModalProps) => {
   const defaultTable = tables[0]?.key || tables[0]?.id || "";
   const [form, setForm] = useState<InsightForm>({
     title: "",
@@ -826,75 +624,15 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
     timeBucket: "day",
     limit: 5,
   });
-  const [selectedMetricField, setSelectedMetricField] = useState<string>("");
-  const [selectedGroupField, setSelectedGroupField] = useState<string>("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [customMetricField, setCustomMetricField] = useState("");
-  const [customGroupField, setCustomGroupField] = useState("");
-  const [metricError, setMetricError] = useState<string | null>(null);
-
-  const currentSchema = useMemo(() => {
-    return tableSchemas.find((s) => {
-      const name = (s as any).tableName || s.name;
-      return s.key === form.sourceTable || name === form.sourceTable;
-    });
-  }, [tableSchemas, form.sourceTable]);
-
-  const metricFieldOptions = useMemo(() => {
-    return (currentSchema?.fields || [])
-      .filter((f) => f.type === "number" || f.type === "date")
-      .map((f) => {
-        const value = (f as any).name || (f as any).key || "";
-        return value ? { value, label: beautifyLabel(value) } : null;
-      })
-      .filter(Boolean) as { value: string; label: string }[];
-  }, [currentSchema]);
-
-  const groupFieldOptions = useMemo(() => {
-    return (currentSchema?.fields || [])
-      .filter((f) => ["string", "boolean", "date"].includes(f.type))
-      .map((f) => {
-        const value = (f as any).name || (f as any).key || "";
-        return value ? { value, label: beautifyLabel(value) } : null;
-      })
-      .filter(Boolean) as { value: string; label: string }[];
-  }, [currentSchema]);
 
   useEffect(() => {
-    if (!open) return;
-    setForm((prev) => ({
-      ...prev,
-      sourceTable: prev.sourceTable || defaultTable,
-    }));
+    if (open) {
+      setForm((prev) => ({
+        ...prev,
+        sourceTable: prev.sourceTable || defaultTable,
+      }));
+    }
   }, [defaultTable, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    setSelectedMetricField("");
-    setSelectedGroupField("");
-    setCustomMetricField("");
-    setCustomGroupField("");
-    setMetricError(null);
-  }, [form.sourceTable, open]);
-
-  useEffect(() => {
-    if (!open || !currentSchema) return;
-    // metric default for sum/avg/min/max
-    const needsNumeric = ["sum", "avg", "min", "max"].includes(form.metricOp);
-    if (needsNumeric && !selectedMetricField && metricFieldOptions.length) {
-      setSelectedMetricField(metricFieldOptions[0].value);
-    }
-    // smart defaults for group and time bucket
-    if (!selectedGroupField && groupFieldOptions.length) {
-      const prefer = groupFieldOptions.find((f) =>
-        ["status", "category", "type", "customer", "user"].some((kw) => f.value.toLowerCase().includes(kw)),
-      );
-      if (prefer) setSelectedGroupField(prefer.value);
-    }
-    if (!form.timeBucket && (currentSchema.fields || []).some((f) => f.type === "date")) {
-      setForm((prev) => ({ ...prev, timeBucket: "day" }));
-    }
-  }, [open, currentSchema, form.metricOp, metricFieldOptions, groupFieldOptions, selectedMetricField, selectedGroupField]);
 
   const handleChange = (key: keyof InsightForm, value: any) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -904,89 +642,33 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
 
   if (!open) return null;
 
-  const resolvedMetricField = customMetricField || selectedMetricField || form.metricField || "";
-  const resolvedGroupField = customGroupField || selectedGroupField || form.groupByField || "";
-
-  const applyTemplate = (template: string) => {
-    if (!currentSchema) return;
-    const firstNumeric = metricFieldOptions[0]?.value || "";
-    const groupByStatus =
-      groupFieldOptions.find((f) => f.value.toLowerCase().includes("status"))?.value || groupFieldOptions[0]?.value || "";
-    const firstDate = (currentSchema.fields || []).find((f) => f.type === "date");
-
-    if (template === "count_records") {
-      setForm((prev) => ({ ...prev, metricOp: "count", timeBucket: undefined }));
-      setSelectedMetricField("");
-      setSelectedGroupField("");
-    } else if (template === "count_status") {
-      setForm((prev) => ({ ...prev, metricOp: "count", timeBucket: undefined }));
-      setSelectedMetricField("");
-      setSelectedGroupField(groupByStatus);
-    } else if (template === "revenue_month") {
-      setForm((prev) => ({ ...prev, metricOp: "sum", timeBucket: "month" }));
-      setSelectedMetricField(firstNumeric);
-      setSelectedGroupField(firstDate ? (firstDate as any).key || (firstDate as any).name || "" : "");
-    } else if (template === "orders_day") {
-      setForm((prev) => ({ ...prev, metricOp: "count", timeBucket: "day" }));
-      setSelectedMetricField("");
-      setSelectedGroupField(firstDate ? (firstDate as any).key || (firstDate as any).name || "" : "");
-    } else {
-      // custom
-      setForm((prev) => ({ ...prev }));
-    }
-    setMetricError(null);
-  };
-
-  const nlPreview = () => {
-    const metricText =
-      form.metricOp === "count"
-        ? "Count"
-        : form.metricOp === "sum"
-          ? "Sum"
-          : form.metricOp === "avg"
-            ? "Average"
-            : form.metricOp === "min"
-              ? "Min"
-              : "Max";
-    const tableName = tables.find((t) => (t.key || t.id) === form.sourceTable)?.name || form.sourceTable || "records";
-    const metricFieldLabel = resolvedMetricField ? ` of ${beautifyLabel(resolvedMetricField)}` : "";
-    const groupLabel = resolvedGroupField ? ` grouped by ${beautifyLabel(resolvedGroupField)}` : "";
-    const timeLabel = form.timeBucket ? ` per ${beautifyLabel(form.timeBucket)}` : "";
-    return `${metricText}${metricFieldLabel} of ${tableName}${groupLabel}${timeLabel}.`;
-  };
-
   return (
     <div className="mdModalOverlay">
       <div className="mdModal">
         <div className="mdModalHeader">
-          <h3 className="mdModalTitle">Add chart</h3>
+          <h3 className="mdModalTitle">Add insight</h3>
           <Button variant="ghost" className="mdGhostBtn" onClick={onClose}>
             Close
           </Button>
         </div>
         <div className="mdModalBody">
-          <div className="mdField" style={{ marginBottom: 12 }}>
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("count_records")}>
-                Count records
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("count_status")}>
-                Count by status
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("revenue_month")}>
-                Revenue by month
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("orders_day")}>
-                Orders by day
-              </Button>
-              <Button variant="outline" className="mdGhostBtn" onClick={() => applyTemplate("custom")}>
-                Custom chart
-              </Button>
-            </div>
-          </div>
           <div className="mdField">
             <label className="mdLabel">Title</label>
             <Input value={form.title} onChange={(e) => handleChange("title", e.target.value)} placeholder="Orders by status" />
+          </div>
+          <div className="mdField">
+            <label className="mdLabel">Chart type</label>
+            <Select value={form.chartType} onValueChange={(v) => handleChange("chartType", v as InsightForm["chartType"])}>
+              <SelectTrigger className="mdSelect">
+                <SelectValue placeholder="Chart type" />
+              </SelectTrigger>
+              <SelectContent position="popper" className="mdSelectContent">
+                <SelectItem value="bar">Bar</SelectItem>
+                <SelectItem value="line">Line</SelectItem>
+                <SelectItem value="pie">Pie</SelectItem>
+                <SelectItem value="table">Table</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="mdField">
             <label className="mdLabel">Source table</label>
@@ -1003,31 +685,10 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
               </SelectContent>
             </Select>
           </div>
-          <div className="mdField">
-            <label className="mdLabel">Chart type</label>
-            <Select value={form.chartType} onValueChange={(v) => handleChange("chartType", v as InsightForm["chartType"])}>
-              <SelectTrigger className="mdSelect">
-                <SelectValue placeholder="Chart type" />
-              </SelectTrigger>
-              <SelectContent position="popper" className="mdSelectContent">
-                <SelectItem value="bar">Bar</SelectItem>
-                <SelectItem value="line">Line</SelectItem>
-                <SelectItem value="pie">Pie</SelectItem>
-                <SelectItem value="table">Table</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <div className="mdGridTwo">
             <div className="mdField">
               <label className="mdLabel">Metric</label>
-              <Select
-                value={form.metricOp}
-                onValueChange={(v) => {
-                  setMetricError(null);
-                  handleChange("metricOp", v as InsightForm["metricOp"]);
-                  if (v === "count") setSelectedMetricField("");
-                }}
-              >
+              <Select value={form.metricOp} onValueChange={(v) => handleChange("metricOp", v as InsightForm["metricOp"])}>
                 <SelectTrigger className="mdSelect">
                   <SelectValue placeholder="Select metric" />
                 </SelectTrigger>
@@ -1035,123 +696,33 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
                   <SelectItem value="count">Count</SelectItem>
                   <SelectItem value="sum">Sum</SelectItem>
                   <SelectItem value="avg">Average</SelectItem>
-                  <SelectItem value="min">Min</SelectItem>
-                  <SelectItem value="max">Max</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {form.metricOp !== "count" && (
-              <div className="mdField">
-                <label className="mdLabel">Metric field</label>
-                <Select
-                  value={selectedMetricField || "__none__"}
-                  onValueChange={(v) => {
-                    const next = v === "__none__" ? "" : v;
-                    setSelectedMetricField(next);
-                    if (["sum", "avg", "min", "max"].includes(form.metricOp) && next) {
-                      const isNumeric = metricFieldOptions.some((opt) => opt.value === next);
-                      setMetricError(isNumeric ? null : "Field must be numeric");
-                    } else {
-                      setMetricError(null);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="mdSelect">
-                    <SelectValue placeholder="Select metric field" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" className="mdSelectContent">
-                    <SelectItem value="__none__">None</SelectItem>
-                    {metricFieldOptions.length === 0 ? (
-                      <SelectItem value="__loading__" disabled>
-                        Loading...
-                      </SelectItem>
-                    ) : (
-                      metricFieldOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                {metricError ? <p className="text-xs text-red-500 mt-1">{metricError}</p> : null}
-              </div>
-            )}
+            <div className="mdField">
+              <label className="mdLabel">Metric field (optional)</label>
+              <Input value={form.metricField} onChange={(e) => handleChange("metricField", e.target.value)} placeholder="total_amount" />
+            </div>
           </div>
           <div className="mdGridTwo">
             <div className="mdField">
               <label className="mdLabel">Group by field (optional)</label>
-              <Select
-                value={selectedGroupField || "__none__"}
-                onValueChange={(v) => setSelectedGroupField(v === "__none__" ? "" : v)}
-              >
+              <Input value={form.groupByField} onChange={(e) => handleChange("groupByField", e.target.value)} placeholder="status" />
+            </div>
+            <div className="mdField">
+              <label className="mdLabel">Time bucket</label>
+              <Select value={form.timeBucket || "day"} onValueChange={(v) => handleChange("timeBucket", v as InsightForm["timeBucket"])}>
                 <SelectTrigger className="mdSelect">
-                  <SelectValue placeholder="Select group field" />
+                  <SelectValue placeholder="Time bucket" />
                 </SelectTrigger>
                 <SelectContent position="popper" className="mdSelectContent">
-                  <SelectItem value="__none__">None</SelectItem>
-                  {groupFieldOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="day">Day</SelectItem>
+                  <SelectItem value="week">Week</SelectItem>
+                  <SelectItem value="month">Month</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {selectedGroupField && (
-              <div className="mdField">
-                <label className="mdLabel">Group by time</label>
-                <Select value={form.timeBucket || "day"} onValueChange={(v) => handleChange("timeBucket", v as InsightForm["timeBucket"])}>
-                  <SelectTrigger className="mdSelect">
-                    <SelectValue placeholder="Time bucket" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" className="mdSelectContent">
-                    <SelectItem value="day">Day</SelectItem>
-                    <SelectItem value="week">Week</SelectItem>
-                    <SelectItem value="month">Month</SelectItem>
-                    <SelectItem value="year">Year</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
-          <div className="mdField" style={{ marginTop: 4 }}>
-            <Button
-              variant="ghost"
-              className="mdGhostBtn"
-              onClick={() =>
-                setShowAdvanced((prev) => {
-                  if (prev) {
-                    setCustomMetricField("");
-                    setCustomGroupField("");
-                  }
-                  return !prev;
-                })
-              }
-            >
-              {showAdvanced ? "Hide advanced options" : "Advanced options (for power users)"}
-            </Button>
-          </div>
-          {showAdvanced && (
-            <div className="mdGridTwo">
-              <div className="mdField">
-                <label className="mdLabel">Metric field (custom)</label>
-                <Input
-                  value={customMetricField}
-                  onChange={(e) => setCustomMetricField(e.target.value)}
-                  placeholder="custom_metric_column"
-                />
-              </div>
-              <div className="mdField">
-                <label className="mdLabel">Group by field (custom)</label>
-                <Input
-                  value={customGroupField}
-                  onChange={(e) => setCustomGroupField(e.target.value)}
-                  placeholder="custom_group_column"
-                />
-              </div>
-            </div>
-          )}
           <div className="mdField">
             <label className="mdLabel">Limit (optional)</label>
             <Input
@@ -1160,10 +731,6 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
               onChange={(e) => handleChange("limit", e.target.value ? Number(e.target.value) : undefined)}
               placeholder="5"
             />
-          </div>
-          <div className="mdField">
-            <p className="mdMainSubtitle">This chart will show:</p>
-            <p className="mdChartTitle" style={{ fontSize: 14 }}>{nlPreview()}</p>
           </div>
         </div>
         <div className="mdModalFooter">
@@ -1174,16 +741,10 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, onSave, saving }
             className="primaryBtn"
             disabled={!canSave}
             onClick={async () => {
-              const metricFieldValue = resolvedMetricField || undefined;
-              const groupFieldValue = resolvedGroupField || undefined;
-              await onSave({
-                ...form,
-                metricField: metricFieldValue,
-                groupByField: groupFieldValue,
-              });
+              await onSave(form);
             }}
           >
-            {saving ? "Saving..." : "Save chart"}
+            {saving ? "Saving..." : "Save insight"}
           </Button>
         </div>
       </div>
@@ -1447,7 +1008,7 @@ const ViewRecordModal = ({
                     : "View entity"}
             </h3>
             {record?._id && (
-              <p className="mdMainSubtitle">ID: {record._id}{record?.created_at ? ` Â· Created ${new Date(record.created_at).toLocaleDateString()}` : ""}</p>
+              <p className="mdMainSubtitle">ID: {record._id}{record?.created_at ? ` · Created ${new Date(record.created_at).toLocaleDateString()}` : ""}</p>
             )}
           </div>
           <Button variant="ghost" className="mdGhostBtn" onClick={onClose}>
@@ -1668,13 +1229,7 @@ export default function ManageDashDetail() {
   const totalTables = mergedTables.length;
   const totalFields = mergedTables.reduce((sum, table) => sum + (table.fields?.length || 0), 0);
   const widgetsLimitReached = effectiveWidgets.length >= 12;
-  const visibleInsights = useMemo(() => {
-    const visible = chartConfigs.filter((i) => !i.hidden);
-    const custom = visible.filter((i) => !i.autoGenerated);
-    const auto = visible.filter((i) => i.autoGenerated);
-    // show all, but keep custom charts first
-    return [...custom, ...auto];
-  }, [chartConfigs]);
+  const visibleInsights = useMemo(() => chartConfigs.filter((i) => !i.hidden).slice(0, 6), [chartConfigs]);
   const totalInsights = useMemo(() => chartConfigs.filter((i) => !i.hidden).length, [chartConfigs]);
 
   const tableOptions = useMemo(
@@ -1897,7 +1452,7 @@ export default function ManageDashDetail() {
             if (base?.first_name || base?.last_name) {
               label = `${base.first_name || ""} ${base.last_name || ""}`.trim();
             } else if (base?.specialty && (base?.first_name || base?.last_name)) {
-              label = `${base.first_name || ""} ${base.last_name || ""} â€“ ${base.specialty}`.trim();
+              label = `${base.first_name || ""} ${base.last_name || ""} – ${base.specialty}`.trim();
             }
             if (!label) {
               const labelKey = labelPreferenceOrder.find((k) => base && k in base);
@@ -2314,14 +1869,12 @@ export default function ManageDashDetail() {
     if (!dashId) return;
     setSavingInsight(true);
     try {
-      const metricField = data.metricField || undefined;
-      const groupField = data.groupByField || undefined;
       const payload = {
         title: data.title,
         chartType: data.chartType,
         sourceTable: data.sourceTable,
-        metric: { op: data.metricOp, field: metricField || null },
-        groupBy: groupField ? { field: groupField, timeBucket: data.timeBucket } : undefined,
+        metric: { op: data.metricOp, field: data.metricField || null },
+        groupBy: data.groupByField ? { field: data.groupByField, timeBucket: data.timeBucket } : undefined,
         limit: data.limit,
       };
       const res = await dashboardApi.createInsight(dashId, payload, { sessionId, userId: currentUser?.id });
@@ -2412,93 +1965,6 @@ export default function ManageDashDetail() {
     });
     return series;
   };
-
-  const summarizeInsight = useCallback(
-    (insight: InsightWidget) => {
-      const sourceTable = insight.sourceTable;
-      const table = mergedTables.find((t) => (t.key || t.id) === sourceTable);
-      const rows = recordsByTable[sourceTable] || (Array.isArray((table as any)?.sampleRows) ? (table as any).sampleRows : []);
-      if (!rows.length) {
-        return { series: [], summary: "No data yet" };
-      }
-      const op = insight.metric?.op || "count";
-      const valueField = insight.metric?.field || "";
-      const groupField = insight.groupBy?.field;
-      const bucket = insight.groupBy?.timeBucket;
-
-      const formatBucket = (val: any) => {
-        const date = val ? new Date(val) : null;
-        if (!date || Number.isNaN(date.getTime())) return "Unknown";
-        const y = date.getFullYear();
-        const m = `${date.getMonth() + 1}`.padStart(2, "0");
-        const d = `${date.getDate()}`.padStart(2, "0");
-        if (bucket === "year") return `${y}`;
-        if (bucket === "month") return `${y}-${m}`;
-        if (bucket === "week") {
-          const oneJan = new Date(date.getFullYear(), 0, 1);
-          const numberOfDays = Math.floor((date.valueOf() - oneJan.valueOf()) / 86400000);
-          const week = Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
-          return `${y}-W${String(week).padStart(2, "0")}`;
-        }
-        return `${y}-${m}-${d}`;
-      };
-
-      const buckets = new Map<string, { total: number; count: number; min?: number; max?: number }>();
-      const pickValue = (row: any, key: string) => {
-        if (!row || !key) return undefined;
-        if (key in row) return row[key];
-        const lower = key.toLowerCase();
-        const match = Object.keys(row).find((k) => k.toLowerCase() === lower);
-        return match ? row[match] : undefined;
-      };
-      rows.forEach((rawRow) => {
-        const row = rawRow && typeof rawRow === "object" && "record" in (rawRow as any) ? (rawRow as any).record : rawRow;
-        let groupKey = "All";
-        if (groupField) {
-          const raw = pickValue(row, groupField);
-          groupKey = bucket ? formatBucket(raw) : raw ?? "Unknown";
-        }
-        let numericValue: number;
-        if (op === "count") {
-          numericValue = 1;
-        } else {
-          const rawVal = pickValue(row, valueField);
-          const num = Number(rawVal);
-          if (rawVal === null || rawVal === undefined || Number.isNaN(num)) return;
-          numericValue = num;
-        }
-        const current = buckets.get(groupKey) || { total: 0, count: 0, min: undefined, max: undefined };
-        current.total += numericValue;
-        current.count += 1;
-        current.min = current.min === undefined ? numericValue : Math.min(current.min, numericValue);
-        current.max = current.max === undefined ? numericValue : Math.max(current.max, numericValue);
-        buckets.set(groupKey, current);
-      });
-
-      const formatNumber = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n);
-
-      const series = Array.from(buckets.entries()).map(([label, stats]) => {
-        let value = 0;
-        if (op === "count") value = stats.total;
-        else if (op === "sum") value = stats.total;
-        else if (op === "avg") value = stats.count ? stats.total / stats.count : 0;
-        else if (op === "min") value = stats.min ?? 0;
-        else if (op === "max") value = stats.max ?? 0;
-        return { label, value };
-      });
-
-      const summary =
-        series.length > 0
-          ? series
-              .slice(0, 3)
-              .map((s) => `${s.label}: ${formatNumber(s.value)}`)
-              .join(" | ")
-          : "No data yet";
-
-      return { series, summary };
-    },
-    [recordsByTable, mergedTables],
-  );
 
   const renderContent = () => {
     if (activeSection === "overview") {
@@ -2595,7 +2061,7 @@ export default function ManageDashDetail() {
                 const result = widgetResultMap[widget.id];
                   const hasData = Boolean(result?.hasData && (result?.value !== null && result?.value !== undefined));
                 const displayValue = formatMetricValue(result?.value, result?.formattedValue as string | undefined);
-                const Icon = pickMetricIcon(widget.title || "", widget.icon as MetricIcon | undefined);
+                const Icon = widget.icon === "money" ? DollarSign : widget.icon === "analytics" ? BarChart2 : pickMetricIcon(widget.title || "");
                   const deletable = widget.source !== "hidden";
                 return (
                   <MetricCard
@@ -2605,7 +2071,6 @@ export default function ManageDashDetail() {
                     value={displayValue as any}
                     description={hasData ? widget.description || "Data available" : "No data yet"}
                     deletable={deletable}
-                    iconKey={widget.icon as MetricIcon | undefined}
                       onDelete={deletable ? () => setConfirmWidgetId(widget.id || widget.widgetKey || "") : null}
                       className={removingWidgetIds.has(widget.id) ? "removing" : ""}
                   />
@@ -2652,57 +2117,43 @@ export default function ManageDashDetail() {
               </div>
             </div>
             <div className="overviewSectionGrid overviewInsightsGrid">
-              {(chartWidgets.length ? chartWidgets : visibleInsights).map((c, idx) => {
+              {(chartWidgets.length ? chartWidgets.slice(0, 6) : visibleInsights).map((c, idx) => {
                 const isWidget = (c as WidgetConfig).type !== undefined;
                 const insight = c as InsightWidget;
-                const result = isWidget ? widgetResultMap[(c as WidgetConfig).id] : null;
-                const insightSummary = !isWidget ? summarizeInsight(insight) : null;
-
-                const chartType: ChartType = isWidget
-                  ? "bar"
+                const chartIcon = isWidget
+                  ? BarChart2
                   : insight.chartType === "line"
-                    ? "line"
+                    ? LineChart
                     : insight.chartType === "pie"
-                      ? "pie"
+                      ? PieChart
                       : insight.chartType === "table"
-                        ? "horizontal-bar"
-                        : "bar";
-
-                const dataset = (() => {
-                  if (isWidget) {
-                    const widget = c as WidgetConfig;
-                    const resultSeries =
-                      result?.series && result.series.length
-                        ? result.series[0].points || []
-                        : (() => {
-                            const built = buildSeriesFromRecords(recordsByTable[widget.sourceTable] || [], widget) || [];
-                            return built[0]?.points || [];
-                          })();
-                    return (resultSeries || [])
-                      .map((p) => ({
-                        label: p.x !== undefined && p.x !== null ? String(p.x) : "Unknown",
-                        value: Number(p.y) || 0,
-                      }))
-                      .filter((d) => Number.isFinite(d.value));
-                  }
-                  return (insightSummary?.series || []).map((s) => ({
-                    label: s.label || "Unknown",
-                    value: Number(s.value) || 0,
-                  }));
-                })();
-
-                const isLoading = isWidget ? result === undefined && !dataset.length : false;
-
+                        ? TableIcon
+                        : BarChart2;
+                const ChartIcon = chartIcon || BarChart2;
+                const result = isWidget ? widgetResultMap[(c as WidgetConfig).id] : null;
+                const hasData = result?.hasData;
                 return (
-                  <ChartCard
-                    key={(c as any).id || idx}
-                    title={(c as any).title || "Chart"}
-                    description={(c as any).description || undefined}
-                    type={chartType}
-                    dataset={dataset}
-                    unit={undefined}
-                    isLoading={isLoading}
-                  />
+                  <div key={(c as any).id || idx} className="mdChartCard">
+                    <div className="mdChartIcon">
+                      {ChartIcon ? <ChartIcon className="w-6 h-6 text-indigo-600" /> : <PieChart className="w-6 h-6 text-indigo-600" />}
+                    </div>
+                    <div>
+                      <p className="mdChartTitle">{(c as any).title || "Chart"}</p>
+                      {isWidget ? renderChart(c as WidgetConfig) : <p className="mdChartSubtitle">{insight.description || "No data yet"}</p>}
+                    </div>
+                    {dashId && !insight.id.startsWith("placeholder") && (
+                      <div className="mdChartActions">
+                        <button
+                          type="button"
+                          className="insightCloseBtn"
+                          onClick={() => setConfirmInsight(insight)}
+                          aria-label="Remove insight"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -3011,7 +2462,6 @@ export default function ManageDashDetail() {
         open={isAddInsightOpen}
         onClose={() => setIsAddInsightOpen(false)}
         tables={mergedTables as DashboardTable[]}
-        tableSchemas={tableSchemas}
         onSave={handleSaveInsight}
         saving={savingInsight}
       />
@@ -3079,9 +2529,6 @@ export default function ManageDashDetail() {
     </div>
   );
 }
-
-
-
 
 
 

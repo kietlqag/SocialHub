@@ -734,20 +734,58 @@ export async function addManualWidget(dashboardId, { sessionId, userId }, payloa
   if (!tableKeys.has(payload.tableKey)) {
     throw new HttpError(400, "Invalid tableKey");
   }
-  if (!["sum", "avg"].includes(payload.aggregation)) {
+  const metricType = payload.metricType || payload.aggregation;
+  const aggregationMap = {
+    sum: "sum",
+    average: "avg",
+    avg: "avg",
+    min: "min",
+    max: "max",
+    count: "count",
+    sum_conditional: "sum",
+    average_conditional: "avg",
+    count_conditional: "count",
+  };
+  const aggregation = aggregationMap[metricType] || payload.aggregation;
+  const allowedAggregations = ["sum", "avg", "min", "max", "count"];
+  if (!allowedAggregations.includes(aggregation)) {
     throw new HttpError(400, "Invalid aggregation");
+  }
+  let filter = undefined;
+  if (payload.condition && payload.condition.field && payload.condition.operator && payload.condition.value !== undefined) {
+    const { field, operator, value, value2 } = payload.condition;
+    const fieldKey = `record.${field}`;
+    if (operator === "between" && value2 !== undefined) {
+      filter = { [field]: { $gte: value, $lte: value2 } };
+    } else {
+      const opMap = {
+        gt: "$gt",
+        gte: "$gte",
+        lt: "$lt",
+        lte: "$lte",
+        eq: "$eq",
+        ne: "$ne",
+        contains: "$regex",
+      };
+      const mongoOp = opMap[operator] || "$eq";
+      filter =
+        operator === "contains"
+          ? { [field]: { [mongoOp]: value, $options: "i" } }
+          : { [field]: { [mongoOp]: value } };
+    }
   }
   const newWidget = {
     id: randomUUID(),
     title: payload.title?.toString().slice(0, 120) || "Metric",
     type: "metric",
     sourceTable: payload.tableKey,
-    aggregate: payload.aggregation,
+    aggregate: aggregation,
+    metricType: metricType,
     valueField: payload.columnKey,
     description: payload.title?.toString().slice(0, 160) || "",
     icon: payload.icon?.toString().slice(0, 40) || undefined,
     source: "manual",
-    filter: payload.filter && typeof payload.filter === "object" ? payload.filter : undefined,
+    filter: filter || (payload.filter && typeof payload.filter === "object" ? payload.filter : undefined),
   };
   const existingManual = Array.isArray(dashboard.widgets) ? dashboard.widgets.filter((w) => w?.source === "manual") : [];
   const nextWidgets = [...existingManual, newWidget].slice(0, 12);
