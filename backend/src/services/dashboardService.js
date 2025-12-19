@@ -6,6 +6,9 @@ import {
   listDashboardsForOwner,
   deleteDashboardForOwner,
   updateDashboardForOwner,
+  findDashboardForOwner,
+  findDashboardById,
+  updateDashboardById,
 } from "../repositories/dashboardRepository.js";
 import {
   insertTables,
@@ -21,6 +24,7 @@ import {
   insertRecord as insertDashboardRecord,
   listRecordsByDashboard,
 } from "../repositories/dashboardRecordRepository.js";
+import { upsertHideOverride, listOverridesByDashboard } from "../repositories/dashboardWidgetOverrideRepository.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -486,67 +490,10 @@ const nameIncludesAny = (value = "", tokens = []) => {
   return tokens.some((t) => lower.includes(t));
 };
 
-const measureNameHints = ["amount", "total", "revenue", "cost", "price", "paid", "billed", "charge", "value", "qty", "quantity"];
-const statusNameHints = ["status", "state", "stage", "phase", "payment", "shipping"];
-const groupNameHints = ["department", "category", "type", "segment", "class", "group", "owner", "assigned", "doctor", "product", "service"];
-const timeNameHints = ["date", "time", "at", "timestamp"];
-const factTableHints = ["order", "invoice", "billing", "payment", "transaction", "appointment", "admission", "visit", "case", "record", "event", "activity", "sale"];
-const entityTableHints = ["patient", "customer", "user", "doctor", "product", "staff", "employee"];
+const buildWidgetKey = (dashboardId, tableKey, valueField, aggregate) =>
+  `${dashboardId || "dash"}:${tableKey || "table"}:${valueField || "value"}:${aggregate || "metric"}`;
 
-const isMeasureField = (field) =>
-  field.semanticRole === "transaction_value" ||
-  field.semanticRole === "measure" ||
-  field.semanticType === "money" ||
-  field.semanticType === "quantity" ||
-  nameIncludesAny(field.key || field.name || "", measureNameHints);
-
-const isTimeField = (field) =>
-  field.semanticRole === "time_dimension" ||
-  field.semanticType === "timestamp" ||
-  nameIncludesAny(field.key || field.name || "", timeNameHints);
-
-const isStatusField = (field) =>
-  field.semanticRole === "state" ||
-  field.semanticType === "status" ||
-  nameIncludesAny(field.key || field.name || "", statusNameHints);
-
-const isGroupField = (field) =>
-  field.semanticRole === "group_dimension" ||
-  field.semanticType === "category" ||
-  nameIncludesAny(field.key || field.name || "", groupNameHints);
-
-const looksLikeFactTable = (tableName = "") =>
-  nameIncludesAny(tableName, factTableHints);
-
-const looksLikeEntityTable = (tableName = "") =>
-  nameIncludesAny(tableName, entityTableHints);
-
-const findFactTables = (tables = []) =>
-  tables
-    .map((table) => {
-      const fields = Array.isArray(table.fields) ? table.fields : [];
-      const measures = fields.filter(isMeasureField);
-      const timeFields = fields.filter(isTimeField);
-      const groupFields = fields.filter(isGroupField);
-      const statusFields = fields.filter(isStatusField);
-      const nameLooksFact = looksLikeFactTable(table.name || table.key || "");
-      // If name hints fact but measures/time missing, try to guess:
-      const numericFields = fields.filter((f) => ["number", "integer", "float", "currency"].includes((f.type || "").toLowerCase()));
-      const guessedMeasure = !measures.length && numericFields.length ? [numericFields[0]] : measures;
-      const guessedTime =
-        !timeFields.length && fields.length
-          ? fields.filter((f) => nameIncludesAny(f.key || f.name || "", ["date", "created", "updated", "time"]))
-          : timeFields;
-      if ((guessedMeasure.length && guessedTime.length) || nameLooksFact) {
-        return { table, measures: guessedMeasure.length ? guessedMeasure : measures, timeFields: guessedTime.length ? guessedTime : timeFields, groupFields, statusFields };
-      }
-      return null;
-    })
-    .filter(Boolean);
-
-const pickFirst = (arr = []) => (Array.isArray(arr) && arr.length ? arr[0] : undefined);
-
-const generateOverviewWidgetsFromSchema = (dashboardDescription = "", tables = []) => {
+const generateOverviewWidgetsFromSchema = (dashboardDescription = "", tables = [], dashboardId = "") => {
   const widgets = [];
   const usedIds = new Set();
   const makeId = (candidate) => {
@@ -561,128 +508,140 @@ const generateOverviewWidgetsFromSchema = (dashboardDescription = "", tables = [
     return id;
   };
 
-  const facts = findFactTables(tables);
+  const numericTypeHints = ["number", "integer", "int", "float", "double", "decimal", "currency", "money", "amount", "numeric"];
+  const monetaryHints = ["price", "amount", "cost", "total", "revenue", "income", "payment", "bill", "fee", "salary"];
+  const quantityHints = ["qty", "quantity", "stock", "inventory", "units", "items", "orders"];
+  const timeHints = ["duration", "time_spent", "waiting_time", "processing_time"];
+  const statusTokens = ["pending", "completed", "cancelled", "overdue", "low_stock"];
+  const descriptionWantsAvg = dashboardDescription.toLowerCase().includes("average") || dashboardDescription.toLowerCase().includes("avg");
 
-  if (facts.length === 0) {
-    // fallback: minimal counts for up to 2 key entity tables
-    tables
-      .filter((t) => looksLikeEntityTable(t.name || t.key || ""))
-      .slice(0, 2)
-      .forEach((table) => {
-        widgets.push({
-          id: makeId(`${table.key}-count`),
-          title: `${table.name || table.key} total`,
-          type: "metric",
-          sourceTable: table.key,
-          aggregate: "count",
-          description: `Total records in ${table.name || table.key}`,
+  const prettify = (value = "") =>
+    value
+      .toString()
+      .replace(/_/g, " ")
+      .replace(/-/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const isNumericField = (field, tableSampleRows = []) => {
+    const type = (field.type || field.fieldType || "").toString().toLowerCase();
+    if (numericTypeHints.includes(type)) return true;
+    const key = field.key || field.name || field.fieldName;
+    if (!key) return false;
+    return tableSampleRows.some((row) => typeof row?.[key] === "number" && Number.isFinite(row[key]));
+  };
+
+  const scoreField = (name = "") => {
+    const lower = name.toLowerCase();
+    let score = 0;
+    if (monetaryHints.some((h) => lower.includes(h))) score += 3;
+    if (quantityHints.some((h) => lower.includes(h))) score += 2;
+    if (timeHints.some((h) => lower.includes(h))) score += 1;
+    return score;
+  };
+
+  const selectMetrics = [];
+
+  tables.forEach((table) => {
+    const fields = Array.isArray(table.fields) ? table.fields : [];
+    const sampleRows = Array.isArray((table || {}).sampleRows) ? table.sampleRows : [];
+    const tableKey = table.key || table.id || (table.name ? slugify(table.name) : `table-${selectMetrics.length + 1}`);
+
+    fields.forEach((field) => {
+      const fieldKey = field.key || field.name || field.fieldName;
+      if (!fieldKey) return;
+      if (!isNumericField(field, sampleRows)) return;
+      const score = scoreField(fieldKey);
+      if (score <= 0) return;
+
+      const isMonetary = monetaryHints.some((h) => fieldKey.toLowerCase().includes(h));
+      const isQuantity = quantityHints.some((h) => fieldKey.toLowerCase().includes(h));
+      const isTime = timeHints.some((h) => fieldKey.toLowerCase().includes(h));
+
+      // Always prefer sum for monetary/quantity/time totals
+      selectMetrics.push({
+        key: `${tableKey}-${fieldKey}-sum`,
+        widgetKey: `${dashboardId || "dash"}:${tableKey}:${fieldKey}:sum`,
+        label: `Total ${prettify(fieldKey)}`,
+        table: tableKey,
+        type: "sum",
+        field: fieldKey,
+        priority: isMonetary ? 3 : isQuantity ? 2 : isTime ? 1 : 0,
+        description: `Sum of ${prettify(fieldKey)}`,
+      });
+
+      // Avg only when description asks or field suggests it (duration/time/avg naming)
+      const wantsAvg =
+        descriptionWantsAvg ||
+        isTime ||
+        fieldKey.toLowerCase().includes("avg") ||
+        fieldKey.toLowerCase().includes("average");
+      if (wantsAvg) {
+        selectMetrics.push({
+        key: `${tableKey}-${fieldKey}-avg`,
+        widgetKey: `${dashboardId || "dash"}:${tableKey}:${fieldKey}:avg`,
+        label: `Average ${prettify(fieldKey)}`,
+        table: tableKey,
+        type: "avg",
+        field: fieldKey,
+        priority: isMonetary ? 2 : isQuantity ? 1 : isTime ? 2 : 0,
+          description: `Average of ${prettify(fieldKey)}`,
         });
-      });
-    if (!widgets.length && tables.length) {
-      const table = tables[0];
-      widgets.push({
-        id: makeId(`${table.key}-count`),
-        title: `${table.name || table.key} total`,
-        type: "metric",
-        sourceTable: table.key,
-        aggregate: "count",
-        description: `Total records in ${table.name || table.key}`,
-      });
-    }
-    return widgets;
-  }
-
-  facts.forEach(({ table, measures, timeFields, groupFields, statusFields }) => {
-    const timeField = pickFirst(timeFields);
-    const mainMeasure = pickFirst(measures);
-    const groupField = pickFirst(groupFields);
-
-    // Total measure (if any measure found)
-    if (mainMeasure) {
-      widgets.push({
-        id: makeId(`${table.key}-${mainMeasure.key}-total`),
-        title: `Total ${mainMeasure.key.replace(/_/g, " ")}`,
-        type: "metric",
-        sourceTable: table.key,
-        aggregate: "sum",
-        valueField: mainMeasure.key,
-        dateField: timeField?.key,
-        description: `Sum of ${mainMeasure.key} in ${table.name || table.key}`,
-      });
-    }
-
-    // Count of rows (only one per fact table)
-    widgets.push({
-      id: makeId(`${table.key}-total-count`),
-      title: `Total ${table.name || table.key}`,
-      type: "metric",
-      sourceTable: table.key,
-      aggregate: "count",
-      dateField: timeField?.key,
-      description: `Total ${table.name || table.key}`,
+      }
     });
 
-    // Status-specific counts (max 2 per table)
-    if (statusFields.length) {
-      statusFields.slice(0, 1).forEach((statusField) => {
-        const enumVals = Array.isArray(statusField.enumValues) ? statusField.enumValues.slice(0, 2) : [];
-        enumVals.forEach((stateValue, idx) => {
-          widgets.push({
-            id: makeId(`${table.key}-${statusField.key}-state-${idx + 1}`),
-            title: `${stateValue} ${table.name || table.key}`,
-            type: "metric",
-            sourceTable: table.key,
-            aggregate: "count",
-            dateField: timeField?.key,
-            filter: { [statusField.key]: stateValue },
-            description: `Count where ${statusField.key} = ${stateValue}`,
+    // Status-based conditional counts (allowed)
+    fields
+      .filter((f) => Array.isArray(f.enumValues) && f.enumValues.length)
+      .forEach((f) => {
+        const statuses = f.enumValues.filter((v) => statusTokens.some((t) => v.toLowerCase().includes(t))).slice(0, 2);
+        statuses.forEach((stateVal, idx) => {
+          selectMetrics.push({
+            key: `${tableKey}-${f.key || f.name || "status"}-${idx}-count`,
+            label: `${prettify(stateVal)} ${prettify(table.name || tableKey)}`,
+            table: tableKey,
+            type: "count_conditional",
+            field: f.key || f.name || f.fieldName,
+            filter: { [f.key || f.name || f.fieldName]: stateVal },
+            priority: 1,
+            description: `Count where ${prettify(f.key || f.name || "status")} = ${prettify(stateVal)}`,
           });
         });
       });
-    }
+  });
 
-    // Time series (measure sum if measure, else count)
-    widgets.push({
-      id: makeId(`${table.key}-over-time`),
-      title: mainMeasure ? `${mainMeasure.key.replace(/_/g, " ")} over time` : `${table.name || table.key} over time`,
-      type: "chart",
-      sourceTable: table.key,
-      aggregate: mainMeasure ? "sum" : "count",
-      valueField: mainMeasure ? mainMeasure.key : undefined,
-      groupByField: timeField?.key,
-      dateField: timeField?.key,
-      description: `Trend over time`,
-    });
+  // Prioritize and cap to 8 widgets to keep overview clean
+  const sorted = selectMetrics
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 8);
 
-    // Categorical breakdown
-    if (groupField) {
+  sorted.forEach((metric) => {
+    if (metric.type === "count_conditional") {
       widgets.push({
-        id: makeId(`${table.key}-by-${groupField.key}`),
-        title: `${table.name || table.key} by ${groupField.key}`,
-        type: "chart",
-        sourceTable: table.key,
-        aggregate: mainMeasure ? "sum" : "count",
-        valueField: mainMeasure ? mainMeasure.key : undefined,
-        groupByField: groupField.key,
-        dateField: timeField?.key,
-        description: `Breakdown by ${groupField.key}`,
+        id: metric.widgetKey || makeId(metric.key),
+        title: metric.label,
+        type: "metric",
+        sourceTable: metric.table,
+        aggregate: "count",
+        valueField: metric.field,
+        filter: metric.filter,
+        description: metric.description,
+        widgetKey: metric.widgetKey || metric.key,
+        source: "auto",
       });
-
-      // Top-N style (no limit field in WidgetConfig; aggregation can later add it)
-      if (mainMeasure) {
-        widgets.push({
-          id: makeId(`${table.key}-top-${groupField.key}`),
-          title: `Top ${groupField.key} by ${mainMeasure.key}`,
-          type: "chart",
-          sourceTable: table.key,
-          aggregate: "sum",
-          valueField: mainMeasure.key,
-          groupByField: groupField.key,
-          dateField: timeField?.key,
-          description: `Top ${groupField.key} by ${mainMeasure.key}`,
-        });
-      }
+      return;
     }
+    widgets.push({
+      id: metric.widgetKey || makeId(metric.key),
+      title: metric.label,
+      type: "metric",
+      sourceTable: metric.table,
+      aggregate: metric.type === "avg" ? "avg" : "sum",
+      valueField: metric.field,
+      description: metric.description,
+      widgetKey: metric.widgetKey || metric.key,
+      source: "auto",
+    });
   });
 
   return widgets;
@@ -690,18 +649,132 @@ const generateOverviewWidgetsFromSchema = (dashboardDescription = "", tables = [
 
 const needsWidgetRegeneration = (widgets = [], tables = []) => {
   if (!Array.isArray(widgets) || widgets.length === 0) return true;
-  // Detect legacy naive widgets: mostly metric count per table
-  const countMetrics = widgets.filter((w) => w?.type === "metric" && (w?.aggregate === "count" || !w?.aggregate));
-  const allCountLike = countMetrics.length === widgets.length && widgets.length >= tables.length * 0.6;
-  const titlesAreCount = widgets.every((w) => typeof w.title === "string" && w.title.toLowerCase().includes("count"));
-  const descCount =
-    widgets.every(
-      (w) =>
-        typeof w.description === "string" &&
-        (w.description.toLowerCase().includes("total records") || w.description.toLowerCase().includes("count")),
-    );
-  return allCountLike && (titlesAreCount || descCount);
+  // Regenerate if legacy count widgets dominate or any metric is not sum/avg/count_conditional with a valueField
+  const invalidMetrics = widgets.some(
+    (w) =>
+      w?.type === "metric" &&
+      !(
+        (["sum", "avg", "count"].includes(w?.aggregate) && w?.valueField) ||
+        (w?.aggregate === "count" && w?.filter)
+      ),
+  );
+  if (invalidMetrics) return true;
+  const countMetrics = widgets.filter((w) => w?.type === "metric" && w?.aggregate === "count");
+  const allCountLike = countMetrics.length === widgets.length && widgets.length >= Math.max(1, tables.length);
+  return allCountLike;
 };
+
+export async function listDashboardWidgets(dashboardId, { sessionId, userId }) {
+  try {
+    const owner = { sessionId, userId };
+    let dashboard = await findDashboardForOwner(dashboardId, owner);
+    if (!dashboard) {
+      dashboard = await findDashboardById(dashboardId);
+    }
+    if (!dashboard) return [];
+    const tables = await listTablesByDashboard(dashboardId);
+    const overrides = await listOverridesByDashboard(dashboardId);
+    const hiddenKeys = new Set(
+      overrides.filter((o) => o.hidden && o.widgetKey).map((o) => o.widgetKey),
+    );
+    const autoWidgets = generateOverviewWidgetsFromSchema(dashboard.description || dashboard.name || "", tables, dashboardId).filter(
+      (w) => !hiddenKeys.has(w.widgetKey),
+    );
+    const stored = Array.isArray(dashboard.widgets) ? dashboard.widgets : [];
+    const manualWidgets = stored
+      .filter((w) => w?.source === "manual" && !w?.hidden)
+      .map((w) => ({
+        ...w,
+        widgetKey: w.widgetKey || buildWidgetKey(dashboardId, w.sourceTable, w.valueField, w.aggregate || "sum"),
+      }));
+    const manualKeys = new Set(manualWidgets.map((w) => w.widgetKey || w.id || w.title));
+    const autoVisible = autoWidgets.filter((w) => !manualKeys.has(w.widgetKey));
+    return [...autoVisible, ...manualWidgets].slice(0, 12);
+  } catch (err) {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const logPath = path.resolve(process.cwd(), "widget-error.log");
+      fs.appendFileSync(logPath, `${new Date().toISOString()} listDashboardWidgets ${dashboardId}: ${err?.stack || err}\n`);
+    } catch (_) {
+      // ignore logging errors
+    }
+    console.error("listDashboardWidgets error", err);
+    throw err;
+  }
+}
+
+export async function addManualWidget(dashboardId, { sessionId, userId }, payload) {
+  const owner = { sessionId, userId };
+  let dashboard = await findDashboardForOwner(dashboardId, owner);
+  if (!dashboard) {
+    dashboard = await findDashboardById(dashboardId);
+  }
+  if (!dashboard) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+  const tables = await listTablesByDashboard(dashboardId);
+  const tableKeys = new Set(tables.map((t) => t.key || t.id));
+  if (!tableKeys.has(payload.tableKey)) {
+    throw new HttpError(400, "Invalid tableKey");
+  }
+  if (!["sum", "avg"].includes(payload.aggregation)) {
+    throw new HttpError(400, "Invalid aggregation");
+  }
+  const newWidget = {
+    id: randomUUID(),
+    title: payload.title?.toString().slice(0, 120) || "Metric",
+    type: "metric",
+    sourceTable: payload.tableKey,
+    aggregate: payload.aggregation,
+    valueField: payload.columnKey,
+    description: payload.title?.toString().slice(0, 160) || "",
+    icon: payload.icon?.toString().slice(0, 40) || undefined,
+    source: "manual",
+    filter: payload.filter && typeof payload.filter === "object" ? payload.filter : undefined,
+  };
+  const existingManual = Array.isArray(dashboard.widgets) ? dashboard.widgets.filter((w) => w?.source === "manual") : [];
+  const nextWidgets = [...existingManual, newWidget].slice(0, 12);
+  const updated = await updateDashboardForOwner(dashboardId, owner, { widgets: nextWidgets });
+  if (!updated) {
+    throw new HttpError(500, "Failed to save widget");
+  }
+  return newWidget;
+}
+
+export async function removeWidget(dashboardId, { sessionId, userId }, widgetId) {
+  const owner = { sessionId, userId };
+  let dashboard = await findDashboardForOwner(dashboardId, owner);
+  if (!dashboard) {
+    dashboard = await findDashboardById(dashboardId);
+  }
+  if (!dashboard) throw new HttpError(404, "Dashboard not found");
+  const tables = await listTablesByDashboard(dashboardId);
+  const autoGenerated = generateOverviewWidgetsFromSchema(dashboard.description || dashboard.name || "", tables);
+  const stored = Array.isArray(dashboard.widgets) ? dashboard.widgets : [];
+  const manual = stored.filter((w) => w?.source === "manual");
+  const existsManual = manual.some((w) => w.id === widgetId);
+  if (existsManual) {
+    const next = stored.filter((w) => w.id !== widgetId);
+    const updated =
+      (await updateDashboardForOwner(dashboardId, owner, { widgets: next })) ||
+      (await updateDashboardById(dashboardId, { widgets: next }));
+    if (!updated) throw new HttpError(500, "Failed to remove widget");
+    return { success: true };
+  }
+  const alreadyHidden = stored.some(
+    (w) =>
+      (w.id === widgetId || (w.title && autoGenerated.find((aw) => aw.title === w.title && aw.id === widgetId))) &&
+      w.hidden,
+  );
+  if (alreadyHidden) return { success: true };
+  const targetAuto =
+    autoGenerated.find((w) => w.id === widgetId || w.widgetKey === widgetId) ||
+    autoGenerated.find((w) => w.title === widgetId);
+  const widgetKey = targetAuto?.widgetKey || widgetId;
+  await upsertHideOverride(dashboardId, widgetKey);
+  return { success: true };
+}
 
 const slugify = (value = "") =>
   value
@@ -1326,15 +1399,24 @@ export async function listDashboards({ sessionId, userId }) {
         emptyStateText: "No records yet. Click Add record to start.",
       };
       const insights = dash.insights || [];
-      let widgets =
-        dash.widgets && dash.widgets.length
-          ? dash.widgets
-          : ui.widgets && ui.widgets.length
-            ? ui.widgets
-            : generateOverviewWidgetsFromSchema(dash.description || dash.name || "", tables);
-      if (needsWidgetRegeneration(widgets, tables)) {
-        widgets = generateOverviewWidgetsFromSchema(dash.description || dash.name || "", tables);
+      const manual = Array.isArray(dash.widgets) ? dash.widgets.filter((w) => w?.source === "manual") : [];
+      const overrides = await listOverridesByDashboard(dash.id);
+      const hiddenKeys = new Set(overrides.filter((o) => o.hidden && o.widgetKey).map((o) => o.widgetKey));
+      let autoWidgets = generateOverviewWidgetsFromSchema(dash.description || dash.name || "", tables, dash.id).filter(
+        (w) => !hiddenKeys.has(w.widgetKey),
+      );
+      if (needsWidgetRegeneration(autoWidgets, tables)) {
+        autoWidgets = generateOverviewWidgetsFromSchema(dash.description || dash.name || "", tables, dash.id).filter(
+          (w) => !hiddenKeys.has(w.widgetKey),
+        );
       }
+      const manualWidgets = manual.map((w) => ({
+        ...w,
+        widgetKey: w.widgetKey || buildWidgetKey(dash.id, w.sourceTable, w.valueField, w.aggregate || "sum"),
+      }));
+      const manualKeys = new Set(manualWidgets.map((w) => w.widgetKey || w.id || w.title));
+      const autoVisible = autoWidgets.filter((w) => !manualKeys.has(w.widgetKey));
+      const widgets = [...autoVisible, ...manualWidgets].slice(0, 12);
       return { ...dash, tables, relationships, insights, ui: { ...ui, widgets }, widgets };
     }),
   );

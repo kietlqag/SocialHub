@@ -332,89 +332,14 @@ export default function ManageDashList() {
         ) : (
           <>
             <section className="dashboard-section">
-              <div className="dashboard-section-header">
+              <div className="dashboard-section-header outer">
                 <Clock className="w-5 h-5 text-slate-500" />
                 <h3 className="text-xl font-semibold text-slate-900">Recently viewed</h3>
               </div>
-              {hasDashboards ? (
-                <div className="dashboard-grid">
-                  {recentlyViewed.map((dashboard) => (
-                    <DashboardCard
-                      key={dashboard.id}
-                      id={dashboard.id}
-                      title={dashboard.displayTitle}
-                      typeLabel={dashboard.domainLabel}
-                      overviewCount={dashboard.overviewCount}
-                      insightCount={dashboard.insightsCount}
-                      tableCount={dashboard.tableCount}
-                      status={dashboard.statusLabel}
-                      isFavorite={favoriteIds.has(dashboard.id)}
-                      variant="recent"
-                      icon={dashboard.iconPreset}
-                      lastViewed={dashboard.lastViewedLabel}
-                      onOpen={openDashboard}
-                      onToggleFavorite={toggleFavorite}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="dashboard-empty">No dashboards viewed yet — start by generating one.</div>
-              )}
-            </section>
-
-            <section className="dashboard-section">
-              <div className="dashboard-section-header">
-                <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                <h3 className="text-xl font-semibold text-slate-900">Favorite dashboards</h3>
-              </div>
-              {favoriteDashboards.length ? (
-                <div className="dashboard-grid">
-                  {favoriteDashboards.map((dashboard) => (
-                    <DashboardCard
-                      key={dashboard.id}
-                      id={dashboard.id}
-                      title={dashboard.displayTitle}
-                      typeLabel={dashboard.domainLabel}
-                      overviewCount={dashboard.overviewCount}
-                      insightCount={dashboard.insightsCount}
-                      tableCount={dashboard.tableCount}
-                      status={dashboard.statusLabel}
-                      isFavorite={favoriteIds.has(dashboard.id)}
-                      variant="favorite"
-                      icon={dashboard.iconPreset}
-                      lastViewed={dashboard.lastViewedLabel}
-                      onOpen={openDashboard}
-                      onToggleFavorite={toggleFavorite}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="dashboard-empty">Mark dashboards as favorites to see them highlighted here.</div>
-              )}
-            </section>
-
-            <section className="dashboard-section">
-              <div className="dashboard-section-header">
-                <div className="flex items-center gap-2">
-                  <LayoutDashboard className="w-5 h-5 text-slate-500" />
-                  <h3 className="text-xl font-semibold text-slate-900">All dashboards</h3>
-                </div>
-              </div>
-              <div className="dashboard-controls below">
-                <div className="dashboard-search inline-flex items-center gap-2">
-                  <Search className="dashboard-search__icon" />
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search dashboards"
-                    className="pl-10 pr-4 mdash-search-input"
-                  />
-                </div>
-              </div>
-              {hasDashboards ? (
-                filteredDashboards.length ? (
+              <div className="dashboard-section-frame">
+                {hasDashboards ? (
                   <div className="dashboard-grid">
-                    {filteredDashboards.map((dashboard) => (
+                    {recentlyViewed.map((dashboard) => (
                       <DashboardCard
                         key={dashboard.id}
                         id={dashboard.id}
@@ -425,6 +350,7 @@ export default function ManageDashList() {
                         tableCount={dashboard.tableCount}
                         status={dashboard.statusLabel}
                         isFavorite={favoriteIds.has(dashboard.id)}
+                        variant="recent"
                         icon={dashboard.iconPreset}
                         lastViewed={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
@@ -433,13 +359,93 @@ export default function ManageDashList() {
                     ))}
                   </div>
                 ) : (
-                  <div className="dashboard-empty">
-                    No dashboards found for "{searchQuery}". Try a different term.
+                  <div className="dashboard-empty">No dashboards viewed yet – start by generating one.</div>
+                )}
+              </div>
+            </section>
+
+            <section className="dashboard-section">
+              <div className="dashboard-section-header outer">
+                <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                <h3 className="text-xl font-semibold text-slate-900">Favorite dashboards</h3>
+              </div>
+              <div className="dashboard-section-frame">
+                {favoriteDashboards.length ? (
+                  <div className="dashboard-grid">
+                    {favoriteDashboards.map((dashboard) => (
+                      <DashboardCard
+                        key={dashboard.id}
+                        id={dashboard.id}
+                        title={dashboard.displayTitle}
+                        typeLabel={dashboard.domainLabel}
+                        overviewCount={dashboard.overviewCount}
+                        insightCount={dashboard.insightsCount}
+                        tableCount={dashboard.tableCount}
+                        status={dashboard.statusLabel}
+                        isFavorite={favoriteIds.has(dashboard.id)}
+                        variant="favorite"
+                        icon={dashboard.iconPreset}
+                        lastViewed={dashboard.lastViewedLabel}
+                        onOpen={openDashboard}
+                        onToggleFavorite={toggleFavorite}
+                      />
+                    ))}
                   </div>
-                )
-              ) : (
-                <div className="dashboard-empty">Create your first dashboard to populate this list.</div>
-              )}
+                ) : (
+                  <div className="dashboard-empty">Mark dashboards as favorites to see them highlighted here.</div>
+                )}
+              </div>
+            </section>
+
+            <section className="dashboard-section">
+              <div className="dashboard-section-header outer between">
+                <div className="flex items-center gap-2">
+                  <LayoutDashboard className="w-5 h-5 text-slate-500" />
+                  <h3 className="text-xl font-semibold text-slate-900">All dashboards</h3>
+                </div>
+                <div className="dashboard-controls below inline">
+                  <div className="dashboard-search inline-flex items-center gap-2">
+                    <Search className="dashboard-search__icon" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search dashboards"
+                      className="pl-10 pr-4 mdash-search-input"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="dashboard-section-frame">
+                {hasDashboards ? (
+                  filteredDashboards.length ? (
+                    <div className="dashboard-grid">
+                      {filteredDashboards.map((dashboard) => (
+                        <DashboardCard
+                          key={dashboard.id}
+                          id={dashboard.id}
+                          title={dashboard.displayTitle}
+                          typeLabel={dashboard.domainLabel}
+                          overviewCount={dashboard.overviewCount}
+                          insightCount={dashboard.insightsCount}
+                          tableCount={dashboard.tableCount}
+                          status={dashboard.statusLabel}
+                          isFavorite={favoriteIds.has(dashboard.id)}
+                          icon={dashboard.iconPreset}
+                          lastViewed={dashboard.lastViewedLabel}
+                          onOpen={openDashboard}
+                          onToggleFavorite={toggleFavorite}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="dashboard-empty">
+                      No dashboards found for "{searchQuery}". Try a different term.
+                    </div>
+                  )
+                ) : (
+                  <div className="dashboard-empty">Create your first dashboard to populate this list.</div>
+                )}
+              </div>
             </section>
           </>
         )}

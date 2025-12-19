@@ -10,6 +10,7 @@ export interface WidgetConfig {
   title: string;
   type: WidgetType;
   sourceTable: string;
+  widgetKey?: string;
   valueField?: string;
   aggregate?: "sum" | "count" | "avg" | "min" | "max";
   groupByField?: string;
@@ -18,6 +19,9 @@ export interface WidgetConfig {
   filter?: Record<string, any>;
   description?: string;
   icon?: string;
+  source?: "auto" | "manual";
+  hidden?: boolean;
+  hiddenAt?: string;
 }
 
 export interface ChartPoint {
@@ -31,6 +35,7 @@ export interface WidgetResult {
   hasData: boolean;
   error?: string;
   value?: number;
+  formattedValue?: string | null;
   series?: Array<{ name: string; points: ChartPoint[] }>;
   rows?: Record<string, any>[];
 }

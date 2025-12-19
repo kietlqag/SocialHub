@@ -23,6 +23,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardTable } from "../services/dashboards";
 import type { WidgetConfig, WidgetResult } from "../../shared/types/dashboard";
+import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
   ResponsiveContainer as ReResponsiveContainer,
   LineChart as ReLineChart,
@@ -64,6 +65,9 @@ type MetricCardProps = {
   title: string;
   value?: string | number;
   description?: string;
+  onDelete?: (() => void) | null;
+  deletable?: boolean;
+  className?: string;
 };
 
 type NormalizedField = {
@@ -76,6 +80,18 @@ type NormalizedField = {
   isReference?: boolean;
   referenceTableKey?: string | null;
   original: any;
+};
+
+type MetricAggregation = "sum" | "avg";
+
+type MetricIcon = "money" | "analytics";
+
+type AddWidgetFormState = {
+  tableKey: string;
+  columnKey: string;
+  aggregation: MetricAggregation;
+  title: string;
+  icon: MetricIcon;
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -97,6 +113,18 @@ const getVisibleFields = (fields: any[] = []) =>
     const key = (f.key || f.fieldName || f.name || "").toString().toLowerCase();
     return key && key !== "_id" && key !== "created_at" && key !== "updated_at";
   });
+
+const formatMetricValue = (value: number | null | undefined, formatted?: string | null) => {
+  if (value === null || value === undefined) return "No data yet";
+  if (typeof formatted === "string" && formatted.length) return formatted;
+  return Number.isFinite(value) ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value) : "No data yet";
+};
+
+const pickMetricIcon = (title: string) => {
+  const lower = title.toLowerCase();
+  const moneyHints = ["revenue", "amount", "price", "cost", "payment", "billing", "bill", "invoice", "sale", "sales"];
+  return moneyHints.some((hint) => lower.includes(hint)) ? DollarSign : BarChart2;
+};
 
 const normalizeFields = (fields: any[] = []): NormalizedField[] =>
   fields
@@ -179,8 +207,21 @@ const buildRecordPayload = (fields: NormalizedField[], values: Record<string, an
   return payload;
 };
 
-const MetricCard = ({ icon: Icon, title, value = "No data", description = "No data" }: MetricCardProps) => (
-  <div className="kpiCard">
+const MetricCard = ({
+  icon: Icon,
+  title,
+  value = "No data",
+  description = "No data",
+  onDelete,
+  deletable,
+  className = "",
+}: MetricCardProps) => (
+  <div className={`kpiCard relative ${className}`}>
+    {deletable && onDelete && (
+      <button className="metricDeleteBtn" title="Remove widget" aria-label="Remove widget" onClick={onDelete}>
+        ×
+      </button>
+    )}
     <div className="kpiIcon">
       <Icon className="w-4 h-4" />
     </div>
@@ -191,6 +232,198 @@ const MetricCard = ({ icon: Icon, title, value = "No data", description = "No da
     </div>
   </div>
 );
+
+const numericFieldTypes = ["number", "integer", "int", "float", "double", "decimal", "currency", "money", "amount", "numeric"];
+const looksNumericField = (field: any) => numericFieldTypes.includes((field?.type || field?.fieldType || "").toString().toLowerCase());
+
+type AddWidgetModalProps = {
+  open: boolean;
+  onClose: () => void;
+  tables: DashboardTable[];
+  onSave: (data: { tableKey: string; columnKey: string; aggregation: MetricAggregation; title: string; icon: MetricIcon }) => Promise<void>;
+  saving: boolean;
+  maxReached: boolean;
+};
+
+const AddWidgetModal = ({ open, onClose, tables, onSave, saving, maxReached }: AddWidgetModalProps) => {
+  const [form, setForm] = useState<AddWidgetFormState>({
+    tableKey: tables[0]?.key || tables[0]?.id || "",
+    columnKey: "",
+    aggregation: "sum",
+    title: "",
+    icon: "analytics",
+  });
+  const [columns, setColumns] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const buildDefaultTitle = (agg: MetricAggregation, field: any) => {
+    const label = beautifyLabel(getFieldKey(field) || "");
+    return agg === "avg" ? `Average ${label}` : `Total ${label}`;
+  };
+
+  const pickIconByField = (field: any): MetricIcon => {
+    const key = (getFieldKey(field) || "").toLowerCase();
+    const moneyHints = ["price", "amount", "total", "revenue", "cost", "bill", "fee", "payment", "salary"];
+    return moneyHints.some((h) => key.includes(h)) ? "money" : "analytics";
+  };
+
+  const updateColumns = (tableKey: string) => {
+    const table = tables.find((t) => (t.key || t.id) === tableKey);
+    const numericFields = (table?.fields || []).filter(looksNumericField);
+    setColumns(numericFields);
+    if (numericFields.length === 0) {
+      setError("This table has no numeric fields available for metrics.");
+    } else {
+      setError(null);
+      const first = numericFields[0];
+      setForm((prev) => ({
+        ...prev,
+        columnKey: prev.columnKey && numericFields.some((f) => getFieldKey(f) === prev.columnKey) ? prev.columnKey : getFieldKey(first),
+        title: prev.title || buildDefaultTitle(prev.aggregation, first),
+        icon: pickIconByField(first),
+      }));
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      const initialTableKey = tables[0]?.key || tables[0]?.id || "";
+      setForm((prev) => ({ ...prev, tableKey: prev.tableKey || initialTableKey }));
+      updateColumns(initialTableKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tables]);
+
+  const handleChange = (field: keyof AddWidgetFormState, value: any) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const onAggregationChange = (agg: MetricAggregation) => {
+    const col = columns.find((c) => getFieldKey(c) === form.columnKey);
+    handleChange("aggregation", agg);
+    if (col) {
+      handleChange("title", buildDefaultTitle(agg, col));
+    }
+  };
+
+  const onTableChange = (tableKey: string) => {
+    handleChange("tableKey", tableKey);
+    setForm((prev) => ({ ...prev, columnKey: "" }));
+    updateColumns(tableKey);
+  };
+
+  const onColumnChange = (columnKey: string) => {
+    const field = columns.find((c) => getFieldKey(c) === columnKey);
+    handleChange("columnKey", columnKey);
+    if (field) {
+      handleChange("title", buildDefaultTitle(form.aggregation, field));
+      handleChange("icon", pickIconByField(field));
+    }
+  };
+
+  const canSave = Boolean(form.tableKey && form.columnKey && !saving && !maxReached && columns.length > 0);
+
+  if (!open) return null;
+
+  return (
+    <div className="mdModalOverlay">
+      <div className="mdModal">
+        <div className="mdModalHeader">
+          <h3 className="mdModalTitle">Add widget</h3>
+          <Button variant="ghost" className="mdGhostBtn" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+        <div className="mdModalBody">
+          <div className="mdField">
+            <label className="mdLabel">Table</label>
+            <Select value={form.tableKey} onValueChange={onTableChange}>
+              <SelectTrigger className="mdSelect">
+                <SelectValue placeholder="Select table" />
+              </SelectTrigger>
+              <SelectContent position="popper" className="mdSelectContent">
+                {tables.map((table) => (
+                  <SelectItem key={table.key || table.id} value={table.key || table.id || ""}>
+                    {table.name || table.key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="mdField">
+            <label className="mdLabel">Column (numeric)</label>
+            <Select value={form.columnKey} onValueChange={onColumnChange} disabled={!columns.length}>
+              <SelectTrigger className="mdSelect">
+                <SelectValue placeholder="Select column" />
+              </SelectTrigger>
+              <SelectContent position="popper" className="mdSelectContent">
+                {columns.map((field) => (
+                  <SelectItem key={getFieldKey(field)} value={getFieldKey(field)}>
+                    {beautifyLabel(getFieldKey(field))}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!columns.length && <p className="mdHint text-red-500">This table has no numeric fields available for metrics.</p>}
+            {error && columns.length > 0 && <p className="mdHint text-red-500">{error}</p>}
+          </div>
+
+          <div className="mdField">
+            <label className="mdLabel">Metric type</label>
+            <Select value={form.aggregation} onValueChange={(v) => onAggregationChange(v as MetricAggregation)}>
+              <SelectTrigger className="mdSelect">
+                <SelectValue placeholder="Select aggregation" />
+              </SelectTrigger>
+              <SelectContent position="popper" className="mdSelectContent">
+                <SelectItem value="sum">Sum</SelectItem>
+                <SelectItem value="avg">Average</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="mdField">
+            <label className="mdLabel">Widget title</label>
+            <Input value={form.title} onChange={(e) => handleChange("title", e.target.value)} placeholder="Total revenue" />
+          </div>
+
+          <div className="mdField">
+            <label className="mdLabel">Icon</label>
+            <Select value={form.icon} onValueChange={(v) => handleChange("icon", v as MetricIcon)}>
+              <SelectTrigger className="mdSelect">
+                <SelectValue placeholder="Icon" />
+              </SelectTrigger>
+              <SelectContent position="popper" className="mdSelectContent">
+                <SelectItem value="money">Money</SelectItem>
+                <SelectItem value="analytics">Analytics</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mdModalFooter">
+          <Button variant="outline" onClick={onClose} className="mdGhostBtn">
+            Cancel
+          </Button>
+          <Button
+            className="primaryBtn"
+            disabled={!canSave}
+            onClick={async () => {
+              await onSave({
+                tableKey: form.tableKey,
+                columnKey: form.columnKey,
+                aggregation: form.aggregation,
+                title: form.title || "Metric",
+                icon: form.icon,
+              });
+            }}
+          >
+            {saving ? "Saving..." : "Save widget"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 type AddRecordModalProps = {
   open: boolean;
@@ -466,6 +699,7 @@ export default function ManageDashDetail() {
   const { dashId } = useParams();
   const navigate = useNavigate();
   const [sessionId] = useState(getSessionId);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -489,14 +723,32 @@ export default function ManageDashDetail() {
     Record<string, { options: { value: string; label: string }[]; loading?: boolean; error?: string; targetTable?: string }>
   >({});
   const [widgetResults, setWidgetResults] = useState<WidgetResult[]>([]);
+  const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfig[]>([]);
   const preloadedTablesRef = useRef<Set<string>>(new Set());
+  const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
+  const [savingWidget, setSavingWidget] = useState(false);
+  const [removingWidgetIds, setRemovingWidgetIds] = useState<Set<string>>(new Set());
+  const [confirmWidgetId, setConfirmWidgetId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (session?.user) setCurrentUser(session.user);
+    if (session?.token) {
+      fetchMe(session.token)
+        .then((res) => setCurrentUser(res.user))
+        .catch(() => {
+          clearSession();
+          setCurrentUser(null);
+        });
+    }
+  }, []);
 
   useEffect(() => {
     if (!dashId || !sessionId) return;
     let active = true;
     setLoading(true);
     dashboardApi
-      .list(sessionId)
+      .list(sessionId, currentUser?.id || undefined)
       .then((res) => {
         if (!active) return;
         const found = (res.dashboards || []).find((d) => d.id === dashId);
@@ -514,11 +766,30 @@ export default function ManageDashDetail() {
     return () => {
       active = false;
     };
-  }, [dashId, sessionId]);
+  }, [dashId, sessionId, currentUser?.id]);
+
+  useEffect(() => {
+    if (!dashId || !sessionId) return;
+    dashboardApi
+      .listWidgets(dashId, { sessionId, userId: currentUser?.id })
+      .then((res) => setWidgetConfigs(res.widgets || []))
+      .catch(() => setWidgetConfigs([]));
+  }, [dashId, sessionId, currentUser?.id]);
 
   const safeDashboard = useMemo(
     () => dashboard ?? { name: "", description: "", fields: [], widgets: [], tables: [] },
     [dashboard],
+  );
+
+  useEffect(() => {
+    if (safeDashboard.widgets && safeDashboard.widgets.length) {
+      setWidgetConfigs(safeDashboard.widgets as WidgetConfig[]);
+    }
+  }, [safeDashboard.widgets]);
+
+  const effectiveWidgets = useMemo<WidgetConfig[]>(
+    () => (Array.isArray(widgetConfigs) ? widgetConfigs.slice(0, 12) : []),
+    [widgetConfigs],
   );
 
   const mergedTables = useMemo(
@@ -539,6 +810,7 @@ export default function ManageDashDetail() {
   const hasData = totalRecordCount > 0;
   const totalTables = mergedTables.length;
   const totalFields = mergedTables.reduce((sum, table) => sum + (table.fields?.length || 0), 0);
+  const widgetsLimitReached = effectiveWidgets.length >= 12;
   const totalInsights = chartConfigs.length;
 
   const tableOptions = useMemo(
@@ -620,24 +892,24 @@ export default function ManageDashDetail() {
     async (tableKey: string) => {
       if (!dashId || !tableKey) return;
       try {
-        const res = await dashboardApi.listRecords({ dashboardId: dashId, tableKey, sessionId });
+        const res = await dashboardApi.listRecords({ dashboardId: dashId, tableKey, sessionId, userId: currentUser?.id });
         setRecordsByTable((prev) => ({ ...prev, [tableKey]: res.records || [] }));
       } catch {
         // Best-effort; sampleRows will be used as fallback.
       }
     },
-    [dashId, sessionId],
+    [dashId, sessionId, currentUser?.id],
   );
 
   const fetchDashboardData = useCallback(async () => {
     if (!dashId) return;
     try {
-      const res = await dashboardApi.getDashboardData(dashId, { sessionId });
+      const res = await dashboardApi.getDashboardData(dashId, { sessionId, userId: currentUser?.id });
       setWidgetResults(res.widgets || []);
     } catch {
       // ignore errors to keep UI responsive
     }
-  }, [dashId, sessionId]);
+  }, [dashId, sessionId, currentUser?.id]);
 
   useEffect(() => {
     const activeOption = tableOptions.find((t) => t.id === activeTableId) || tableOptions[0];
@@ -664,12 +936,12 @@ export default function ManageDashDetail() {
     const targets = allTableKeys.filter((k) => !preloadedTablesRef.current.has(k));
     if (!targets.length) return;
     targets.forEach((k) => preloadedTablesRef.current.add(k));
-    Promise.all(
-      targets.map((tableKey) =>
-        dashboardApi
-          .listRecords({ dashboardId: dashId, tableKey, sessionId })
-          .then((res) => ({ tableKey, records: res.records || [] }))
-          .catch(() => ({ tableKey, records: [] })),
+      Promise.all(
+        targets.map((tableKey) =>
+          dashboardApi
+            .listRecords({ dashboardId: dashId, tableKey, sessionId, userId: currentUser?.id })
+            .then((res) => ({ tableKey, records: res.records || [] }))
+            .catch(() => ({ tableKey, records: [] })),
       ),
     ).then((results) => {
       setRecordsByTable((prev) => {
@@ -680,7 +952,7 @@ export default function ManageDashDetail() {
         return next;
       });
     });
-  }, [dashId, sessionId, allTableKeys]);
+  }, [dashId, sessionId, currentUser?.id, allTableKeys]);
 
   const fetchReferenceOptions = useCallback(
     async (field: NormalizedField) => {
@@ -692,7 +964,12 @@ export default function ManageDashDetail() {
         [fieldKey]: { ...(prev[fieldKey] || {}), loading: true, error: undefined, targetTable },
       }));
       try {
-        const res = await dashboardApi.listRecords({ dashboardId: dashId, tableKey: targetTable, sessionId });
+        const res = await dashboardApi.listRecords({
+          dashboardId: dashId,
+          tableKey: targetTable,
+          sessionId,
+          userId: currentUser?.id,
+        });
         const records = res.records || [];
         const mapped = records
           .map((row: any) => {
@@ -727,7 +1004,7 @@ export default function ManageDashDetail() {
         }));
       }
     },
-    [dashId, sessionId],
+    [dashId, sessionId, currentUser?.id],
   );
 
   const activeTableOption = useMemo(() => {
@@ -745,11 +1022,6 @@ export default function ManageDashDetail() {
   const activeTableKey = activeTable ? activeTable.key || activeTable.id || "" : "";
   const normalizedActiveFields = useMemo(() => normalizeFields(activeTable?.fields || []), [activeTable]);
   const visibleFields = useMemo(() => getVisibleFields(activeTable?.fields || []), [activeTable]);
-
-  const widgetConfigs = useMemo<WidgetConfig[]>(
-    () => (Array.isArray(safeDashboard.widgets) ? (safeDashboard.widgets as WidgetConfig[]) : []),
-    [safeDashboard.widgets],
-  );
   const widgetResultMap = useMemo<Record<string, WidgetResult>>(
     () =>
       widgetResults.reduce((acc, item) => {
@@ -759,20 +1031,7 @@ export default function ManageDashDetail() {
     [widgetResults],
   );
 
-  const dataDrivenMetrics = useMemo(
-    () =>
-      mergedTables.slice(0, 4).map((table, idx) => {
-        const key = table.key || table.id || `table-${idx}`;
-        const count = recordsByTable[key]?.length ?? (Array.isArray(table.sampleRows) ? table.sampleRows.length : 0);
-        return {
-          id: `metric-${key}`,
-          title: `${table.name || key} count`,
-          value: count,
-          description: "Total records",
-        };
-      }),
-    [mergedTables, recordsByTable],
-  );
+  const dataDrivenMetrics: any[] = useMemo(() => [], []);
 
   const tableRecords = useMemo(() => {
     if (!activeTable) return [];
@@ -837,18 +1096,18 @@ export default function ManageDashDetail() {
 
   const handleEditSubmit = async () => {
     if (!dashId || !activeTableKey || !selectedRecord) return;
-    const validation = validateFormValues(normalizedActiveFields, editFormValues);
-    setFormErrors(validation);
-    if (Object.keys(validation).length) return;
-    const recordId = getRecordId(selectedRecord);
-    if (!recordId) {
+      const validation = validateFormValues(normalizedActiveFields, editFormValues);
+      setFormErrors(validation);
+      if (Object.keys(validation).length) return;
+      const recordId = getRecordId(selectedRecord);
+      if (!recordId) {
       toast.error("Missing record id");
       return;
     }
     setIsSubmitting(true);
     try {
       const payload = buildRecordPayload(normalizedActiveFields, editFormValues);
-      await dashboardApi.updateDashboardRecord(dashId, activeTableKey, recordId, payload, sessionId);
+      await dashboardApi.updateDashboardRecord(dashId, activeTableKey, recordId, payload, sessionId, currentUser?.id);
       toast.success("Record updated");
       setIsEditOpen(false);
       setSelectedRecord(null);
@@ -912,7 +1171,7 @@ export default function ManageDashDetail() {
     setIsSubmitting(true);
     try {
       const payload = buildRecordPayload(normalizedActiveFields, formValues);
-      const res = await dashboardApi.createDashboardRecord(dashId, activeTableKey, payload, sessionId);
+      const res = await dashboardApi.createDashboardRecord(dashId, activeTableKey, payload, sessionId, currentUser?.id);
       const createdRecord = (res as any)?.record || payload;
       setRecordsByTable((prev) => {
         const prevRecords = prev[activeTableKey] || [];
@@ -974,7 +1233,7 @@ export default function ManageDashDetail() {
       return;
     }
     try {
-      await dashboardApi.deleteDashboardRecord(dashId, activeTableKey, recordId, sessionId);
+      await dashboardApi.deleteDashboardRecord(dashId, activeTableKey, recordId, sessionId, currentUser?.id);
       toast.success("Record deleted");
       setIsDeleteOpen(false);
       setSelectedRecord(null);
@@ -986,6 +1245,63 @@ export default function ManageDashDetail() {
         (err as any)?.message ||
         "Failed to delete record";
       toast.error(message);
+    }
+  };
+
+  const handleConfirmWidgetDelete = async () => {
+    if (!dashId || !confirmWidgetId) return;
+    const target = widgetConfigs.find((w) => w.id === confirmWidgetId || w.widgetKey === confirmWidgetId);
+    const isManual = target?.source === "manual";
+    setRemovingWidgetIds((prev) => {
+      const next = new Set(prev);
+      next.add(confirmWidgetId);
+      return next;
+    });
+    setTimeout(() => {
+      setWidgetConfigs((prev) => prev.filter((w) => w.id !== confirmWidgetId && w.widgetKey !== confirmWidgetId));
+    }, 220);
+    try {
+      if (isManual) {
+        await dashboardApi.deleteWidget(dashId, target?.id || confirmWidgetId, { sessionId, userId: currentUser?.id });
+      } else {
+        await dashboardApi.hideWidgetOverride(
+          dashId,
+          { widgetKey: target?.widgetKey || confirmWidgetId },
+          { sessionId, userId: currentUser?.id },
+        );
+      }
+      await fetchDashboardData();
+    } catch (err) {
+      const message = (err as any)?.message || "Failed to delete widget";
+      toast.error(message);
+    } finally {
+      setConfirmWidgetId(null);
+    }
+  };
+
+  const handleSaveWidget = async (data: { tableKey: string; columnKey: string; aggregation: MetricAggregation; title: string; icon: MetricIcon }) => {
+    if (!dashId) return;
+    setSavingWidget(true);
+    try {
+      const res = await dashboardApi.createWidget(
+        dashId,
+        {
+          tableKey: data.tableKey,
+          columnKey: data.columnKey,
+          aggregation: data.aggregation,
+          title: data.title,
+          icon: data.icon,
+        },
+        { sessionId, userId: currentUser?.id },
+      );
+      setWidgetConfigs((prev) => [...prev, res.widget].slice(0, 12));
+      setIsAddWidgetOpen(false);
+      await fetchDashboardData();
+    } catch (err) {
+      const message = (err as any)?.message || "Failed to save widget";
+      toast.error(message);
+    } finally {
+      setSavingWidget(false);
     }
   };
 
@@ -1044,8 +1360,8 @@ export default function ManageDashDetail() {
 
   const renderContent = () => {
     if (activeSection === "overview") {
-      const metricWidgets = widgetConfigs.filter((w) => w.type === "metric");
-      const chartWidgets = widgetConfigs.filter((w) => w.type === "chart");
+      const metricWidgets = effectiveWidgets.filter((w) => w.type === "metric");
+      const chartWidgets = effectiveWidgets.filter((w) => w.type === "chart");
       const renderChart = (widget: WidgetConfig) => {
         const result = widgetResultMap[widget.id];
         const records = widget.sourceTable ? recordsByTable[widget.sourceTable] || [] : [];
@@ -1107,6 +1423,21 @@ export default function ManageDashDetail() {
               <p className="mdMainSubtitle">Key metrics and analytics</p>
             </div>
             <div className="tableActions">
+              <Button
+                variant="outline"
+                className="mdGhostBtn"
+                disabled={widgetsLimitReached || !mergedTables.length}
+                title={
+                  widgetsLimitReached
+                    ? "You reached the maximum number of overview widgets."
+                    : !mergedTables.length
+                      ? "Add a table first to create widgets."
+                      : ""
+                }
+                onClick={() => setIsAddWidgetOpen(true)}
+              >
+                Add widget
+              </Button>
               <Button variant="ghost" className="mdGhostBtn">
                 <Clock className="w-4 h-4 mr-2" />
                 Last 30 days
@@ -1114,57 +1445,71 @@ export default function ManageDashDetail() {
             </div>
           </div>
 
-          <div className="kpiGrid">
+          <div className="overviewSection">
+            <div className="overviewSectionHeader">
+              <h4 className="overviewSectionTitle">Key metrics</h4>
+            </div>
+            <div className="overviewSectionGrid overviewMetricsGrid">
             {(metricWidgets.length ? metricWidgets : dataDrivenMetrics.length ? dataDrivenMetrics : overviewKpis).map((item, idx) => {
               const isWidget = (item as WidgetConfig).type !== undefined;
               if (isWidget) {
                 const widget = item as WidgetConfig;
                 const result = widgetResultMap[widget.id];
-                const hasData = result?.hasData;
-                const value = hasData ? result?.value ?? result?.series?.length ?? 0 : "No data yet";
+                  const hasData = Boolean(result?.hasData && (result?.value !== null && result?.value !== undefined));
+                const displayValue = formatMetricValue(result?.value, result?.formattedValue as string | undefined);
+                const Icon = widget.icon === "money" ? DollarSign : widget.icon === "analytics" ? BarChart2 : pickMetricIcon(widget.title || "");
+                  const deletable = widget.source !== "hidden";
                 return (
                   <MetricCard
                     key={widget.id}
-                    icon={DollarSign}
+                    icon={Icon}
                     title={widget.title}
-                    value={value as any}
+                    value={displayValue as any}
                     description={hasData ? widget.description || "Data available" : "No data yet"}
+                    deletable={deletable}
+                      onDelete={deletable ? () => setConfirmWidgetId(widget.id || widget.widgetKey || "") : null}
+                      className={removingWidgetIds.has(widget.id) ? "removing" : ""}
                   />
                 );
               }
-              const fallback = item as any;
-              return (
-                <MetricCard
-                  key={fallback.id || idx}
-                  icon={DollarSign}
-                  title={fallback.title || "Metric"}
-                  value={fallback.value || "No data"}
-                  description={fallback.description || "No data"}
-                />
-              );
-            })}
+                const fallback = item as any;
+                return (
+                  <MetricCard
+                    key={fallback.id || idx}
+                    icon={BarChart2}
+                    title={fallback.title || "Metric"}
+                    value={fallback.value || "No data"}
+                    description={fallback.description || "No data"}
+                  />
+                );
+              })}
+            </div>
           </div>
 
-          <div className="chartRow">
-            {(chartWidgets.length ? chartWidgets : chartConfigs).map((c, idx) => {
-              const isWidget = (c as WidgetConfig).type !== undefined;
-              const chartIcon = isWidget ? BarChart2 : c.type === "timeSeries" ? LineChart : PieChart;
-              const ChartIcon = chartIcon;
-              const result = isWidget ? widgetResultMap[(c as WidgetConfig).id] : null;
-              const hasData = result?.hasData;
-              const series = result?.series || [];
-              return (
-                <div key={(c as any).id || idx} className="mdChartCard">
-                  <div className="mdChartIcon">
-                    {ChartIcon ? <ChartIcon className="w-6 h-6 text-indigo-600" /> : <PieChart className="w-6 h-6 text-indigo-600" />}
+          <div className="overviewSection">
+            <div className="overviewSectionHeader">
+              <h4 className="overviewSectionTitle">Detailed insights</h4>
+            </div>
+            <div className="overviewSectionGrid overviewInsightsGrid">
+              {(chartWidgets.length ? chartWidgets : chartConfigs).map((c, idx) => {
+                const isWidget = (c as WidgetConfig).type !== undefined;
+                const chartIcon = isWidget ? BarChart2 : c.type === "timeSeries" ? LineChart : PieChart;
+                const ChartIcon = chartIcon;
+                const result = isWidget ? widgetResultMap[(c as WidgetConfig).id] : null;
+                const hasData = result?.hasData;
+                return (
+                  <div key={(c as any).id || idx} className="mdChartCard">
+                    <div className="mdChartIcon">
+                      {ChartIcon ? <ChartIcon className="w-6 h-6 text-indigo-600" /> : <PieChart className="w-6 h-6 text-indigo-600" />}
+                    </div>
+                    <div>
+                      <p className="mdChartTitle">{(c as any).title || "Chart"}</p>
+                      {isWidget ? renderChart(c as WidgetConfig) : <p className="mdChartSubtitle">{c.description || "No data"}</p>}
+                    </div>
                   </div>
-                  <div>
-                    <p className="mdChartTitle">{(c as any).title || "Chart"}</p>
-                    {isWidget ? renderChart(c as WidgetConfig) : <p className="mdChartSubtitle">{c.description || "No data"}</p>}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       );
@@ -1258,7 +1603,7 @@ export default function ManageDashDetail() {
 
   const sidebarItems = useMemo(
     () => [
-      { id: "overview", label: "Overview", icon: BarChart3, count: overviewKpis.length },
+      { id: "overview", label: "Overview", icon: BarChart3 },
       ...tableOptions.map((table) => ({
         id: table.id,
         label: table.title,
@@ -1266,7 +1611,7 @@ export default function ManageDashDetail() {
         count: table.count,
       })),
     ],
-    [overviewKpis.length, tableOptions],
+    [tableOptions],
   );
 
   if (!dashId) {
@@ -1400,6 +1745,36 @@ export default function ManageDashDetail() {
         }}
         onConfirm={handleDeleteConfirm}
       />
+
+      <AddWidgetModal
+        open={isAddWidgetOpen}
+        onClose={() => setIsAddWidgetOpen(false)}
+        tables={mergedTables as DashboardTable[]}
+        onSave={handleSaveWidget}
+        saving={savingWidget}
+        maxReached={widgetsLimitReached}
+      />
+
+      {confirmWidgetId && (
+        <div className="mdModalOverlay">
+          <div className="mdModal">
+            <div className="mdModalHeader">
+              <h3 className="mdModalTitle">Remove widget?</h3>
+            </div>
+            <div className="mdModalBody">
+              <p className="mdMainSubtitle">This widget will be removed from your dashboard.</p>
+            </div>
+            <div className="mdModalFooter">
+              <Button variant="outline" onClick={() => setConfirmWidgetId(null)} className="mdGhostBtn">
+                Cancel
+              </Button>
+              <Button className="primaryBtn" onClick={handleConfirmWidgetDelete}>
+                Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

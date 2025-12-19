@@ -8,6 +8,10 @@ import {
   createDashboardRecord,
   getDashboardRecords,
   getDashboardData,
+  listWidgets,
+  createWidget,
+  deleteWidget,
+  hideWidget,
 } from "../controllers/dashboardController.js";
 
 const router = Router();
@@ -20,5 +24,9 @@ router.post("/dashboards/:id/records", asyncHandler(createDashboardRecord));
 router.post("/dashboards/records", asyncHandler(createDashboardRecord));
 router.get("/records", asyncHandler(getDashboardRecords));
 router.get("/dashboards/:id/data", asyncHandler(getDashboardData));
+router.get("/dashboards/:id/widgets", asyncHandler(listWidgets));
+router.post("/dashboards/:id/widgets", asyncHandler(createWidget));
+router.delete("/dashboards/:id/widgets/:widgetId", asyncHandler(deleteWidget));
+router.post("/dashboards/:id/widget-overrides/hide", asyncHandler(hideWidget));
 
 export default router;

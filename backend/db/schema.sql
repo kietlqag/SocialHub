@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     full_name TEXT,
     company TEXT,
     is_verified BOOLEAN NOT NULL DEFAULT false,
-    provider TEXT,
+    provider TEXT CHECK (provider IN ('google', 'github', 'local') OR provider IS NULL),
     provider_id TEXT,
     avatar_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    slug TEXT UNIQUE,
+    slug CITEXT UNIQUE NOT NULL,
     industry TEXT,
     employee_count INTEGER,
     data_volume TEXT,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS organization_members (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'admin',
+    role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('owner', 'admin', 'member', 'viewer')),
     invited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     joined_at TIMESTAMPTZ,
     UNIQUE (organization_id, user_id)
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS data_sources (
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft',
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'syncing', 'error', 'archived')),
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
     last_synced_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -79,62 +79,13 @@ CREATE TABLE IF NOT EXISTS data_sources (
 CREATE INDEX IF NOT EXISTS idx_data_sources_org ON data_sources(organization_id);
 CREATE INDEX IF NOT EXISTS idx_data_sources_status ON data_sources(status);
 
-CREATE TABLE IF NOT EXISTS dashboards (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    description TEXT,
-    ai_summary TEXT,
-    layout JSONB NOT NULL DEFAULT '[]'::jsonb,
-    status TEXT NOT NULL DEFAULT 'draft',
-    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_dashboards_org ON dashboards(organization_id);
-CREATE INDEX IF NOT EXISTS idx_dashboards_status ON dashboards(status);
-
-CREATE TABLE IF NOT EXISTS dashboard_widgets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    dashboard_id UUID NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
-    data_source_id UUID REFERENCES data_sources(id) ON DELETE SET NULL,
-    title TEXT NOT NULL,
-    visualization TEXT NOT NULL,
-    config JSONB NOT NULL DEFAULT '{}'::jsonb,
-    position JSONB NOT NULL DEFAULT jsonb_build_object('x', 0, 'y', 0, 'w', 6, 'h', 4),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_widgets_dashboard ON dashboard_widgets(dashboard_id);
-
-CREATE TABLE IF NOT EXISTS service_profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    service_type TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft',
-    config JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_service_profiles_org ON service_profiles(organization_id);
-
-CREATE TABLE IF NOT EXISTS dashboard_service_bindings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    dashboard_id UUID NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
-    service_profile_id UUID NOT NULL REFERENCES service_profiles(id) ON DELETE CASCADE,
-    scope TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (dashboard_id, service_profile_id)
-);
-
 CREATE TABLE IF NOT EXISTS ai_recommendations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     requested_by UUID REFERENCES users(id) ON DELETE SET NULL,
     prompt JSONB NOT NULL,
     result JSONB,
-    status TEXT NOT NULL DEFAULT 'pending',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ
 );
@@ -181,7 +132,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     message TEXT,
-    type TEXT NOT NULL DEFAULT 'info',
+    type TEXT NOT NULL DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'error', 'system')),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     is_read BOOLEAN NOT NULL DEFAULT false,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -206,3 +157,4 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON user_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation_user ON ai_messages(conversation_id, user_id, created_at);

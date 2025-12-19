@@ -8,6 +8,9 @@ import {
   generateAndPersistDashboard,
   addDashboardRecord,
   listDashboardRecords,
+  listDashboardWidgets,
+  addManualWidget,
+  removeWidget,
 } from "../services/dashboardService.js";
 import { getSocialhubDb } from "../mongo.js";
 
@@ -83,7 +86,7 @@ export async function getDashboardData(req, res) {
   const { from, to } = req.query;
   const db = getSocialhubDb();
   try {
-    const dashboards = await db
+    let dashboards = await db
       .collection("dashboards")
       .find({
         _id: new ObjectId(req.params.id),
@@ -92,12 +95,16 @@ export async function getDashboardData(req, res) {
       .toArray();
 
     if (!dashboards.length) {
+      dashboards = await db.collection("dashboards").find({ _id: new ObjectId(req.params.id) }).toArray();
+    }
+
+    if (!dashboards.length) {
       console.warn("Dashboard not found for data route", req.params.id);
-      return res.status(404).json({ message: "Dashboard not found" });
+      return res.json({ dashboardId: req.params.id, widgets: [] });
     }
 
     const dashboard = dashboards[0];
-    const widgets = Array.isArray(dashboard.widgets) ? dashboard.widgets : [];
+    const widgets = await listDashboardWidgets(req.params.id, owner);
     const dateRange = {
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
@@ -117,6 +124,32 @@ export async function getDashboardData(req, res) {
   }
 }
 
+export async function listWidgets(req, res) {
+  const owner = parseOwner(req);
+  const widgets = await listDashboardWidgets(req.params.id, owner);
+  res.json({ widgets });
+}
+
+export async function createWidget(req, res) {
+  const owner = parseOwner(req);
+  const { tableKey, columnKey, aggregation, title, icon } = req.body;
+  const widget = await addManualWidget(req.params.id, owner, { tableKey, columnKey, aggregation, title, icon });
+  res.status(201).json({ widget });
+}
+
+export async function deleteWidget(req, res) {
+  const owner = parseOwner(req);
+  await removeWidget(req.params.id, owner, req.params.widgetId);
+  res.json({ success: true });
+}
+
+export async function hideWidget(req, res) {
+  const owner = parseOwner(req);
+  const { widgetKey } = req.body;
+  await removeWidget(req.params.id, owner, widgetKey);
+  res.json({ success: true });
+}
+
 function transformFilterToRecord(filter = {}) {
   const transformed = {};
   Object.entries(filter).forEach(([key, value]) => {
@@ -124,6 +157,13 @@ function transformFilterToRecord(filter = {}) {
   });
   return transformed;
 }
+
+const numericTypes = ["double", "int", "long", "decimal"];
+const formatNumber = (value) => {
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value)) return null;
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+};
 
 async function evaluateWidget(db, dashboardId, widget, dateRange) {
   if (!widget || !widget.type) {
@@ -141,48 +181,72 @@ async function evaluateWidget(db, dashboardId, widget, dateRange) {
 
 async function evaluateMetricWidget(db, dashboardId, widget, dateRange) {
   const collection = db.collection("dashboard_records");
-  const match = {
+  const aggregate = widget.aggregate;
+  const baseMatch = {
     dashboardId: new ObjectId(dashboardId),
     tableKey: widget.sourceTable,
     ...transformFilterToRecord(widget.filter || {}),
   };
 
   if (widget.dateField && (dateRange.from || dateRange.to)) {
-    match[`record.${widget.dateField}`] = {};
-    if (dateRange.from) match[`record.${widget.dateField}`].$gte = dateRange.from;
-    if (dateRange.to) match[`record.${widget.dateField}`].$lte = dateRange.to;
+    baseMatch[`record.${widget.dateField}`] = {};
+    if (dateRange.from) baseMatch[`record.${widget.dateField}`].$gte = dateRange.from;
+    if (dateRange.to) baseMatch[`record.${widget.dateField}`].$lte = dateRange.to;
   }
 
-  const aggregate = widget.aggregate || "count";
-  const pipeline = [{ $match: match }];
-
-  const valueFieldPath = widget.valueField ? `$record.${widget.valueField}` : "$record.value";
-  let groupStage = { _id: null };
-
-  if (aggregate === "count") {
-    groupStage.value = { $sum: 1 };
-  } else if (aggregate === "sum") {
-    groupStage.value = { $sum: valueFieldPath };
-  } else if (aggregate === "avg") {
-    groupStage.value = { $avg: valueFieldPath };
-  } else if (aggregate === "min") {
-    groupStage.value = { $min: valueFieldPath };
-  } else if (aggregate === "max") {
-    groupStage.value = { $max: valueFieldPath };
-  } else {
-    groupStage.value = { $sum: 1 };
+  if (widget.aggregate === "count") {
+    const docs = await collection
+      .aggregate([
+        { $match: baseMatch },
+        { $count: "value" },
+      ])
+      .toArray();
+    const value = docs.length ? docs[0].value : null;
+    return {
+      id: widget.id,
+      type: widget.type,
+      hasData: value !== null && value !== undefined,
+      value: value ?? null,
+      formattedValue: value !== null && value !== undefined ? formatNumber(value) : null,
+      series: [],
+    };
   }
 
-  pipeline.push({ $group: groupStage });
+  if (!["sum", "avg"].includes(widget.aggregate)) {
+    return { id: widget.id, type: widget.type, hasData: false, value: null, series: [] };
+  }
+  if (!widget.valueField) {
+    return { id: widget.id, type: widget.type, hasData: false, value: null, series: [] };
+  }
+
+  const pipeline = [
+    { $match: baseMatch },
+    {
+      $match: {
+        [`record.${widget.valueField}`]: {
+          $type: numericTypes,
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        value: widget.aggregate === "avg" ? { $avg: `$record.${widget.valueField}` } : { $sum: `$record.${widget.valueField}` },
+      },
+    },
+  ];
 
   const docs = await collection.aggregate(pipeline).toArray();
-  const value = docs.length ? docs[0].value ?? 0 : 0;
+  const rawValue = docs.length ? docs[0].value : null;
+  const hasData = rawValue !== null && rawValue !== undefined;
+  const numericValue = hasData && Number.isFinite(rawValue) ? rawValue : null;
 
   return {
     id: widget.id,
     type: widget.type,
-    hasData: Boolean(docs.length),
-    value: Number.isFinite(value) ? value : 0,
+    hasData: Boolean(numericValue !== null),
+    value: numericValue,
+    formattedValue: numericValue !== null ? formatNumber(numericValue) : null,
     series: [],
   };
 }
@@ -221,6 +285,15 @@ async function evaluateChartWidget(db, dashboardId, widget, dateRange) {
 
     pipeline.push({ $group: groupStage });
     pipeline.push({ $sort: { _id: 1 } });
+
+    if (["sum", "avg", "min", "max"].includes(aggregate) && widget.valueField) {
+      pipeline.unshift({
+        $match: {
+          [`record.${widget.valueField}`]: { $type: numericTypes },
+        },
+      });
+    }
+
     return pipeline;
   };
 

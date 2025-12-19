@@ -78,3 +78,27 @@ export async function updateDashboardForOwner(id, params, updates) {
   );
   return res.value ? mapDashboard(res.value) : null;
 }
+
+export async function updateDashboardById(id, updates) {
+  const objectId = requireObjectId(id);
+  if (!objectId) return null;
+  const payload = { ...updates, updatedAt: new Date() };
+  const res = await collection().findOneAndUpdate({ _id: objectId }, { $set: payload }, { returnDocument: "after" });
+  return res.value ? mapDashboard(res.value) : null;
+}
+
+export async function findDashboardForOwner(id, params) {
+  const filter = ownerFilter(params);
+  if (!filter) return null;
+  const objectId = requireObjectId(id);
+  if (!objectId) return null;
+  const doc = await collection().findOne({ _id: objectId, ...filter });
+  return doc ? mapDashboard(doc) : null;
+}
+
+export async function findDashboardById(id) {
+  const objectId = requireObjectId(id);
+  if (!objectId) return null;
+  const doc = await collection().findOne({ _id: objectId });
+  return doc ? mapDashboard(doc) : null;
+}

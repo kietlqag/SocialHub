@@ -79,6 +79,19 @@ export type DashboardDataResponse = {
   widgets: WidgetResult[];
 };
 
+export type MetricWidgetConfig = {
+  id: string;
+  dashboardId?: string;
+  source: "auto" | "manual";
+  widgetKey?: string;
+  tableKey: string;
+  columnKey?: string;
+  aggregation: "sum" | "avg";
+  title: string;
+  icon?: "money" | "analytics" | string;
+  filter?: Record<string, any>;
+};
+
 type InferredSchema = {
   fileName: string;
   fileType: "csv" | "excel";
@@ -186,5 +199,41 @@ export const dashboardApi = {
     if (params.from) query.set("from", params.from);
     if (params.to) query.set("to", params.to);
     return api.get<DashboardDataResponse>(`/api/dashboards/${dashboardId}/data${query.toString() ? `?${query.toString()}` : ""}`);
+  },
+  listWidgets: (dashboardId: string, params: { sessionId?: string; userId?: string | null } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.get<{ widgets: WidgetConfig[] }>(`/api/dashboards/${dashboardId}/widgets${queryString}`);
+  },
+  createWidget: (
+    dashboardId: string,
+    body: { tableKey: string; columnKey: string; aggregation: "sum" | "avg"; title: string; icon?: string },
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.post<{ widget: WidgetConfig }>(`/api/dashboards/${dashboardId}/widgets${queryString}`, body);
+  },
+  deleteWidget: (dashboardId: string, widgetId: string, params: { sessionId?: string; userId?: string | null } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.delete<{ success: boolean }>(`/api/dashboards/${dashboardId}/widgets/${widgetId}${queryString}`);
+  },
+  hideWidgetOverride: (
+    dashboardId: string,
+    body: { widgetKey: string },
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.post<{ success: boolean }>(`/api/dashboards/${dashboardId}/widget-overrides/hide${queryString}`, body);
   },
 };

@@ -7,7 +7,7 @@ import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
-import { getDashboardData } from "./controllers/dashboardController.js";
+import { getDashboardData, listWidgets, createWidget, deleteWidget, hideWidget } from "./controllers/dashboardController.js";
 import { initDb } from "./db.js";
 import { initMongo, getSocialhubDb } from "./mongo.js";
 import { HttpError } from "./utils/httpError.js";
@@ -49,11 +49,23 @@ app.use("/notifications", notificationRoutes);
 app.use("/profile", profileRoutes);
 // Direct mount for dashboard data (in addition to router) to avoid 404s
 app.get("/api/dashboards/:id/data", asyncHandler(getDashboardData));
+app.get("/api/dashboards/:id/widgets", asyncHandler(listWidgets));
+app.post("/api/dashboards/:id/widgets", asyncHandler(createWidget));
+app.delete("/api/dashboards/:id/widgets/:widgetId", asyncHandler(deleteWidget));
+app.post("/api/dashboards/:id/widget-overrides/hide", asyncHandler(hideWidget));
 app.use("/api", dashboardRoutes);
 
 // Basic error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const logPath = path.resolve(__dirname, "../server-error.log");
+    fs.appendFileSync(logPath, `${new Date().toISOString()} ${req.method} ${req.originalUrl} :: ${err?.stack || err}\n`);
+  } catch (_) {
+    // ignore
+  }
   console.error(err);
   const status = err instanceof HttpError && err.status ? err.status : err.status || 500;
   const message = err.status ? err.message : "Internal Server Error";
