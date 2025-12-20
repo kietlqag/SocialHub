@@ -66,7 +66,9 @@ export interface FieldConfig {
   label?: string;
   type: FieldType;
   required?: boolean;
+  visible?: boolean;
   visibleInTable?: boolean;
+  hidden?: boolean;
   options?: string[];
   referenceTable?: string;
   displayField?: string;

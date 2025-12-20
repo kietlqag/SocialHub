@@ -676,8 +676,15 @@
   background: linear-gradient(135deg, rgba(249, 250, 251, 0.9), rgba(242, 244, 255, 0.9));
 }
 
+.recordTableScroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .recordTable {
   width: 100%;
+  min-width: max-content;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -692,6 +699,7 @@
   background: rgba(124, 106, 242, 0.08);
   color: #0f172a;
   font-weight: 700;
+  min-width: max-content;
 }
 
 .recordRow {
@@ -701,6 +709,7 @@
   border-radius: 12px;
   border: 1px solid rgba(226, 232, 240, 0.8);
   background: rgba(255, 255, 255, 0.96);
+  min-width: max-content;
 }
 
 .recordCell {

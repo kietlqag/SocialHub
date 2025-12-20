@@ -15,8 +15,9 @@ import Profile from "./pages/Profile";
 import ManageDashList from "./pages/ManageDashList";
 import ManageDashDetail from "./pages/ManageDashDetail";
 import Contact from "./pages/Contact";
-import { clearSession, fetchMe, getCurrentSession, type AuthUser } from "./services/auth";
+import { clearSession, fetchMe, getCurrentSession, persistSession, type AuthUser } from "./services/auth";
 import "./styles/home.css";
+import ExploreDashboardsPage from "./pages/ExploreDashboardsPage";
 
 const Landing = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLogout: () => void }) => {
   const navigate = useNavigate();
@@ -79,6 +80,40 @@ const ChatPage = () => {
 const SettingsPage = () => {
   const navigate = useNavigate();
   return <ProfileSettings onBack={() => navigate("/")} onLogout={() => navigate("/")} />;
+};
+
+const OAuthCallbackPage = ({ onLoginSuccess }: { onLoginSuccess: (user: AuthUser) => void }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get("token");
+    const error = params.get("error");
+    if (error) {
+      navigate("/login", { replace: true, state: { error } });
+      return;
+    }
+    if (!token) {
+      navigate("/login", { replace: true });
+      return;
+    }
+    fetchMe(token)
+      .then((res) => {
+        const session = { user: res.user, token };
+        persistSession(session, true);
+        onLoginSuccess(res.user);
+        navigate("/home", { replace: true });
+      })
+      .catch(() => navigate("/login", { replace: true }))
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, navigate, onLoginSuccess]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-700">
+      Completing sign-in...
+    </div>
+  );
 };
 
 const NotificationsPage = () => {
@@ -144,11 +179,13 @@ function App() {
         <Route path="/home" element={<Landing currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/login" element={<LoginPage onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/register" element={<SignUpPage onLoginSuccess={handleLoginSuccess} />} />
+        <Route path="/auth/callback" element={<OAuthCallbackPage onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/explore" element={<ExploreDashboardsPage />} />
         <Route
           path="/managedash"
           element={

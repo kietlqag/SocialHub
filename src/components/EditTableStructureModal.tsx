@@ -24,10 +24,11 @@ type EditTableStructureModalProps = {
   onSaved?: (fields: DashboardField[]) => void;
 };
 
-type EditableField = DashboardField & { tempId: string; previousKey?: string };
+type EditableField = DashboardField & { tempId: string; previousKey?: string; isSystem?: boolean; visible?: boolean };
 
 const FIELD_TYPES: Array<DashboardField["type"]> = ["string", "number", "boolean", "date", "enum", "reference"];
 const RESERVED_KEYS = new Set(["_id", "created_at", "updated_at", ...SYSTEM_FIELDS]);
+const SYSTEM_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
 
 const makeTempId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
 
@@ -37,6 +38,30 @@ const normalizeKey = (value: string) =>
     .replace(/[^a-zA-Z0-9_]/g, "")
     .replace(/_{2,}/g, "_")
     .trim();
+
+const normalizeFieldVisibility = (field: DashboardField): EditableField => {
+  const key = String(field.key || field.fieldName || field.name || "");
+  const isSystem = field.system === true || field.systemField === true || SYSTEM_KEYS.has(key);
+  const rawVisibleInTable = (field as any).visibleInTable;
+  const rawHidden = (field as any).hidden;
+  let visible: boolean;
+  if (rawVisibleInTable !== undefined || rawHidden !== undefined) {
+    if (rawHidden === true) visible = false;
+    else if (rawVisibleInTable === false) visible = false;
+    else visible = true;
+  } else {
+    visible = isSystem ? false : true;
+  }
+  return {
+    ...field,
+    visible,
+    visibleInTable: visible,
+    hidden: !visible,
+    tempId: (field as any).tempId || (field as any).id || makeTempId(),
+    previousKey: (field as any).previousKey || field.key,
+    isSystem,
+  };
+};
 
 export function EditTableStructureModal({
   open,
@@ -52,7 +77,7 @@ export function EditTableStructureModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<EditableField[]>([]);
-  const [systemFields, setSystemFields] = useState<DashboardField[]>([]);
+  const [systemFields, setSystemFields] = useState<EditableField[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,10 +87,12 @@ export function EditTableStructureModal({
       .getTableSchema(dashboardId, tableKey, { sessionId, userId })
       .then((res) => {
         const incoming = Array.isArray(res.fields) ? res.fields : [];
-        const system = incoming.filter((f) => isSystemField(f));
+        const system = incoming
+          .filter((f) => isSystemField(f))
+          .map((f) => normalizeFieldVisibility({ ...f, required: true }));
         const editable = incoming
           .filter((f) => !isSystemField(f))
-          .map((f) => ({ ...f, tempId: f.id || makeTempId(), previousKey: f.key }));
+          .map((f) => normalizeFieldVisibility(f as DashboardField));
         setSystemFields(system);
         setFields(editable);
         setError(null);
@@ -103,7 +130,9 @@ export function EditTableStructureModal({
       label: "",
       type: "string",
       required: false,
+      visible: true,
       visibleInTable: true,
+      hidden: false,
       previousKey: "",
     };
     setFields((prev) => [...prev, next]);
@@ -111,7 +140,31 @@ export function EditTableStructureModal({
 
   const updateField = (tempId: string, patch: Partial<EditableField>) => {
     setFields((prev) =>
-      prev.map((field) => (field.tempId === tempId ? { ...field, ...patch } : field)),
+      prev.map((field) => {
+        if (field.tempId !== tempId) return field;
+        const next = { ...field, ...patch };
+        if (patch.visible !== undefined) {
+          next.visibleInTable = patch.visible;
+          next.hidden = !patch.visible;
+        }
+        return next;
+      }),
+    );
+  };
+
+  const updateSystemField = (tempId: string, patch: Partial<EditableField>) => {
+    setSystemFields((prev) =>
+      prev.map((field) =>
+        field.tempId === tempId
+          ? {
+              ...field,
+              ...patch,
+              required: true,
+              visibleInTable: patch.visible !== undefined ? patch.visible : field.visibleInTable,
+              hidden: patch.visible !== undefined ? !patch.visible : field.hidden,
+            }
+          : field,
+      ),
     );
   };
 
@@ -168,8 +221,16 @@ export function EditTableStructureModal({
     setError(null);
     try {
       const payloadFields = [...systemFields, ...fields].map((f) => {
-        const { tempId, ...rest } = f;
-        return rest;
+        const { tempId, isSystem, previousKey, ...rest } = f;
+        const visible = rest.visible ?? rest.visibleInTable ?? !rest.hidden ?? true;
+        return {
+          ...rest,
+          label: rest.label || rest.key,
+          required: isSystem ? true : !!rest.required,
+          visible,
+          visibleInTable: visible,
+          hidden: !visible,
+        };
       });
       const res = await dashboardApi.updateTableSchema(
         dashboardId,
@@ -178,11 +239,15 @@ export function EditTableStructureModal({
         { sessionId, userId },
       );
       const incoming = Array.isArray(res.fields) ? res.fields : [];
-      setSystemFields(incoming.filter((f) => isSystemField(f)));
+      setSystemFields(
+        incoming
+          .filter((f) => isSystemField(f))
+          .map((f) => normalizeFieldVisibility({ ...f, required: true })),
+      );
       setFields(
         incoming
           .filter((f) => !isSystemField(f))
-          .map((f) => ({ ...f, tempId: f.id || makeTempId(), previousKey: f.key })),
+          .map((f) => normalizeFieldVisibility(f as DashboardField)),
       );
       onSaved?.(incoming);
       toast.success("Table structure updated");
@@ -216,11 +281,113 @@ export function EditTableStructureModal({
           </div>
         </div>
 
-        <div className="mdModalBody">
+          <div className="mdModalBody">
           {loading ? (
             <div className="text-sm text-muted-foreground">Loading schema...</div>
           ) : (
             <div className="schemaList">
+              {systemFields.map((field) => {
+                const refFields = getReferenceFields(field.referenceTable);
+                return (
+                  <div key={field.tempId} className="schemaRow systemRow">
+                    <div className="schemaDragHandle" title="System field">
+                      <GripVertical className="w-4 h-4 opacity-50" />
+                    </div>
+                    <div className="schemaGrid">
+                      <div className="mdField">
+                        <label className="mdLabel">Field key</label>
+                        <Input value={field.key} disabled />
+                      </div>
+                      <div className="mdField">
+                        <label className="mdLabel">Label</label>
+                        <Input
+                          value={field.label || ""}
+                          onChange={(e) => updateSystemField(field.tempId, { label: e.target.value })}
+                          placeholder="Label"
+                        />
+                      </div>
+                      <div className="mdField">
+                        <label className="mdLabel">Type</label>
+                        <Select value={field.type} disabled>
+                          <SelectTrigger className="mdSelect">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </Select>
+                      </div>
+                      <div className="mdField schemaToggles">
+                        <label className="mdLabel">Options</label>
+                        <div className="schemaToggleGroup">
+                          <label className="mdCheckbox">
+                            <input type="checkbox" checked readOnly />
+                            <span>Required</span>
+                          </label>
+                          <label className="mdCheckbox">
+                            <input
+                              type="checkbox"
+                              checked={field.visible !== false}
+                              onChange={() =>
+                                updateSystemField(field.tempId, {
+                                  visible: !field.visible,
+                                  visibleInTable: !field.visible,
+                                  hidden: field.visible,
+                                })
+                              }
+                            />
+                            <span>Visible</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {field.type === "reference" && (
+                      <div className="schemaSubSection">
+                        <div className="schemaSubHeader">
+                          <p className="mdMainSubtitle">Reference settings</p>
+                        </div>
+                        <div className="schemaGrid">
+                          <div className="mdField">
+                            <label className="mdLabel">Reference table</label>
+                            <Select
+                              value={field.referenceTable || ""}
+                              onValueChange={(v) => updateSystemField(field.tempId, { referenceTable: v, displayField: "" })}
+                            >
+                              <SelectTrigger className="mdSelect">
+                                <SelectValue placeholder="Select table" />
+                              </SelectTrigger>
+                              <SelectContent className="mdSelectContent" position="popper">
+                                {referenceTargets.map((table) => (
+                                  <SelectItem key={table.key || table.id} value={table.key || table.id || ""}>
+                                    {table.name || table.key}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="mdField">
+                            <label className="mdLabel">Display field</label>
+                            <Select
+                              value={field.displayField || ""}
+                              onValueChange={(v) => updateSystemField(field.tempId, { displayField: v })}
+                              disabled={!field.referenceTable}
+                            >
+                              <SelectTrigger className="mdSelect">
+                                <SelectValue placeholder="Choose field" />
+                              </SelectTrigger>
+                              <SelectContent className="mdSelectContent" position="popper">
+                                {refFields.map((refField) => (
+                                  <SelectItem key={refField.key} value={refField.key}>
+                                    {refField.label || refField.key}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {fields.map((field) => {
                 const refFields = getReferenceFields(field.referenceTable);
                 return (
@@ -282,8 +449,14 @@ export function EditTableStructureModal({
                           <label className="mdCheckbox">
                             <input
                               type="checkbox"
-                              checked={field.visibleInTable !== false}
-                              onChange={(e) => updateField(field.tempId, { visibleInTable: e.target.checked })}
+                              checked={field.visible !== false}
+                              onChange={() =>
+                                updateField(field.tempId, {
+                                  visible: !field.visible,
+                                  visibleInTable: !field.visible,
+                                  hidden: field.visible,
+                                })
+                              }
                             />
                             <span>Visible</span>
                           </label>

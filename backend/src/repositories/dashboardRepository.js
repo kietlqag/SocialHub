@@ -15,6 +15,7 @@ const mapDashboard = (doc) => ({
   userId: doc.userId || null,
   createdAt: doc.createdAt,
   updatedAt: doc.updatedAt,
+  accessControl: doc.accessControl || null,
 });
 
 const ownerFilter = ({ sessionId, userId }) => {
@@ -25,6 +26,7 @@ const ownerFilter = ({ sessionId, userId }) => {
 
 export async function insertDashboard(doc) {
   const now = new Date();
+  const { buildDefaultAccessControl } = await import("../utils/accessControlDefaults.js");
   const payload = {
     name: doc.name,
     type: doc.type || "",
@@ -34,6 +36,7 @@ export async function insertDashboard(doc) {
     ui: doc.ui || {},
     sessionId: doc.sessionId || null,
     userId: doc.userId || null,
+    accessControl: doc.accessControl || buildDefaultAccessControl(),
     createdAt: now,
     updatedAt: now,
   };

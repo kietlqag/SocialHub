@@ -44,6 +44,33 @@ export type DashboardTable = Omit<TableConfig, "fields"> & {
   sampleRows?: Record<string, any>[];
 };
 
+export type DashboardAccessMode = "public" | "restricted" | "private";
+
+export type DashboardRolePermission = {
+  role: string;
+  permissions: {
+    view: boolean;
+    create: boolean;
+    edit: boolean;
+    delete: boolean;
+    manageAccess: boolean;
+  };
+};
+
+export type DashboardUserAssignment = {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  role: string;
+};
+
+export type DashboardAccessPayload = {
+  accessMode: DashboardAccessMode;
+  rolePermissions: DashboardRolePermission[];
+  userAssignments: DashboardUserAssignment[];
+};
+
 export type NewFieldDefinition = {
   key: string;
   label: string;
@@ -115,6 +142,17 @@ export type DashboardDataResponse = {
 export type TableSchemaResponse = {
   table: { key: string; name: string; description?: string };
   fields: DashboardField[];
+};
+
+export type PublicDashboardSummary = {
+  _id: string;
+  name: string;
+  description?: string;
+  owner?: { id?: string; fullName?: string } | null;
+  updatedAt?: string;
+  tablesCount?: number;
+  favoriteCount?: number;
+  tags?: string[];
 };
 
 export type MetricWidgetConfig = {
@@ -241,7 +279,7 @@ export const dashboardApi = {
       `/api/dashboards/${dashboardId}/tables/${tableKey}/records/${recordId}${queryString}`,
     );
   },
-  createDashboardTable: (
+  createDashboardTable: async (
     dashboardId: string,
     table: TableDefinition,
     params: { sessionId?: string; userId?: string | null } = {},
@@ -250,7 +288,18 @@ export const dashboardApi = {
     if (params.sessionId) query.set("sessionId", params.sessionId);
     if (params.userId) query.set("userId", params.userId);
     const queryString = query.toString() ? `?${query.toString()}` : "";
-    return api.post<{ table: TableDefinition }>(`/api/dashboards/${dashboardId}/tables${queryString}`, table);
+    const primaryPath = `/api/dashboards/${dashboardId}/tables${queryString}`;
+    try {
+      return await api.post<{ table: TableDefinition }>(primaryPath, table);
+    } catch (err: any) {
+      // Fallback for backends that expose /tables/create
+      const status = err?.response?.status || err?.status;
+      if (status === 404) {
+        const fallbackPath = `/api/dashboards/${dashboardId}/tables/create${queryString}`;
+        return api.post<{ table: TableDefinition }>(fallbackPath, table);
+      }
+      throw err;
+    }
   },
   getTableSchema: (dashboardId: string, tableKey: string, params: { sessionId?: string; userId?: string | null } = {}) => {
     const query = new URLSearchParams();
@@ -304,6 +353,68 @@ export const dashboardApi = {
     const queryString = query.toString() ? `?${query.toString()}` : "";
     return api.delete<{ success: boolean }>(`/api/dashboards/${dashboardId}/widgets/${widgetId}${queryString}`);
   },
+  getAccessControl: (dashboardId: string, params: { sessionId?: string; userId?: string | null } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.get<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/access${queryString}`);
+  },
+  updateAccessMode: (
+    dashboardId: string,
+    accessMode: DashboardAccessMode,
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.patch<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/access-mode${queryString}`, { accessMode });
+  },
+  updateRolePermissions: (
+    dashboardId: string,
+    rolePermissions: DashboardRolePermission[],
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.patch<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/permissions${queryString}`, { rolePermissions });
+  },
+  searchUsers: (queryStr: string) =>
+    api.get<{ users: Array<{ id: string; fullName: string; email: string }> }>(`/api/users?query=${encodeURIComponent(queryStr)}`),
+  addUserAssignment: (
+    dashboardId: string,
+    body: { userId: string; role: string },
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.post<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/users${queryString}`, body);
+  },
+  updateUserAssignment: (
+    dashboardId: string,
+    assignmentId: string,
+    body: { role: string },
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.patch<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/users/${assignmentId}${queryString}`, body);
+  },
+  removeUserAssignment: (dashboardId: string, assignmentId: string, params: { sessionId?: string; userId?: string | null } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.delete<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/users/${assignmentId}${queryString}`);
+  },
+  listPublicDashboards: () => api.get<PublicDashboardSummary[]>(`/api/dashboards/public`),
   hideWidgetOverride: (
     dashboardId: string,
     body: { widgetKey: string },

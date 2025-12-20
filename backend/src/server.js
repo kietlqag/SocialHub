@@ -7,6 +7,7 @@ import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
 import { getDashboardData, listWidgets, createWidget, deleteWidget, hideWidget } from "./controllers/dashboardController.js";
 import { initDb } from "./db.js";
 import { initMongo, getSocialhubDb } from "./mongo.js";
@@ -49,6 +50,7 @@ app.use(orgRoutes);
 app.use("/notifications", notificationRoutes);
 // Profile endpoints
 app.use("/profile", profileRoutes);
+app.use("/api", userRoutes);
 // Direct mount for dashboard data (in addition to router) to avoid 404s
 app.get("/api/dashboards/:id/data", asyncHandler(getDashboardData));
 app.get("/api/dashboards/:id/widgets", asyncHandler(listWidgets));

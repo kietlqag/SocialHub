@@ -27,6 +27,41 @@ const slugify = (text: string) =>
 
 const RESERVED_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
 
+const normalizeNewField = (field: NewFieldDefinition): any => {
+  const normalizedKey = slugify(field.key || field.label);
+  const base = {
+    key: normalizedKey,
+    label: (field.label || "").trim(),
+    required: !!field.required,
+  };
+
+  if (field.type === "reference") {
+    return {
+      ...base,
+      type: "id",
+      ref: field.referenceTableKey ? slugify(field.referenceTableKey) : null,
+      semanticType: "reference",
+      semanticRole: "foreign_id",
+      options: null,
+    };
+  }
+
+  if (field.type === "enum") {
+    return {
+      ...base,
+      type: "string",
+      semanticType: "enum",
+      options: field.enumOptions ?? [],
+    };
+  }
+
+  return {
+    ...base,
+    type: field.type || "string",
+    options: null,
+  };
+};
+
 export const CreateTableModal = ({ isOpen, onClose, dashboardId, existingTables, sessionId, userId, onCreated }: CreateTableModalProps) => {
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
@@ -103,16 +138,13 @@ export const CreateTableModal = ({ isOpen, onClose, dashboardId, existingTables,
       key: slugify(key || name),
       name: name.trim(),
       description: description.trim() || undefined,
-      fields: fields.map((f) => {
-        const fKey = slugify(f.key || f.label);
-        return {
+      fields: fields.map((f) =>
+        normalizeNewField({
           ...f,
-          key: fKey,
-          label: f.label.trim(),
-          isReference: f.type === "reference" ? true : f.isReference,
-          referenceTableKey: f.type === "reference" ? f.referenceTableKey || null : null,
-        };
-      }),
+          key: slugify(f.key || f.label),
+          label: (f.label || "").trim(),
+        }),
+      ),
     };
     try {
       const res = await dashboardApi.createDashboardTable(dashboardId, payload, { sessionId, userId });

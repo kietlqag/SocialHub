@@ -18,6 +18,10 @@ import {
   removeInsight,
   updateInsight,
 } from "../services/dashboardService.js";
+import { findDashboardForOwner } from "../repositories/dashboardRepository.js";
+import { listTablesByDashboard } from "../repositories/dashboardTableRepository.js";
+import { DashboardTableModel } from "../models/dashboardTableModel.js";
+import { mongoose } from "../mongoose.js";
 import { getSocialhubDb } from "../mongo.js";
 
 const parseOwner = (req) => ({
@@ -48,6 +52,113 @@ export async function createDashboard(req, res) {
 export async function listDashboard(req, res) {
   const dashboards = await listDashboards(parseOwner(req));
   res.json({ dashboards });
+}
+
+export async function listDashboardTables(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId } = req.params;
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  if (!owner.sessionId && !owner.userId) {
+    throw new HttpError(400, "sessionId or userId required");
+  }
+  const dashboard = await findDashboardForOwner(dashboardId, owner);
+  if (!dashboard) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+  const tables = await listTablesByDashboard(dashboardId);
+  res.json({ tables });
+}
+
+export async function createDashboardTable(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId } = req.params;
+  const { name, key, description, fields } = req.body || {};
+  const RESERVED_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
+  const defaultSystemFields = [
+    {
+      key: "id",
+      label: "ID",
+      type: "id",
+      required: true,
+      visibleInTable: false,
+      system: true,
+      systemField: true,
+      isReference: false,
+    },
+    {
+      key: "created_at",
+      label: "Created at",
+      type: "datetime",
+      required: false,
+      visibleInTable: false,
+      system: true,
+      systemField: true,
+      isReference: false,
+    },
+    {
+      key: "updated_at",
+      label: "Updated at",
+      type: "datetime",
+      required: false,
+      visibleInTable: false,
+      system: true,
+      systemField: true,
+      isReference: false,
+    },
+  ];
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  if (!owner.sessionId && !owner.userId) {
+    throw new HttpError(400, "sessionId or userId required");
+  }
+  if (!mongoose.Types.ObjectId.isValid(dashboardId)) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+  const dashboard = await findDashboardForOwner(dashboardId, owner);
+  if (!dashboard) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+
+  const normalizedKey = (key || "").toString().trim();
+  const normalizedName = (name || "").toString().trim();
+  if (!normalizedKey) throw new HttpError(400, "key is required");
+  if (!normalizedName) throw new HttpError(400, "name is required");
+
+  const existingTables = await listTablesByDashboard(dashboardId);
+  const lowerKey = normalizedKey.toLowerCase();
+  if (existingTables.some((table) => (table.key || "").toLowerCase() === lowerKey)) {
+    throw new HttpError(400, "Duplicate table key");
+  }
+
+  const dashboardObjectId = new mongoose.Types.ObjectId(dashboardId);
+  const userFields = Array.isArray(fields)
+    ? fields.filter((field) => field && field.key && !RESERVED_KEYS.has(field.key))
+    : [];
+  const newTable = {
+    name: normalizedName,
+    key: normalizedKey,
+    description: (description || "").toString(),
+    fields: [...defaultSystemFields, ...userFields],
+  };
+
+  try {
+    const created = await DashboardTableModel.create({
+      dashboardId: dashboardObjectId,
+      ...newTable,
+    });
+
+    res.status(201).json({
+      message: "Table created",
+      table: {
+        id: created._id?.toString(),
+        ...newTable,
+      },
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      throw new HttpError(400, "Duplicate table key");
+    }
+    throw err;
+  }
 }
 
 export async function deleteDashboard(req, res) {

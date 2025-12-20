@@ -56,6 +56,18 @@ export async function selectUserById(userId) {
   return res.rows[0] || null;
 }
 
+export async function searchUsers(term) {
+  const like = `%${term}%`;
+  const res = await query(
+    `${baseSelect}
+     WHERE email ILIKE $1 OR full_name ILIKE $1
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [like]
+  );
+  return res.rows || [];
+}
+
 export async function updateOAuthProfile(userId, { provider, providerId, avatarUrl }) {
   await query(
     `UPDATE users

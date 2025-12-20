@@ -34,6 +34,8 @@ export function Header({
       ? "home"
       : pathname.startsWith("/managedash") || pathname.startsWith("/dashboard")
         ? "dashboard"
+        : pathname.startsWith("/explore")
+          ? "explore"
         : pathname.startsWith("/chat")
           ? "chat"
           : pathname.startsWith("/contact")
@@ -54,6 +56,7 @@ export function Header({
           <nav className="hidden md:block">
             <div className="ml-10 flex items-baseline space-x-8">
               <a href="/home" className={`nav-link ${activeKey === "home" ? "active" : ""}`}>Home</a>
+              <a href="/explore" className={`nav-link ${activeKey === "explore" ? "active" : ""}`}>Explore</a>
               {currentUser && (
                 <button
                   onClick={onManageDash}
@@ -106,10 +109,11 @@ export function Header({
       </div>
 
       {/* Mobile menu */}
-      {isMenuOpen && (
+          {isMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-100">
             <a href="/home" className="block px-3 py-2 text-gray-700 hover:text-primary font-semibold">Home</a>
+            <a href="/explore" className="block px-3 py-2 text-gray-700 hover:text-primary font-semibold">Explore</a>
             {currentUser && (
               <Button
                 variant="ghost"

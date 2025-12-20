@@ -4,6 +4,8 @@ import {
   generateStructure,
   createDashboard,
   listDashboard,
+  listDashboardTables,
+  createDashboardTable,
   deleteDashboard,
   createDashboardRecord,
   getDashboardRecords,
@@ -19,6 +21,8 @@ import {
   deleteInsight,
   patchInsight,
 } from "../controllers/dashboardController.js";
+import { getDashboardAccess, updateDashboardAccess, updateDashboardAccessMode } from "../controllers/dashboardAccessController.js";
+import { getPublicDashboards } from "../controllers/publicDashboardController.js";
 import { getTableSchema, updateTableSchema } from "../controllers/tableSchemaController.js";
 
 const router = Router();
@@ -26,6 +30,8 @@ const router = Router();
 router.post("/dashboards/generate", asyncHandler(generateStructure));
 router.post("/dashboards", asyncHandler(createDashboard));
 router.get("/dashboards", asyncHandler(listDashboard));
+router.get("/dashboards/:dashboardId/tables", asyncHandler(listDashboardTables));
+router.post("/dashboards/:dashboardId/tables/create", asyncHandler(createDashboardTable));
 router.delete("/dashboards/:id", asyncHandler(deleteDashboard));
 router.post("/dashboards/:id/records", asyncHandler(createDashboardRecord));
 router.post("/dashboards/records", asyncHandler(createDashboardRecord));
@@ -43,5 +49,9 @@ router.post("/dashboards/:id/widget-overrides/hide", asyncHandler(hideWidget));
 router.post("/dashboards/:id/insights", asyncHandler(createInsight));
 router.delete("/dashboards/:id/insights/:insightId", asyncHandler(deleteInsight));
 router.patch("/dashboards/:id/insights/:insightId", asyncHandler(patchInsight));
+router.get("/dashboards/:dashboardId/access", asyncHandler(getDashboardAccess));
+router.patch("/dashboards/:dashboardId/access", asyncHandler(updateDashboardAccess));
+router.patch("/dashboards/:dashboardId/access-mode", asyncHandler(updateDashboardAccessMode));
+router.get("/dashboards/public", asyncHandler(getPublicDashboards));
 
 export default router;

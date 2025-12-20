@@ -26,6 +26,7 @@ import {
   Layers3,
   ChartBar,
   BarChartHorizontal,
+  ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardTable, type DashboardField } from "../services/dashboards";
@@ -64,7 +65,10 @@ import "../styles/managedash-detail.css";
 import { SYSTEM_FIELDS, isSystemField } from "../../shared/systemFields";
 import { useTableFilters, type FilterGroup } from "../components/table/filters/useTableFilters";
 import { TableFiltersModal } from "../components/table/filters/TableFiltersModal";
+import { AccessControlTab } from "../components/dashboard/AccessControlTab";
+import { useDashboardPermissions } from "../dashboard/useDashboardPermissions";
 
+const SYSTEM_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
 const DASHBOARD_SESSION_KEY = "socialhub:dashboards_session";
 const getSessionId = () => {
   if (typeof window === "undefined") return "";
@@ -185,14 +189,40 @@ const isSelfReferencingId = (field: { key?: string; isReference?: boolean; refer
   return target && target === tableKey.toLowerCase();
 };
 
+const normalizeFieldVisibility = <T extends { key?: string; fieldName?: string; name?: string; system?: boolean; systemField?: boolean; visible?: boolean; visibleInTable?: boolean; hidden?: boolean }>(
+  field: T,
+): T & { visible: boolean; visibleInTable: boolean; hidden: boolean } => {
+  const key = String(field.key || (field as any).fieldName || (field as any).name || "");
+  const isSystem = field.system === true || field.systemField === true || SYSTEM_KEYS.has(key);
+  const rawVisibleInTable = field.visibleInTable;
+  const rawHidden = field.hidden;
+  let visible: boolean;
+  if (rawVisibleInTable !== undefined || rawHidden !== undefined) {
+    if (rawHidden === true) visible = false;
+    else if (rawVisibleInTable === false) visible = false;
+    else visible = true;
+  } else {
+    visible = isSystem ? false : true;
+  }
+  return {
+    ...field,
+    visible,
+    visibleInTable: visible,
+    hidden: !visible,
+  };
+};
+
 const getVisibleFields = (fields: any[] = []) =>
   fields.filter((f) => {
     const key = (f.key || f.fieldName || f.name || "").toString();
+    const isSystem = isSystemFieldName(key) || isSystemKey(key);
+    const visibleFlag = f.visible ?? f.visibleInTable;
+    const isVisible = visibleFlag !== undefined ? visibleFlag !== false : isSystem ? false : true;
+    if (!isVisible) return false;
     if (!key) return false;
-    if (isSystemFieldName(key)) return false;
-    // keep foreign keys visible
+    // keep foreign keys visible even if system-like
     if (isForeignKeyFieldName(key)) return true;
-    return !isSystemKey(key);
+    return true;
   });
 
 const formatMetricValue = (value: number | null | undefined, formatted?: string | null) => {
@@ -512,6 +542,17 @@ const isForeignKeyFieldName = (key: string) => {
   const lower = key.toLowerCase();
   if (isSystemFieldName(lower)) return false;
   return lower.endsWith("_id");
+};
+
+const inferTableKeyFromFieldKey = (fieldKey: string): string => {
+  const base = fieldKey.replace(/_id$/i, "");
+  return base.endsWith("s") ? base : `${base}s`;
+};
+
+const humanizeTableKey = (key: string): string => {
+  if (!key) return "";
+  const base = key.replace(/_/g, " ");
+  return base.charAt(0).toUpperCase() + base.slice(1);
 };
 
 const validateFormValues = (fields: NormalizedField[], values: Record<string, any>, tableKey?: string) => {
@@ -1687,14 +1728,19 @@ const AddRecordModal = ({
       if (isReadOnly) return;
       onChange(key, value);
     };
-    if (field.isReference && field.referenceTableKey) {
+    if (field.isReference) {
+      const targetTableKey =
+        field.referenceTableKey && field.referenceTableKey.trim().length > 0
+          ? field.referenceTableKey
+          : inferTableKeyFromFieldKey(field.key);
       const refKey = `${tableKey}:${field.key}`;
-      const refData = referenceOptions[refKey] || referenceOptions[field.key] || { options: [], loading: true };
+      const refData = referenceOptions[refKey] || referenceOptions[field.key] || { options: [], loading: true, targetTable: targetTableKey };
       const opts = refData.options || [];
       const base = field.key.replace(/_id$/i, "");
       const placeholderBase = base || field.label.toLowerCase();
       const placeholder = `Select ${placeholderBase}`;
-      const targetTable = refData.targetTable || field.referenceTableKey;
+      const targetTable = refData.targetTable || targetTableKey;
+      const tableLabel = humanizeTableKey(targetTable);
       return (
         <Select
           value={values[field.key] ?? ""}
@@ -1715,7 +1761,7 @@ const AddRecordModal = ({
               ))
             ) : (
               <div className="px-3 py-2 text-sm text-muted-foreground">
-                No records available in {targetTable}. Add one first.
+                No records available in {tableLabel || targetTable}. Add one first.
               </div>
             )}
           </SelectContent>
@@ -2037,6 +2083,11 @@ export default function ManageDashDetail() {
   const CHARTS_PER_PAGE = 4;
   const [widgetPage, setWidgetPage] = useState(1);
   const [chartPage, setChartPage] = useState(1);
+  const permissions = useDashboardPermissions(dashId, { userId: currentUser?.id ?? null, sessionId });
+  const canCreate = permissions.hasPermission("create");
+  const canEdit = permissions.hasPermission("edit");
+  const canDelete = permissions.hasPermission("delete");
+  const canManageAccess = permissions.hasPermission("manageAccess");
 
   // Reset modals when navigating to a different dashboard or landing
   useEffect(() => {
@@ -2071,7 +2122,17 @@ export default function ManageDashDetail() {
         if (!active) return;
         const found = (res.dashboards || []).find((d) => d.id === dashId);
         if (!found) setError("Dashboard not found");
-        setDashboard(found || null);
+        const normalized =
+          found && found.tables
+            ? {
+                ...found,
+                tables: found.tables.map((t) => ({
+                  ...t,
+                  fields: (t.fields || []).map((f) => normalizeFieldVisibility(f)),
+                })),
+              }
+            : found || null;
+        setDashboard(normalized as Dashboard | null);
       })
       .catch((err) => {
         if (!active) return;
@@ -2119,7 +2180,11 @@ export default function ManageDashDetail() {
     (table: DashboardTable | any) => {
       setDashboard((prev) => {
         if (!prev) return prev;
-        const nextTables = [...(prev.tables || []), table];
+        const normalizedTable = {
+          ...table,
+          fields: (table.fields || []).map((f: any) => normalizeFieldVisibility(f)),
+        };
+        const nextTables = [...(prev.tables || []), normalizedTable];
         return { ...prev, tables: nextTables };
       });
       const nextId = table.key || table.id;
@@ -2392,7 +2457,9 @@ export default function ManageDashDetail() {
 
   const fetchReferenceOptions = useCallback(
     async (field: NormalizedField) => {
-      const targetTable = field.referenceTableKey;
+      const targetTable = field.referenceTableKey && field.referenceTableKey.trim().length > 0
+        ? field.referenceTableKey
+        : inferTableKeyFromFieldKey(field.key);
       if (!dashId || !targetTable) return;
       const fieldKey = field.key;
       setReferenceOptions((prev) => ({
@@ -2460,10 +2527,11 @@ export default function ManageDashDetail() {
     (updatedFields: DashboardField[]) => {
       const targetKey = schemaTargetKey || activeTableKey;
       if (!targetKey) return;
+      const normalizedFields = (updatedFields || []).map((f) => normalizeFieldVisibility(f));
       setDashboard((prev) => {
         if (!prev) return prev;
         const nextTables = (prev.tables || []).map((table) =>
-          (table.key || table.id) === targetKey ? { ...table, fields: updatedFields } : table,
+          (table.key || table.id) === targetKey ? { ...table, fields: normalizedFields } : table,
         );
         return { ...prev, tables: nextTables };
       });
@@ -3397,6 +3465,10 @@ export default function ManageDashDetail() {
       );
     }
 
+    if (activeSection === "access-control" && dashId) {
+      return <AccessControlTab dashboardId={dashId} sessionId={sessionId} userId={currentUser?.id} />;
+    }
+
     const activeOption = tableOptions.find((t) => t.id === activeSection) || activeTableOption;
     if (!activeOption) {
       return (
@@ -3456,26 +3528,29 @@ export default function ManageDashDetail() {
                 </span>
               ) : null}
             </Button>
-            <Button className="primaryBtn" onClick={handleOpenAdd} disabled={!tableKey}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add record
-            </Button>
+            {canCreate && (
+              <Button className="primaryBtn" onClick={handleOpenAdd} disabled={!tableKey}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add record
+              </Button>
+            )}
           </div>
         </div>
 
         <div className="recordTableWrap simple">
-          <div className="recordTable">
-            <div className="recordHeaderRow" style={{ gridTemplateColumns: `repeat(${recordColumnCount}, minmax(140px, 1fr))` }}>
-              {recordColumns.map((col) => (
-                <div key={col.key} className="recordCell header">
-                  {col.label}
-                </div>
-              ))}
-              <div className="recordCell header">Actions</div>
-            </div>
-            {filteredRecords.length ? (
-              filteredRecords.map((record, idx) => {
-                const meta = (record as any).__meta;
+            <div className="recordTableScroll">
+            <div className="recordTable">
+              <div className="recordHeaderRow" style={{ gridTemplateColumns: `repeat(${recordColumnCount}, minmax(140px, 1fr))` }}>
+                {recordColumns.map((col) => (
+                  <div key={col.key} className="recordCell header">
+                    {col.label}
+                  </div>
+                ))}
+                <div className="recordCell header">Actions</div>
+              </div>
+              {filteredRecords.length ? (
+                filteredRecords.map((record, idx) => {
+                  const meta = (record as any).__meta;
                 return (
                   <div
                     key={(meta as any)?.id || (record as any)?.id || (meta as any)?._id || idx}
@@ -3513,40 +3588,49 @@ export default function ManageDashDetail() {
                       <button className="recordIconBtn view" title="View record" onClick={() => handleView(record)}>
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button className="recordIconBtn edit" title="Edit" onClick={() => handleEdit(record)}>
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button className="recordIconBtn danger" title="Delete" onClick={() => handleDelete(record)}>
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canEdit && (
+                        <button className="recordIconBtn edit" title="Edit" onClick={() => handleEdit(record)}>
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button className="recordIconBtn danger" title="Delete" onClick={() => handleDelete(record)}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               })
-            ) : (
-              <div className="tableEmpty padded">
-                {tableDisplayRecords.length
-                  ? "No records match your search."
-                  : "No data yet. Add your first record to populate this table."}
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="tableEmpty padded">
+                  {tableDisplayRecords.length
+                    ? "No records match your search."
+                    : "No data yet. Add your first record to populate this table."}
+                </div>
+              )}
+            </div>
+            </div>
         </div>
       </div>
     );
   };
 
   const sidebarItems = useMemo(
-    () => [
-      { id: "overview", label: "Overview", icon: BarChart3 },
-      ...filteredTableOptions.map((table) => ({
-        id: table.id,
-        label: table.title,
-        icon: TableIcon,
-        count: table.count,
-      })),
-      { id: "add-table", label: "Add table", icon: Plus, add: true },
-    ],
+    () => {
+      const items = [{ id: "overview", label: "Overview", icon: BarChart3 } as any];
+      items.push(
+        ...filteredTableOptions.map((table) => ({
+          id: table.id,
+          label: table.title,
+          icon: TableIcon,
+          count: table.count,
+        })),
+      );
+      items.push({ id: "add-table", label: "Add table", icon: Plus, add: true });
+      items.push({ id: "access-control", label: "Access control", icon: ShieldCheck });
+      return items;
+    },
     [filteredTableOptions],
   );
 
@@ -3601,7 +3685,8 @@ export default function ManageDashDetail() {
                     return;
                   }
                   setActiveSection(item.id);
-                  if (item.id !== "overview") setActiveTableId(item.id);
+                  const targetTable = tableOptions.find((t) => t.id === item.id);
+                  if (targetTable) setActiveTableId(item.id);
                 }}
               >
                 <item.icon className="w-4 h-4" />
