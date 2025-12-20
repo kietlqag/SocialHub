@@ -3,6 +3,7 @@ import { query } from "../db.js";
 const baseSelect =
   `SELECT id,
           email,
+          role,
           password_hash,
           full_name AS "fullName",
           company,
@@ -19,6 +20,7 @@ export async function insertUser({ email, passwordHash, fullName, company }) {
      VALUES ($1, $2, $3, $4, false, NULL, NULL, NULL)
      RETURNING id,
                email,
+               role,
                full_name AS "fullName",
                company,
                created_at AS "createdAt",

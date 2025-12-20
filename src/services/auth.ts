@@ -3,6 +3,7 @@
 export type AuthUser = {
   id: string;
   email: string;
+  role: "user" | "admin";
   fullName?: string;
   company?: string;
   createdAt?: string;

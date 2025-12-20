@@ -4,7 +4,7 @@ import UserMenu from "./UserMenu";
 import { useState } from "react";
 import { AuthUser } from "../services/auth";
 import { NotificationDropdown } from "./NotificationDropdown";
-import { useLocation } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import "../styles/headerDropdown.css";
 
 export function Header({
@@ -27,6 +27,7 @@ export function Header({
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const pathname = location.pathname || "/";
   const activeKey =
@@ -78,7 +79,8 @@ export function Header({
                   <NotificationDropdown />
                   <UserMenu
                     userName={currentUser.fullName || currentUser.email}
-                    avatarUrl={currentUser.avatarUrl || undefined}
+                    role={currentUser.role}
+                    onAdmin={() => navigate("/admin")}
                     onProfile={onProfileOpen}
                     onSettings={onSettingsOpen}
                     onSignOut={onLogout}

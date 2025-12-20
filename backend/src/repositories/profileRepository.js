@@ -3,6 +3,7 @@ import { query } from "../db.js";
 const profileSelect = `
 SELECT u.id,
        u.email,
+       u.role,
        u.full_name AS "fullName",
        u.company,
        u.avatar_url AS "avatarUrl",
