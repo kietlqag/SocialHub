@@ -14,6 +14,8 @@ import { initMongoose } from "./mongoose.js";
 import { HttpError } from "./utils/httpError.js";
 import { login } from "./controllers/authController.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
+import adminRoutes from "./routes/adminRoutes.js";
+
 
 dotenv.config();
 
@@ -49,6 +51,7 @@ app.use(orgRoutes);
 app.use("/notifications", notificationRoutes);
 // Profile endpoints
 app.use("/profile", profileRoutes);
+
 // Direct mount for dashboard data (in addition to router) to avoid 404s
 app.get("/api/dashboards/:id/data", asyncHandler(getDashboardData));
 app.get("/api/dashboards/:id/widgets", asyncHandler(listWidgets));
@@ -56,6 +59,9 @@ app.post("/api/dashboards/:id/widgets", asyncHandler(createWidget));
 app.delete("/api/dashboards/:id/widgets/:widgetId", asyncHandler(deleteWidget));
 app.post("/api/dashboards/:id/widget-overrides/hide", asyncHandler(hideWidget));
 app.use("/api", dashboardRoutes);
+
+// Admin routes
+app.use("/admin", adminRoutes);
 
 // Basic error handler
 // eslint-disable-next-line no-unused-vars

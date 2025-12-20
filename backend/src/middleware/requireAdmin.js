@@ -1,8 +1,10 @@
-import { Navigate } from "react-router-dom";
-import { AuthUser } from "../services/auth";
+export const requireAdmin = (req, res, next) => {
+  // authenticate middleware phải chạy trước để gắn req.user
+  if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-export default function RequireAdmin({ user, children }) {
-  if (!user) return <Navigate to="/home" replace />;
-  if (user.role !== "admin") return <Navigate to="/managedash" replace />;
-  return children;
-}
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  return next();
+};

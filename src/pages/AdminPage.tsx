@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -31,48 +31,121 @@ import {
 import { Label } from "../components/ui/label";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { Textarea } from "../components/ui/textarea";
+import { Switch } from "../components/ui/switch";
 import {
   ArrowLeft,
   Shield,
   Users,
   UserPlus,
   Search,
-  Filter,
   Download,
-  Upload,
-  MoreVertical,
   Edit,
   Trash2,
   Ban,
   CheckCircle,
-  XCircle,
-  AlertTriangle,
   Eye,
   Mail,
   Calendar,
   Activity,
-  TrendingUp,
   UserCheck,
-  UserX,
-  Settings,
   Lock,
   Unlock,
   LayoutDashboard,
+  Database,
+  Bell,
+  DollarSign,
+  LifeBuoy,
+  AlertTriangle,
+  TrendingUp,
+  Settings,
+  Copy,
+  RefreshCw,
+  ExternalLink,
+  FileText,
+  Key,
+  UserCog,
+  Users2,
+  FolderTree,
+  BarChart3,
+  Zap,
+  Server,
+  MessageSquare,
+  CreditCard,
+  Clock,
+  Filter,
+  MoreVertical,
+  Send,
+  Sparkles,
+  GitBranch,
+  Blocks,
 } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../services/api";
+import { getCurrentSession } from "../services/auth";
 
 interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "user" | "manager" | "viewer";
+  role: "admin" | "editor" | "viewer" | "user";
   status: "active" | "inactive" | "suspended" | "pending";
   plan: "free" | "starter" | "pro" | "enterprise";
   joinDate: string;
   lastActive: string;
+  lastLogin: string;
   dashboards: number;
   storage: string;
   avatar: string;
+  owner?: string;
+  team?: string;
+  loginHistory: Array<{ date: string; ip: string; device: string }>;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  members: number;
+  dashboardAccess: string[];
+  quota: {
+    dashboards: number;
+    tables: number;
+    records: number;
+  };
+  usedQuota: {
+    dashboards: number;
+    tables: number;
+    records: number;
+  };
+}
+
+interface DashboardItem {
+  id: string;
+  name: string;
+  owner: string;
+  tables: number;
+  records: number;
+  lastModified: string;
+  status: "active" | "locked" | "archived";
+  size: string;
+}
+
+interface ActivityLog {
+  id: string;
+  user: string;
+  action: string;
+  target: string;
+  timestamp: string;
+  details: string;
+}
+
+interface SystemHealth {
+  id: string;
+  organization: string;
+  dbStatus: "connected" | "error" | "slow";
+  apiErrors: number;
+  queueStatus: "running" | "stopped" | "warning";
+  lastCheck: string;
 }
 
 interface AdminPageProps {
@@ -80,162 +153,248 @@ interface AdminPageProps {
 }
 
 export function AdminPage({ onBack }: AdminPageProps = {}) {
+  const [activeTab, setActiveTab] = useState("users");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTab, setSelectedTab] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
-  const [isUserDetailOpen, setIsUserDetailOpen] = useState(false);
-  const [isEditUserOpen, setIsEditUserOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [filterRole, setFilterRole] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [dialogType, setDialogType] = useState<string>("");
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
+  // Mock Data
   const [users, setUsers] = useState<User[]>([
     {
       id: "1",
       name: "Sarah Johnson",
-      email: "sarah.johnson@example.com",
+      email: "sarah.johnson@company.com",
       role: "admin",
       status: "active",
       plan: "enterprise",
       joinDate: "2024-01-15",
       lastActive: "2 mins ago",
+      lastLogin: "2024-12-20 09:30",
       dashboards: 12,
       storage: "4.2 GB",
       avatar: "SJ",
+      owner: "John Admin",
+      team: "Engineering",
+      loginHistory: [
+        { date: "2024-12-20 09:30", ip: "192.168.1.100", device: "Chrome / MacOS" },
+        { date: "2024-12-19 14:20", ip: "192.168.1.100", device: "Chrome / MacOS" },
+        { date: "2024-12-18 08:15", ip: "192.168.1.101", device: "Safari / iOS" },
+      ],
     },
     {
       id: "2",
       name: "Michael Chen",
-      email: "michael.chen@example.com",
-      role: "manager",
+      email: "michael.chen@company.com",
+      role: "editor",
       status: "active",
       plan: "pro",
       joinDate: "2024-02-20",
       lastActive: "15 mins ago",
+      lastLogin: "2024-12-20 08:45",
       dashboards: 8,
       storage: "2.8 GB",
       avatar: "MC",
+      owner: "John Admin",
+      team: "Marketing",
+      loginHistory: [
+        { date: "2024-12-20 08:45", ip: "192.168.1.102", device: "Firefox / Windows" },
+      ],
     },
     {
       id: "3",
       name: "Emma Williams",
-      email: "emma.williams@example.com",
-      role: "user",
+      email: "emma.williams@company.com",
+      role: "viewer",
       status: "active",
       plan: "starter",
       joinDate: "2024-03-10",
       lastActive: "1 hour ago",
+      lastLogin: "2024-12-20 07:00",
       dashboards: 5,
       storage: "1.5 GB",
       avatar: "EW",
-    },
-    {
-      id: "4",
-      name: "James Anderson",
-      email: "james.anderson@example.com",
-      role: "user",
-      status: "inactive",
-      plan: "pro",
-      joinDate: "2024-01-25",
-      lastActive: "3 days ago",
-      dashboards: 15,
-      storage: "5.7 GB",
-      avatar: "JA",
-    },
-    {
-      id: "5",
-      name: "Olivia Martinez",
-      email: "olivia.martinez@example.com",
-      role: "viewer",
-      status: "active",
-      plan: "free",
-      joinDate: "2024-04-05",
-      lastActive: "30 mins ago",
-      dashboards: 2,
-      storage: "0.5 GB",
-      avatar: "OM",
-    },
-    {
-      id: "6",
-      name: "David Brown",
-      email: "david.brown@example.com",
-      role: "manager",
-      status: "suspended",
-      plan: "pro",
-      joinDate: "2023-12-10",
-      lastActive: "1 week ago",
-      dashboards: 20,
-      storage: "8.3 GB",
-      avatar: "DB",
-    },
-    {
-      id: "7",
-      name: "Sophia Taylor",
-      email: "sophia.taylor@example.com",
-      role: "user",
-      status: "pending",
-      plan: "starter",
-      joinDate: "2024-12-15",
-      lastActive: "Never",
-      dashboards: 0,
-      storage: "0 GB",
-      avatar: "ST",
-    },
-    {
-      id: "8",
-      name: "Robert Wilson",
-      email: "robert.wilson@example.com",
-      role: "user",
-      status: "active",
-      plan: "enterprise",
-      joinDate: "2024-02-01",
-      lastActive: "5 mins ago",
-      dashboards: 18,
-      storage: "6.9 GB",
-      avatar: "RW",
-    },
-    {
-      id: "9",
-      name: "Isabella Davis",
-      email: "isabella.davis@example.com",
-      role: "admin",
-      status: "active",
-      plan: "enterprise",
-      joinDate: "2023-11-20",
-      lastActive: "10 mins ago",
-      dashboards: 25,
-      storage: "12.1 GB",
-      avatar: "ID",
-    },
-    {
-      id: "10",
-      name: "William Garcia",
-      email: "william.garcia@example.com",
-      role: "user",
-      status: "active",
-      plan: "pro",
-      joinDate: "2024-03-15",
-      lastActive: "2 hours ago",
-      dashboards: 9,
-      storage: "3.4 GB",
-      avatar: "WG",
+      owner: "Sarah Johnson",
+      team: "Sales",
+      loginHistory: [
+        { date: "2024-12-20 07:00", ip: "192.168.1.103", device: "Edge / Windows" },
+      ],
     },
   ]);
 
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [groups, setGroups] = useState<Group[]>([
+    {
+      id: "1",
+      name: "Engineering Team",
+      members: 12,
+      dashboardAccess: ["dashboard-1", "dashboard-2", "dashboard-3"],
+      quota: { dashboards: 50, tables: 200, records: 100000 },
+      usedQuota: { dashboards: 35, tables: 140, records: 75000 },
+    },
+    {
+      id: "2",
+      name: "Marketing Team",
+      members: 8,
+      dashboardAccess: ["dashboard-4", "dashboard-5"],
+      quota: { dashboards: 30, tables: 100, records: 50000 },
+      usedQuota: { dashboards: 18, tables: 65, records: 32000 },
+    },
+  ]);
 
+  const [dashboards, setDashboards] = useState<DashboardItem[]>([
+    {
+      id: "1",
+      name: "Sales Dashboard",
+      owner: "Sarah Johnson",
+      tables: 8,
+      records: 15420,
+      lastModified: "2024-12-20 09:15",
+      status: "active",
+      size: "2.3 GB",
+    },
+    {
+      id: "2",
+      name: "Analytics Hub",
+      owner: "Michael Chen",
+      tables: 12,
+      records: 28900,
+      lastModified: "2024-12-19 16:30",
+      status: "active",
+      size: "4.1 GB",
+    },
+    {
+      id: "3",
+      name: "Customer Insights",
+      owner: "Emma Williams",
+      tables: 5,
+      records: 8200,
+      lastModified: "2024-12-18 11:20",
+      status: "locked",
+      size: "1.2 GB",
+    },
+  ]);
+
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([
+    {
+      id: "1",
+      user: "Sarah Johnson",
+      action: "Created",
+      target: "Dashboard: Q4 Sales",
+      timestamp: "2024-12-20 09:30",
+      details: "New dashboard created with 5 tables",
+    },
+    {
+      id: "2",
+      user: "Michael Chen",
+      action: "Edited",
+      target: "Record #1234",
+      timestamp: "2024-12-20 09:15",
+      details: "Updated customer data",
+    },
+    {
+      id: "3",
+      user: "Emma Williams",
+      action: "Deleted",
+      target: "Widget: Revenue Chart",
+      timestamp: "2024-12-20 08:45",
+      details: "Removed outdated widget",
+    },
+    {
+      id: "4",
+      user: "System",
+      action: "Alert",
+      target: "Traffic Spike",
+      timestamp: "2024-12-20 08:00",
+      details: "Unusual traffic detected on Dashboard #2",
+    },
+  ]);
+
+  const [systemHealth, setSystemHealth] = useState<SystemHealth[]>([
+    {
+      id: "1",
+      organization: "Acme Corp",
+      dbStatus: "connected",
+      apiErrors: 0,
+      queueStatus: "running",
+      lastCheck: "2024-12-20 09:30",
+    },
+    {
+      id: "2",
+      organization: "TechStart Inc",
+      dbStatus: "slow",
+      apiErrors: 3,
+      queueStatus: "warning",
+      lastCheck: "2024-12-20 09:28",
+    },
+    {
+      id: "3",
+      organization: "Global Systems",
+      dbStatus: "error",
+      apiErrors: 15,
+      queueStatus: "stopped",
+      lastCheck: "2024-12-20 09:25",
+    },
+  ]);
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (!session?.token) return;
+    setLoadingUsers(true);
+    api
+      .get<{ users: any[] }>("/admin/users", session.token)
+      .then((res) => {
+        const mapped = (res.users || []).map((u) => {
+          const fullName = u.full_name || u.fullName || u.name || u.email || "User";
+          const joinDate = u.joinDate || u.created_at || u.createdAt;
+          const updated = u.updated_at || u.updatedAt;
+          return {
+            id: u.id,
+            name: fullName,
+            email: u.email,
+            role: (u.role || "user") as User["role"],
+            status: u.isVerified ? "active" : "pending",
+            plan: "free",
+            joinDate: joinDate ? new Date(joinDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+            lastActive: updated ? new Date(updated).toLocaleString() : "—",
+            lastLogin: updated ? new Date(updated).toLocaleString() : "—",
+            dashboards: u.dashboards || 0,
+            storage: "—",
+            avatar: fullName.slice(0, 2).toUpperCase(),
+            owner: u.owner || "",
+            team: u.team || "—",
+            loginHistory: Array.isArray(u.loginHistory) ? u.loginHistory : [],
+          } as User;
+        });
+        if (mapped.length) setUsers(mapped);
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(err?.message || "Failed to load users");
+      })
+      .finally(() => setLoadingUsers(false));
+  }, []);
+
+  // Helper functions
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
+      case "connected":
+      case "running":
         return "bg-green-100 text-green-800";
       case "inactive":
-        return "bg-gray-100 text-gray-800";
+      case "locked":
+      case "warning":
+      case "slow":
+        return "bg-yellow-100 text-yellow-800";
       case "suspended":
+      case "error":
+      case "stopped":
         return "bg-red-100 text-red-800";
       case "pending":
-        return "bg-yellow-100 text-yellow-800";
+      case "archived":
+        return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -245,10 +404,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     switch (role) {
       case "admin":
         return "bg-purple-100 text-purple-800";
-      case "manager":
+      case "editor":
         return "bg-blue-100 text-blue-800";
-      case "user":
-        return "bg-indigo-100 text-indigo-800";
       case "viewer":
         return "bg-gray-100 text-gray-800";
       default:
@@ -256,58 +413,9 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     }
   };
 
-  const getPlanColor = (plan: string) => {
-    switch (plan) {
-      case "enterprise":
-        return "bg-amber-100 text-amber-800";
-      case "pro":
-        return "bg-violet-100 text-violet-800";
-      case "starter":
-        return "bg-emerald-100 text-emerald-800";
-      case "free":
-        return "bg-slate-100 text-slate-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesTab =
-      selectedTab === "all" ||
-      (selectedTab === "active" && user.status === "active") ||
-      (selectedTab === "inactive" && user.status === "inactive") ||
-      (selectedTab === "suspended" && user.status === "suspended") ||
-      (selectedTab === "pending" && user.status === "pending") ||
-      (selectedTab === "admins" && user.role === "admin");
-
-    const matchesRole = filterRole === "all" || user.role === filterRole;
-    const matchesStatus = filterStatus === "all" || user.status === filterStatus;
-
-    return matchesSearch && matchesTab && matchesRole && matchesStatus;
-  });
-
-  const sortedUsers = [...filteredUsers].sort((a, b) => {
-    switch (sortBy) {
-      case "newest":
-        return new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime();
-      case "oldest":
-        return new Date(a.joinDate).getTime() - new Date(b.joinDate).getTime();
-      case "name":
-        return a.name.localeCompare(b.name);
-      case "lastActive":
-        return a.lastActive.localeCompare(b.lastActive);
-      default:
-        return 0;
-    }
-  });
-
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedUsers(new Set(sortedUsers.map((u) => u.id)));
+      setSelectedUsers(new Set(users.map((u) => u.id)));
     } else {
       setSelectedUsers(new Set());
     }
@@ -323,86 +431,30 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     setSelectedUsers(newSelected);
   };
 
-  const handleViewUser = (user: User) => {
-    setSelectedUser(user);
-    setIsUserDetailOpen(true);
+  const openDialog = (type: string, item?: any) => {
+    setDialogType(type);
+    setSelectedItem(item);
+    setIsDialogOpen(true);
   };
 
-  const handleEditUser = (user: User) => {
-    setEditingUser({ ...user });
-    setIsEditUserOpen(true);
+  const handleResetPassword = (user: User) => {
+    toast.success(`Password reset link sent to ${user.email}`);
   };
 
-  const handleDeleteUser = (user: User) => {
-    setSelectedUser(user);
-    setIsDeleteDialogOpen(true);
-  };
-
-  const confirmDeleteUser = () => {
-    if (selectedUser) {
-      setUsers(users.filter((u) => u.id !== selectedUser.id));
-      toast.success(`User ${selectedUser.name} has been deleted`);
-      setIsDeleteDialogOpen(false);
-      setSelectedUser(null);
-    }
-  };
-
-  const handleUpdateUserStatus = (userId: string, newStatus: User["status"]) => {
-    setUsers(
-      users.map((u) =>
-        u.id === userId ? { ...u, status: newStatus } : u
-      )
-    );
-    const statusText = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
-    toast.success(`User status updated to ${statusText}`);
+  const handleAssignOwner = (user: User, owner: string) => {
+    setUsers(users.map((u) => (u.id === user.id ? { ...u, owner } : u)));
+    toast.success(`Owner assigned to ${user.name}`);
   };
 
   const handleBulkAction = (action: string) => {
     const selectedCount = selectedUsers.size;
-    switch (action) {
-      case "activate":
-        setUsers(
-          users.map((u) =>
-            selectedUsers.has(u.id) ? { ...u, status: "active" } : u
-          )
-        );
-        toast.success(`${selectedCount} user(s) activated`);
-        break;
-      case "suspend":
-        setUsers(
-          users.map((u) =>
-            selectedUsers.has(u.id) ? { ...u, status: "suspended" } : u
-          )
-        );
-        toast.success(`${selectedCount} user(s) suspended`);
-        break;
-      case "delete":
-        setUsers(users.filter((u) => !selectedUsers.has(u.id)));
-        toast.success(`${selectedCount} user(s) deleted`);
-        break;
-    }
+    toast.success(`${action} applied to ${selectedCount} user(s)`);
     setSelectedUsers(new Set());
   };
 
-  const handleSaveEdit = () => {
-    if (editingUser) {
-      setUsers(
-        users.map((u) => (u.id === editingUser.id ? editingUser : u))
-      );
-      toast.success("User updated successfully");
-      setIsEditUserOpen(false);
-      setEditingUser(null);
-    }
+  const handleExport = (type: string) => {
+    toast.success(`${type} data exported successfully`);
   };
-
-  const handleExportUsers = () => {
-    toast.success("Users exported successfully");
-  };
-
-  const totalUsers = users.length;
-  const activeUsers = users.filter((u) => u.status === "active").length;
-  const suspendedUsers = users.filter((u) => u.status === "suspended").length;
-  const pendingUsers = users.filter((u) => u.status === "pending").length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -428,558 +480,1343 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                 <div>
                   <h1 className="text-2xl">System Administration</h1>
                   <p className="text-sm text-gray-600">
-                    Manage users, roles, and permissions
+                    Comprehensive platform management and monitoring
                   </p>
                 </div>
               </div>
             </div>
             <Button className="gap-2">
-              <UserPlus className="h-4 w-4" />
-              Add User
+              <Download className="h-4 w-4" />
+              Export All Data
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="px-6 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Users</p>
-                <p className="text-2xl mt-1">{totalUsers}</p>
-                <p className="text-xs text-green-600 mt-1">+12% from last month</p>
-              </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Active Users</p>
-                <p className="text-2xl mt-1">{activeUsers}</p>
-                <p className="text-xs text-green-600 mt-1">
-                  {((activeUsers / totalUsers) * 100).toFixed(0)}% of total
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <UserCheck className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Suspended</p>
-                <p className="text-2xl mt-1">{suspendedUsers}</p>
-                <p className="text-xs text-red-600 mt-1">Requires attention</p>
-              </div>
-              <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <Ban className="h-6 w-6 text-red-600" />
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Pending Approval</p>
-                <p className="text-2xl mt-1">{pendingUsers}</p>
-                <p className="text-xs text-yellow-600 mt-1">Awaiting review</p>
-              </div>
-              <div className="h-12 w-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="h-6 w-6 text-yellow-600" />
-              </div>
-            </div>
-          </Card>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="w-full mb-6 flex flex-nowrap overflow-x-auto gap-2 px-1">
+            <TabsTrigger value="users" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <Users className="h-4 w-4" />
+              Users
+            </TabsTrigger>
+            <TabsTrigger value="permissions" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <UserCog className="h-4 w-4" />
+              Permissions
+            </TabsTrigger>
+            <TabsTrigger value="dashboards" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboards
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <Activity className="h-4 w-4" />
+              Activity
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <Bell className="h-4 w-4" />
+              Notifications
+            </TabsTrigger>
+            <TabsTrigger value="widgets" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <Sparkles className="h-4 w-4" />
+              Widgets
+            </TabsTrigger>
+            <TabsTrigger value="health" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <Server className="h-4 w-4" />
+              Health
+            </TabsTrigger>
+            <TabsTrigger value="billing" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <DollarSign className="h-4 w-4" />
+              Billing
+            </TabsTrigger>
+            <TabsTrigger value="support" className="gap-2 whitespace-nowrap flex-1 md:flex-none">
+              <LifeBuoy className="h-4 w-4" />
+              Support
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Main Content */}
-        <Card>
-          <div className="p-6">
-            {/* Filters and Search */}
-            <div className="flex flex-col lg:flex-row gap-4 mb-6">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search users by name or email..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Select value={filterRole} onValueChange={setFilterRole}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="newest">Newest First</SelectItem>
-                    <SelectItem value="oldest">Oldest First</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="lastActive">Last Active</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" size="icon" onClick={handleExportUsers}>
-                  <Download className="h-4 w-4" />
-                </Button>
-              </div>
+          {/* Users Tab */}
+          <TabsContent value="users" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Users</p>
+                    <p className="text-2xl mt-1">{users.length}</p>
+                  </div>
+                  <Users className="h-8 w-8 text-blue-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Active</p>
+                    <p className="text-2xl mt-1">
+                      {users.filter((u) => u.status === "active").length}
+                    </p>
+                  </div>
+                  <UserCheck className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Suspended</p>
+                    <p className="text-2xl mt-1">
+                      {users.filter((u) => u.status === "suspended").length}
+                    </p>
+                  </div>
+                  <Ban className="h-8 w-8 text-red-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Pending</p>
+                    <p className="text-2xl mt-1">
+                      {users.filter((u) => u.status === "pending").length}
+                    </p>
+                  </div>
+                  <Clock className="h-8 w-8 text-yellow-600" />
+                </div>
+              </Card>
             </div>
 
-            {/* Tabs */}
-            <Tabs value={selectedTab} onValueChange={setSelectedTab} className="mb-6">
-              <TabsList>
-                <TabsTrigger value="all">
-                  All ({users.length})
-                </TabsTrigger>
-                <TabsTrigger value="active">
-                  Active ({users.filter((u) => u.status === "active").length})
-                </TabsTrigger>
-                <TabsTrigger value="inactive">
-                  Inactive ({users.filter((u) => u.status === "inactive").length})
-                </TabsTrigger>
-                <TabsTrigger value="suspended">
-                  Suspended ({users.filter((u) => u.status === "suspended").length})
-                </TabsTrigger>
-                <TabsTrigger value="pending">
-                  Pending ({users.filter((u) => u.status === "pending").length})
-                </TabsTrigger>
-                <TabsTrigger value="admins">
-                  Admins ({users.filter((u) => u.role === "admin").length})
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <Card>
+              <div className="p-6">
+                <div className="flex gap-4 mb-6">
+                  <div className="flex-1 relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <Input
+                      placeholder="Search by name, email..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <Select defaultValue="all">
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Roles</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="editor">Editor</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select defaultValue="all">
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={() => handleExport("Users")}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </div>
 
-            {/* Bulk Actions */}
-            {selectedUsers.size > 0 && (
-              <div className="mb-4 p-4 bg-blue-50 rounded-lg flex items-center justify-between">
-                <span className="text-sm">
-                  {selectedUsers.size} user(s) selected
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleBulkAction("activate")}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Activate
+                {selectedUsers.size > 0 && (
+                  <div className="mb-4 p-4 bg-blue-50 rounded-lg flex items-center justify-between">
+                    <span className="text-sm">
+                      {selectedUsers.size} user(s) selected
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleBulkAction("Activated")}
+                      >
+                        Activate
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleBulkAction("Suspended")}
+                      >
+                        Suspend
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openDialog("bulk-assign-owner")}
+                      >
+                        Assign Owner
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={selectedUsers.size === users.length}
+                            onCheckedChange={handleSelectAll}
+                          />
+                        </TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Owner</TableHead>
+                        <TableHead>Team</TableHead>
+                        <TableHead>Last Login</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users
+                        .filter(
+                          (user) =>
+                            user.name
+                              .toLowerCase()
+                              .includes(searchQuery.toLowerCase()) ||
+                            user.email
+                              .toLowerCase()
+                              .includes(searchQuery.toLowerCase())
+                        )
+                        .map((user) => (
+                          <TableRow key={user.id}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedUsers.has(user.id)}
+                                onCheckedChange={(checked) =>
+                                  handleSelectUser(user.id, checked as boolean)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9">
+                                  <AvatarFallback>{user.avatar}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <div className="font-medium">{user.name}</div>
+                                  <div className="text-sm text-gray-500">
+                                    {user.email}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={getRoleColor(user.role)}>
+                                {user.role}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={getStatusColor(user.status)}>
+                                {user.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {user.owner || "Unassigned"}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {user.team || "-"}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {user.lastLogin}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openDialog("user-details", user)}
+                                  title="View Details"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleResetPassword(user)}
+                                  title="Reset Password"
+                                >
+                                  <Key className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openDialog("login-history", user)}
+                                  title="Login History"
+                                >
+                                  <Clock className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openDialog("edit-user", user)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Permissions Tab */}
+          <TabsContent value="permissions" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Groups</p>
+                    <p className="text-2xl mt-1">{groups.length}</p>
+                  </div>
+                  <Users2 className="h-8 w-8 text-purple-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Members</p>
+                    <p className="text-2xl mt-1">
+                      {groups.reduce((sum, g) => sum + g.members, 0)}
+                    </p>
+                  </div>
+                  <UserCheck className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Dashboard Access</p>
+                    <p className="text-2xl mt-1">
+                      {groups.reduce((sum, g) => sum + g.dashboardAccess.length, 0)}
+                    </p>
+                  </div>
+                  <LayoutDashboard className="h-8 w-8 text-blue-600" />
+                </div>
+              </Card>
+            </div>
+
+            <Card>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg">Groups & Permissions</h3>
+                  <Button className="gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Create Group
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleBulkAction("suspend")}
-                  >
-                    <Ban className="h-4 w-4 mr-2" />
-                    Suspend
+                </div>
+
+                <div className="space-y-4">
+                  {groups.map((group) => (
+                    <Card key={group.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <Users2 className="h-5 w-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium">{group.name}</h4>
+                              <p className="text-sm text-gray-600">
+                                {group.members} members
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4 mb-4">
+                            <div>
+                              <p className="text-xs text-gray-600 mb-1">
+                                Dashboards Quota
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-blue-600"
+                                    style={{
+                                      width: `${(group.usedQuota.dashboards / group.quota.dashboards) * 100}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span className="text-sm">
+                                  {group.usedQuota.dashboards}/{group.quota.dashboards}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600 mb-1">
+                                Tables Quota
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-green-600"
+                                    style={{
+                                      width: `${(group.usedQuota.tables / group.quota.tables) * 100}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span className="text-sm">
+                                  {group.usedQuota.tables}/{group.quota.tables}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600 mb-1">
+                                Records Quota
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-purple-600"
+                                    style={{
+                                      width: `${(group.usedQuota.records / group.quota.records) * 100}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span className="text-sm">
+                                  {group.usedQuota.records.toLocaleString()}/
+                                  {group.quota.records.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">
+                              {group.dashboardAccess.length} Dashboard(s) Access
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openDialog("edit-group", group)}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openDialog("group-permissions", group)}
+                          >
+                            <Shield className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Dashboards Tab */}
+          <TabsContent value="dashboards" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Dashboards</p>
+                    <p className="text-2xl mt-1">{dashboards.length}</p>
+                  </div>
+                  <LayoutDashboard className="h-8 w-8 text-blue-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Active</p>
+                    <p className="text-2xl mt-1">
+                      {dashboards.filter((d) => d.status === "active").length}
+                    </p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Locked</p>
+                    <p className="text-2xl mt-1">
+                      {dashboards.filter((d) => d.status === "locked").length}
+                    </p>
+                  </div>
+                  <Lock className="h-8 w-8 text-yellow-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Storage</p>
+                    <p className="text-2xl mt-1">7.6 GB</p>
+                  </div>
+                  <Database className="h-8 w-8 text-purple-600" />
+                </div>
+              </Card>
+            </div>
+
+            <Card>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex-1 relative mr-4">
+                    <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <Input
+                      placeholder="Search dashboards..."
+                      className="pl-10"
+                    />
+                  </div>
+                  <Button variant="outline" onClick={() => handleExport("Dashboards")}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleBulkAction("delete")}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
+                </div>
+
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Dashboard</TableHead>
+                        <TableHead>Owner</TableHead>
+                        <TableHead>Tables</TableHead>
+                        <TableHead>Records</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last Modified</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dashboards.map((dashboard) => (
+                        <TableRow key={dashboard.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <LayoutDashboard className="h-5 w-5 text-gray-400" />
+                              <div className="font-medium">{dashboard.name}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {dashboard.owner}
+                          </TableCell>
+                          <TableCell>{dashboard.tables}</TableCell>
+                          <TableCell>{dashboard.records.toLocaleString()}</TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {dashboard.size}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(dashboard.status)}>
+                              {dashboard.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {dashboard.lastModified}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openDialog("dashboard-schema", dashboard)}
+                                title="View Schema"
+                              >
+                                <FolderTree className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => toast.success("Dashboard duplicated")}
+                                title="Duplicate"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  toast.success(
+                                    dashboard.status === "locked"
+                                      ? "Dashboard unlocked"
+                                      : "Dashboard locked"
+                                  )
+                                }
+                                title={dashboard.status === "locked" ? "Unlock" : "Lock"}
+                              >
+                                {dashboard.status === "locked" ? (
+                                  <Unlock className="h-4 w-4" />
+                                ) : (
+                                  <Lock className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openDialog("export-dashboard", dashboard)}
+                                title="Export Data"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Activity Tab */}
+          <TabsContent value="activity" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Events</p>
+                    <p className="text-2xl mt-1">{activityLogs.length}</p>
+                  </div>
+                  <Activity className="h-8 w-8 text-blue-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Dashboard Views</p>
+                    <p className="text-2xl mt-1">1,247</p>
+                  </div>
+                  <Eye className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Alerts Today</p>
+                    <p className="text-2xl mt-1">3</p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Traffic Spike</p>
+                    <p className="text-2xl mt-1">+45%</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-purple-600" />
+                </div>
+              </Card>
+            </div>
+
+            <Card>
+              <div className="p-6">
+                <div className="flex gap-4 mb-6">
+                  <div className="flex-1 relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <Input placeholder="Search activity..." className="pl-10" />
+                  </div>
+                  <Select defaultValue="all">
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Actions</SelectItem>
+                      <SelectItem value="created">Created</SelectItem>
+                      <SelectItem value="edited">Edited</SelectItem>
+                      <SelectItem value="deleted">Deleted</SelectItem>
+                      <SelectItem value="viewed">Viewed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filter
                   </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {activityLogs.map((log) => (
+                    <Card key={log.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                              log.action === "Alert"
+                                ? "bg-red-100"
+                                : log.action === "Created"
+                                  ? "bg-green-100"
+                                  : log.action === "Edited"
+                                    ? "bg-blue-100"
+                                    : "bg-gray-100"
+                            }`}
+                          >
+                            {log.action === "Alert" ? (
+                              <AlertTriangle className="h-5 w-5 text-red-600" />
+                            ) : log.action === "Created" ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : log.action === "Edited" ? (
+                              <Edit className="h-5 w-5 text-blue-600" />
+                            ) : (
+                              <Trash2 className="h-5 w-5 text-gray-600" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{log.user}</span>
+                              <Badge variant="outline">{log.action}</Badge>
+                              <span className="text-sm text-gray-600">
+                                {log.target}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              {log.details}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {log.timestamp}
+                            </p>
+                          </div>
+                        </div>
+                        <Button variant="ghost" size="icon">
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications" className="space-y-4">
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg mb-4">Email & Notification Templates</h3>
+                
+                <div className="space-y-4">
+                  {[
+                    { id: 1, name: "Welcome Email", channel: "Email", status: "active" },
+                    { id: 2, name: "Password Reset", channel: "Email", status: "active" },
+                    { id: 3, name: "Dashboard Alert", channel: "Slack", status: "active" },
+                    { id: 4, name: "Weekly Report", channel: "Email", status: "inactive" },
+                  ].map((template) => (
+                    <Card key={template.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <Bell className="h-5 w-5 text-gray-400" />
+                          <div>
+                            <div className="font-medium">{template.name}</div>
+                            <div className="text-sm text-gray-600">
+                              Channel: {template.channel}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Switch defaultChecked={template.status === "active"} />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toast.success("Test notification sent")}
+                          >
+                            <Send className="h-4 w-4 mr-2" />
+                            Test
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openDialog("edit-template", template)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Widgets Tab */}
+          <TabsContent value="widgets" className="space-y-4">
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg mb-4">Widget Management</h3>
+                
+                <div className="space-y-4">
+                  {[
+                    { id: 1, name: "Revenue Chart", dashboard: "Sales Dashboard", visible: true },
+                    { id: 2, name: "User Analytics", dashboard: "Analytics Hub", visible: true },
+                    { id: 3, name: "Traffic Report", dashboard: "Marketing", visible: false },
+                  ].map((widget) => (
+                    <Card key={widget.id} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <BarChart3 className="h-5 w-5 text-gray-400" />
+                          <div>
+                            <div className="font-medium">{widget.name}</div>
+                            <div className="text-sm text-gray-600">
+                              {widget.dashboard}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge variant={widget.visible ? "default" : "outline"}>
+                            {widget.visible ? "Visible" : "Hidden"}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toast.success("Widget regenerated")}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Regenerate
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openDialog("edit-widget", widget)}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Health Tab */}
+          <TabsContent value="health" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Healthy Systems</p>
+                    <p className="text-2xl mt-1">
+                      {systemHealth.filter((s) => s.dbStatus === "connected").length}
+                    </p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Warnings</p>
+                    <p className="text-2xl mt-1">
+                      {systemHealth.filter((s) => s.dbStatus === "slow").length}
+                    </p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Critical Issues</p>
+                    <p className="text-2xl mt-1">
+                      {systemHealth.filter((s) => s.dbStatus === "error").length}
+                    </p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-red-600" />
+                </div>
+              </Card>
+            </div>
+
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg mb-4">System Health by Organization</h3>
+                
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Organization</TableHead>
+                        <TableHead>DB Status</TableHead>
+                        <TableHead>API Errors</TableHead>
+                        <TableHead>Queue Status</TableHead>
+                        <TableHead>Last Check</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {systemHealth.map((health) => (
+                        <TableRow key={health.id}>
+                          <TableCell className="font-medium">
+                            {health.organization}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(health.dbStatus)}>
+                              {health.dbStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={
+                                health.apiErrors > 0
+                                  ? "text-red-600"
+                                  : "text-gray-600"
+                              }
+                            >
+                              {health.apiErrors}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(health.queueStatus)}>
+                              {health.queueStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {health.lastCheck}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toast.success("Health check running...")}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Check Now
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openDialog("health-details", health)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Billing Tab */}
+          <TabsContent value="billing" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Revenue</p>
+                    <p className="text-2xl mt-1">$24,580</p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Active Subscriptions</p>
+                    <p className="text-2xl mt-1">47</p>
+                  </div>
+                  <CreditCard className="h-8 w-8 text-blue-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Near Limit</p>
+                    <p className="text-2xl mt-1">5</p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Overdue</p>
+                    <p className="text-2xl mt-1">2</p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-red-600" />
+                </div>
+              </Card>
+            </div>
+
+            <Card>
+              <div className="p-6">
+                <h3 className="text-lg mb-4">Usage & Billing Overview</h3>
+                
+                <div className="space-y-4">
+                  {[
+                    {
+                      org: "Acme Corp",
+                      plan: "Enterprise",
+                      usage: { dashboards: 35, tables: 140, records: 75000 },
+                      limit: { dashboards: 50, tables: 200, records: 100000 },
+                      revenue: "$499/mo",
+                      status: "active",
+                    },
+                    {
+                      org: "TechStart Inc",
+                      plan: "Pro",
+                      usage: { dashboards: 18, tables: 65, records: 32000 },
+                      limit: { dashboards: 20, tables: 80, records: 50000 },
+                      revenue: "$99/mo",
+                      status: "warning",
+                    },
+                  ].map((billing, idx) => (
+                    <Card key={idx} className="p-4">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <div className="font-medium">{billing.org}</div>
+                          <div className="text-sm text-gray-600">
+                            Plan: {billing.plan} - {billing.revenue}
+                          </div>
+                        </div>
+                        <Badge
+                          className={
+                            billing.status === "active"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }
+                        >
+                          {billing.status === "active" ? "Active" : "Near Limit"}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Dashboards</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-600"
+                                style={{
+                                  width: `${(billing.usage.dashboards / billing.limit.dashboards) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-sm">
+                              {billing.usage.dashboards}/{billing.limit.dashboards}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Tables</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-green-600"
+                                style={{
+                                  width: `${(billing.usage.tables / billing.limit.tables) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-sm">
+                              {billing.usage.tables}/{billing.limit.tables}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Records</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-purple-600"
+                                style={{
+                                  width: `${(billing.usage.records / billing.limit.records) * 100}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-sm">
+                              {billing.usage.records.toLocaleString()}/
+                              {billing.limit.records.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 mt-4">
+                        <Button variant="outline" size="sm">
+                          <FileText className="h-4 w-4 mr-2" />
+                          View Invoice
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <TrendingUp className="h-4 w-4 mr-2" />
+                          Usage History
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Support Tab */}
+          <TabsContent value="support" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Open Tickets</p>
+                    <p className="text-2xl mt-1">12</p>
+                  </div>
+                  <LifeBuoy className="h-8 w-8 text-blue-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Resolved Today</p>
+                    <p className="text-2xl mt-1">8</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+              </Card>
+              <Card className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Avg Response Time</p>
+                    <p className="text-2xl mt-1">2.4h</p>
+                  </div>
+                  <Clock className="h-8 w-8 text-purple-600" />
+                </div>
+              </Card>
+            </div>
+
+            <Card>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg">Support Tickets</h3>
+                  <Button className="gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    New Ticket
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {[
+                    {
+                      id: "#1234",
+                      customer: "Acme Corp",
+                      subject: "Dashboard loading issue",
+                      priority: "high",
+                      status: "open",
+                      created: "2024-12-20 09:00",
+                    },
+                    {
+                      id: "#1233",
+                      customer: "TechStart Inc",
+                      subject: "Data export problem",
+                      priority: "medium",
+                      status: "in-progress",
+                      created: "2024-12-20 08:30",
+                    },
+                    {
+                      id: "#1232",
+                      customer: "Global Systems",
+                      subject: "User permissions question",
+                      priority: "low",
+                      status: "resolved",
+                      created: "2024-12-19 16:00",
+                    },
+                  ].map((ticket) => (
+                    <Card key={ticket.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium">{ticket.id}</span>
+                            <Badge
+                              variant={
+                                ticket.priority === "high"
+                                  ? "destructive"
+                                  : "outline"
+                              }
+                            >
+                              {ticket.priority}
+                            </Badge>
+                            <Badge
+                              className={
+                                ticket.status === "resolved"
+                                  ? "bg-green-100 text-green-800"
+                                  : ticket.status === "in-progress"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
+                              {ticket.status}
+                            </Badge>
+                          </div>
+                          <div className="font-medium mb-1">{ticket.subject}</div>
+                          <div className="text-sm text-gray-600">
+                            {ticket.customer} • {ticket.created}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              toast.success("Support email sent")
+                            }
+                          >
+                            <Mail className="h-4 w-4 mr-2" />
+                            Email
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openDialog("ticket-logs", ticket)}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Logs
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium mb-3">Customer Notes</h4>
+                  <Textarea
+                    placeholder="Add internal notes about this customer..."
+                    className="mb-3"
+                  />
+                  <Button size="sm">Save Note</Button>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* Dialogs */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {dialogType === "user-details" && "User Details"}
+              {dialogType === "login-history" && "Login History"}
+              {dialogType === "edit-user" && "Edit User"}
+              {dialogType === "dashboard-schema" && "Dashboard Schema"}
+              {dialogType === "health-details" && "System Health Details"}
+            </DialogTitle>
+            <DialogDescription>
+              {dialogType === "user-details" && "View detailed user information"}
+              {dialogType === "login-history" && "Recent login activity"}
+              {dialogType === "edit-user" && "Update user information"}
+              {dialogType === "dashboard-schema" && "Tables and fields configuration"}
+              {dialogType === "health-details" && "Detailed system status"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {dialogType === "user-details" && selectedItem && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-16 w-16">
+                    <AvatarFallback className="text-lg">
+                      {selectedItem.avatar}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-lg">{selectedItem.name}</h3>
+                    <p className="text-sm text-gray-600">{selectedItem.email}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-600">Role</Label>
+                    <p>{selectedItem.role}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Status</Label>
+                    <p>{selectedItem.status}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Owner</Label>
+                    <p>{selectedItem.owner || "Unassigned"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Team</Label>
+                    <p>{selectedItem.team || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Dashboards</Label>
+                    <p>{selectedItem.dashboards}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">Storage</Label>
+                    <p>{selectedItem.storage}</p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Users Table */}
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={selectedUsers.size === sortedUsers.length && sortedUsers.length > 0}
-                        onCheckedChange={handleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Dashboards</TableHead>
-                    <TableHead>Last Active</TableHead>
-                    <TableHead>Join Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedUsers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                        No users found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    sortedUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedUsers.has(user.id)}
-                            onCheckedChange={(checked) =>
-                              handleSelectUser(user.id, checked as boolean)
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-9 w-9">
-                              <AvatarFallback>{user.avatar}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="font-medium">{user.name}</div>
-                              <div className="text-sm text-gray-500">{user.email}</div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getRoleColor(user.role)}>
-                            {user.role}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(user.status)}>
-                            {user.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getPlanColor(user.plan)}>
-                            {user.plan}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{user.dashboards}</TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {user.lastActive}
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {new Date(user.joinDate).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleViewUser(user)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditUser(user)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            {user.status === "active" ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleUpdateUserStatus(user.id, "suspended")}
-                              >
-                                <Ban className="h-4 w-4 text-red-600" />
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleUpdateUserStatus(user.id, "active")}
-                              >
-                                <CheckCircle className="h-4 w-4 text-green-600" />
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteUser(user)}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Pagination Info */}
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-gray-600">
-                Showing {sortedUsers.length} of {totalUsers} users
-              </p>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* User Detail Dialog */}
-      <Dialog open={isUserDetailOpen} onOpenChange={setIsUserDetailOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>User Details</DialogTitle>
-            <DialogDescription>
-              View detailed information about this user
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser && (
-            <div className="space-y-6">
-              <div className="flex items-start gap-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarFallback className="text-lg">{selectedUser.avatar}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <h3 className="text-xl mb-1">{selectedUser.name}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{selectedUser.email}</p>
-                  <div className="flex gap-2">
-                    <Badge className={getRoleColor(selectedUser.role)}>
-                      {selectedUser.role}
-                    </Badge>
-                    <Badge className={getStatusColor(selectedUser.status)}>
-                      {selectedUser.status}
-                    </Badge>
-                    <Badge className={getPlanColor(selectedUser.plan)}>
-                      {selectedUser.plan}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Card className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <LayoutDashboard className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Dashboards</p>
-                      <p className="text-xl">{selectedUser.dashboards}</p>
-                    </div>
-                  </div>
-                </Card>
-                <Card className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <Activity className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Storage Used</p>
-                      <p className="text-xl">{selectedUser.storage}</p>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
+            {dialogType === "login-history" && selectedItem && (
               <div className="space-y-3">
-                <div className="flex items-center gap-3 text-sm">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-600">Joined:</span>
-                  <span>{new Date(selectedUser.joinDate).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Activity className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-600">Last Active:</span>
-                  <span>{selectedUser.lastActive}</span>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Mail className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-600">Email:</span>
-                  <span>{selectedUser.email}</span>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h4 className="mb-3">Recent Activity</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-gray-600">Created new dashboard</span>
-                    <span className="text-gray-400">2 hours ago</span>
+                {selectedItem.loginHistory?.map((login: any, idx: number) => (
+                  <div key={idx} className="p-3 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{login.date}</p>
+                        <p className="text-sm text-gray-600">{login.device}</p>
+                      </div>
+                      <Badge variant="outline">{login.ip}</Badge>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-gray-600">Updated profile settings</span>
-                    <span className="text-gray-400">1 day ago</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-gray-600">Exported data</span>
-                    <span className="text-gray-400">3 days ago</span>
-                  </div>
-                </div>
+                ))}
               </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUserDetailOpen(false)}>
-              Close
-            </Button>
-            <Button onClick={() => {
-              if (selectedUser) {
-                handleEditUser(selectedUser);
-                setIsUserDetailOpen(false);
-              }
-            }}>
-              Edit User
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            )}
 
-      {/* Edit User Dialog */}
-      <Dialog open={isEditUserOpen} onOpenChange={setIsEditUserOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Update user information and permissions
-            </DialogDescription>
-          </DialogHeader>
-          {editingUser && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={editingUser.name}
-                  onChange={(e) =>
-                    setEditingUser({ ...editingUser, name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={editingUser.email}
-                  onChange={(e) =>
-                    setEditingUser({ ...editingUser, email: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select
-                  value={editingUser.role}
-                  onValueChange={(value: User["role"]) =>
-                    setEditingUser({ ...editingUser, role: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={editingUser.status}
-                  onValueChange={(value: User["status"]) =>
-                    setEditingUser({ ...editingUser, status: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plan">Plan</Label>
-                <Select
-                  value={editingUser.plan}
-                  onValueChange={(value: User["plan"]) =>
-                    setEditingUser({ ...editingUser, plan: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">Free</SelectItem>
-                    <SelectItem value="starter">Starter</SelectItem>
-                    <SelectItem value="pro">Pro</SelectItem>
-                    <SelectItem value="enterprise">Enterprise</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditUserOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEdit}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this user? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser && (
-            <div className="py-4">
-              <div className="flex items-center gap-3 p-4 bg-red-50 rounded-lg">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback>{selectedUser.avatar}</AvatarFallback>
-                </Avatar>
+            {dialogType === "dashboard-schema" && selectedItem && (
+              <div className="space-y-4">
                 <div>
-                  <p>{selectedUser.name}</p>
-                  <p className="text-sm text-gray-600">{selectedUser.email}</p>
+                  <Label className="text-sm text-gray-600">Dashboard Name</Label>
+                  <p className="font-medium">{selectedItem.name}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-gray-600 mb-2 block">
+                    Tables ({selectedItem.tables})
+                  </Label>
+                  <div className="space-y-2">
+                    {["Customers", "Orders", "Products"].map((table) => (
+                      <div key={table} className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Database className="h-4 w-4 text-gray-400" />
+                            <span>{table}</span>
+                          </div>
+                          <Button variant="ghost" size="sm">
+                            View Fields
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteUser}>
-              Delete User
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
