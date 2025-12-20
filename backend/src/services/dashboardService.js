@@ -261,6 +261,20 @@ const FALLBACK_FIELDS = [
   },
 ];
 
+const inferRefTable = (key = "") => {
+  if (!key.toLowerCase().endsWith("_id")) return null;
+  const base = key.replace(/_id$/i, "");
+  if (!base) return null;
+  if (base.endsWith("y")) return `${base.slice(0, -1)}ies`;
+  if (!base.endsWith("s")) return `${base}s`;
+  return base;
+};
+
+const addField = (fields, field) => {
+  if (fields.some((f) => f?.key === field.key)) return;
+  fields.push(field);
+};
+
 const normalizeField = (field, index) => ({
   id: field.id || randomUUID(),
   fieldName: (field.fieldName || `Field ${index + 1}`).toString().slice(0, 80),
@@ -408,12 +422,25 @@ const sanitizeWidgets = (widgets = [], fields = []) => {
 
 const sanitizeTables = (tables = []) => {
   if (!Array.isArray(tables)) return [];
+  const dropExtraIdFields = (fields = []) => {
+    const hasSystemId = fields.some((f) => f?.key === "id" && f?.systemField);
+    if (!hasSystemId) return fields;
+    return fields.filter((f) => {
+      if (!f) return false;
+      if (f.systemField) return true;
+      const type = (f.type || "").toString().toLowerCase();
+      if (type === "id" && !f.ref && !f.referenceTableKey) {
+        return false;
+      }
+      return true;
+    });
+  };
   return tables
     .map((table, tableIndex) => {
       const normalizedFields =
         Array.isArray(table.fields) && table.fields.length
-          ? normalizeIdFields(table.fields.map((field, fieldIndex) => normalizeField(field, fieldIndex)))
-          : normalizeIdFields(FALLBACK_FIELDS.map((field, index) => normalizeField(field, index)));
+          ? normalizeIdFields(dropExtraIdFields(table.fields.map((field, fieldIndex) => normalizeField(field, fieldIndex))))
+          : normalizeIdFields(dropExtraIdFields(FALLBACK_FIELDS.map((field, index) => normalizeField(field, index))));
       return {
         id: table.id?.toString() || `table-${tableIndex}-${randomUUID()}`,
         name: table.name?.toString().slice(0, 120) || `Table ${tableIndex + 1}`,
@@ -453,25 +480,124 @@ const normalizeIdFields = (fields = []) => {
   return normalized;
 };
 
-const ensureSystemFields = (fields = []) => {
-  const normalized = normalizeIdFields(fields);
-  const existing = new Set(normalized.map((f) => f.key));
-  const system = [
-    { key: "id", type: "id", required: true, systemField: true },
-    { key: "created_at", type: "date", required: true, systemField: true },
-    { key: "updated_at", type: "date", required: true, systemField: true },
-  ];
-  system.forEach((f) => {
-    if (!existing.has(f.key)) {
-      normalized.unshift({ ...f, required: true });
-      existing.add(f.key);
+const ensureSystemFields = (fields = [], tableKey = "") => {
+  const normalized = [];
+
+  fields.forEach((field) => {
+    if (!field || !field.key) return;
+    let next = { ...field };
+    const lowerKey = next.key.toString().toLowerCase();
+
+    // Normalize primary id
+    if (lowerKey === "id") {
+      next = {
+        ...next,
+        key: "id",
+        type: "id",
+        required: true,
+        systemField: true,
+        semanticType: "countable_entity",
+        semanticRole: "entity_id",
+        options: null,
+        ref: null,
+        hidden: true,
+      };
+      addField(normalized, next);
+      return;
     }
+
+    // Normalize system timestamps
+    if (lowerKey === "created_at" || lowerKey === "updated_at") {
+      next = {
+        ...next,
+        type: "date",
+        required: true,
+        systemField: true,
+        semanticType: "timestamp",
+        semanticRole: lowerKey === "created_at" ? "system_created_at" : "system_updated_at",
+        options: null,
+        ref: null,
+        hidden: true,
+      };
+      addField(normalized, next);
+      return;
+    }
+
+    // Foreign keys: *_id (but skip self-referencing duplicates)
+    if (lowerKey.endsWith("_id")) {
+      const refTable = inferRefTable(lowerKey);
+      if (refTable && refTable === tableKey) {
+        // Drop duplicate self id like product_id in products table
+        return;
+      }
+      next = {
+        ...next,
+        type: "id",
+        semanticType: "reference",
+        semanticRole: "foreign_id",
+        ref: refTable || next.ref || null,
+      };
+      addField(normalized, next);
+      return;
+    }
+
+    addField(normalized, next);
   });
+
+  // Ensure required system fields exist and remain hidden
+  const systemFields = [
+    {
+      key: "id",
+      type: "id",
+      required: true,
+      systemField: true,
+      semanticType: "countable_entity",
+      semanticRole: "entity_id",
+      options: null,
+      ref: null,
+      hidden: true,
+    },
+    {
+      key: "created_at",
+      type: "date",
+      required: true,
+      systemField: true,
+      semanticType: "timestamp",
+      semanticRole: "system_created_at",
+      options: null,
+      ref: null,
+      hidden: true,
+    },
+    {
+      key: "updated_at",
+      type: "date",
+      required: true,
+      systemField: true,
+      semanticType: "timestamp",
+      semanticRole: "system_updated_at",
+      options: null,
+      ref: null,
+      hidden: true,
+    },
+  ];
+
+  systemFields.forEach((sf) => addField(normalized, sf));
+
   return normalizeIdFields(normalized);
 };
 
 const allowedFieldTypes = ["id", "string", "number", "boolean", "date", "enum", "reference", "text"];
-const allowedSemanticTypes = ["money", "quantity", "countable_entity", "timestamp", "category", "status", "boolean", "generic"];
+const allowedSemanticTypes = [
+  "money",
+  "quantity",
+  "countable_entity",
+  "timestamp",
+  "category",
+  "status",
+  "boolean",
+  "generic",
+  "reference",
+];
 const allowedSemanticRoles = [
   "transaction_value",
   "entity_id",
@@ -480,10 +606,14 @@ const allowedSemanticRoles = [
   "group_dimension",
   "state",
   "generic",
+  "foreign_id",
+  "system_created_at",
+  "system_updated_at",
 ];
 
 const inferSemantic = (key = "", type = "") => {
   const lower = key.toLowerCase();
+  if (lower.endsWith("_id") && lower !== "id") return { semanticType: "reference", semanticRole: "foreign_id" };
   if (lower === "_id" || lower === "id") return { semanticType: "countable_entity", semanticRole: "entity_id" };
   if (type === "date") return { semanticType: "timestamp", semanticRole: "time_dimension" };
   if (type === "boolean") return { semanticType: "boolean", semanticRole: "state" };
@@ -1144,6 +1274,10 @@ async function callWithRepair({
         return validator(fallbackParsed);
       }
     } catch (err) {
+      // If OpenAI rate limits, don't retry to avoid additional 429 hits
+      if (err?.status === 429 || /rate limit/i.test(err?.message || "")) {
+        throw new HttpError(429, "Rate limited by AI provider. Please retry in ~20s.");
+      }
       if (attempt >= 2) {
         if (err instanceof HttpError) throw err;
         throw new HttpError(502, err.message || "AI returned invalid JSON");
@@ -1212,7 +1346,7 @@ function validateBlueprint(rawBlueprint) {
             };
           })
         : [];
-    const withSystem = ensureSystemFields(normalizedFields);
+    const withSystem = ensureSystemFields(normalizedFields, key);
     withSystem.forEach((f) => {
       if (f.key) {
         const lower = f.key.toString().toLowerCase();
@@ -1247,6 +1381,19 @@ function validateBlueprint(rawBlueprint) {
 
   const allowedRelationshipTypes = ["one-to-many", "many-to-one", "many-to-many"];
   const relationshipsRaw = Array.isArray(rawBlueprint.relationships) ? rawBlueprint.relationships : [];
+
+  const findForeignKeyCandidate = (table, targetTableKey) => {
+    if (!table?.fields?.length || !targetTableKey) return null;
+    const lowerTarget = targetTableKey.toLowerCase();
+    const exactMatch = table.fields.find((f) => f?.key?.toString().toLowerCase() === `${lowerTarget}_id`);
+    if (exactMatch) return exactMatch.key;
+    const byRef = table.fields.find((f) => f?.ref === targetTableKey);
+    if (byRef) return byRef.key;
+    const inferred = table.fields.find((f) => inferRefTable(f?.key?.toString()) === targetTableKey);
+    if (inferred) return inferred.key;
+    return null;
+  };
+
   const normalizedRelationships = relationshipsRaw.map((rel, idx) => {
     let fromTableKey = rel.fromTableKey || tableNameMap.get(rel.fromTable?.toString().toLowerCase());
     let toTableKey = rel.toTableKey || tableNameMap.get(rel.toTable?.toString().toLowerCase());
@@ -1260,10 +1407,29 @@ function validateBlueprint(rawBlueprint) {
       return table.fieldKeyByName[fieldName.toString().toLowerCase()] || null;
     };
 
-    const fromFieldKey = mapField(fromTable, rel.fromFieldKey, rel.fromField);
-    const toFieldKey = mapField(toTable, rel.toFieldKey, rel.toField);
+    let fromFieldKey = mapField(fromTable, rel.fromFieldKey, rel.fromField);
+    let toFieldKey = mapField(toTable, rel.toFieldKey, rel.toField);
+
+    // Repair toFieldKey: map *_id to primary id of target table
+    if (toTable && (!toFieldKey || !toTable.fields?.some((f) => f.key === toFieldKey))) {
+      if (rel.toFieldKey?.toString().toLowerCase().endsWith("_id")) {
+        const primaryId = toTable.fields.find((f) => f.key === "id");
+        if (primaryId) {
+          toFieldKey = "id";
+        }
+      }
+    }
+
+    // Repair fromFieldKey if missing on fromTable: try FK candidates to target table
+    if (fromTable && (!fromFieldKey || !fromTable.fields?.some((f) => f.key === fromFieldKey))) {
+      const candidate = findForeignKeyCandidate(fromTable, toTableKey);
+      if (candidate) {
+        fromFieldKey = candidate;
+      }
+    }
+
     if (!fromTableKey || !toTableKey || !fromFieldKey || !toFieldKey || !rel.type) {
-      errors.push(`Relationship ${idx + 1} is incomplete`);
+      errors.push(`Relationship ${idx + 1} is incomplete (from ${fromTableKey || "?"}.${fromFieldKey || "?"} -> ${toTableKey || "?"}.${toFieldKey || "?"})`);
     }
     if (fromTableKey && !tableMap.has(fromTableKey)) {
       errors.push(`Relationship ${idx + 1} references missing fromTableKey ${fromTableKey}`);
@@ -1274,10 +1440,10 @@ function validateBlueprint(rawBlueprint) {
     const fromFieldExists = fromTable?.fields?.some((f) => f.key === fromFieldKey);
     const toFieldExists = toTable?.fields?.some((f) => f.key === toFieldKey);
     if (fromTable && fromFieldKey && !fromFieldExists) {
-      errors.push(`Relationship ${idx + 1} references missing fromFieldKey ${fromFieldKey}`);
+      errors.push(`Relationship ${idx + 1} missing fromFieldKey ${fromFieldKey} in table ${fromTableKey}`);
     }
     if (toTable && toFieldKey && !toFieldExists) {
-      errors.push(`Relationship ${idx + 1} references missing toFieldKey ${toFieldKey}`);
+      errors.push(`Relationship ${idx + 1} missing toFieldKey ${toFieldKey} in table ${toTableKey}`);
     }
     if (rel.type && !allowedRelationshipTypes.includes(rel.type)) {
       errors.push(`Relationship ${idx + 1} has unsupported type ${rel.type}`);
@@ -1435,7 +1601,7 @@ async function generateSchemaAndInsights({ name, description, type, plan }) {
   const messages = [
     {
       role: "system",
-      content: `You are an AI schema + insight generator for a modern dashboard. Use the provided plan and user description to build data tables, relationships, insights, and UI widget metadata.\nConstraints:\n- Max 10 tables, each max 10 fields (including system fields).\n- Max 8 insights, max 8 widgets.\nRequirements:\n- Return ONLY JSON. No markdown, no backticks, no explanation.\n- Tables: [{ key, name, description, fields:[{ key, type(id|string|number|boolean|date|enum|reference|text), required, options?, ref?, semanticType?(money|quantity|countable_entity|timestamp|category|status|boolean|generic), semanticRole?(transaction_value|entity_id|entity_name|time_dimension|group_dimension|state|generic) }] }]\n- Relationships: [{ fromTableKey, fromFieldKey, toTableKey, toFieldKey, type("one-to-many"|"many-to-one"|"many-to-many") }]\n- Insights: [{ id, title, kind("kpi"|"trend"|"breakdown"|"table"), source:{ tableKey, metric("count"|"sum"|"avg"), fieldKey?, groupByFieldKey?, timeFieldKey? }, visualization?:{ chartType("line"|"bar"|"pie") } }]\n- UI: { defaultTableKey, tableDropdownOrder, emptyStateText, widgets:[{ id, type("stat_card"|"chart"|"data_table"), title, tableKey, insightId?, fields?, layout? }] }\n- Include system fields in every table: _id(id, required), created_at(date, required), updated_at(date, required).\n- Table library keys for inspiration (optional): ${libraryKeys}.`,
+      content: `You are an AI schema + insight generator for a modern dashboard. Use the provided plan and user description to build data tables, relationships, insights, and UI widget metadata.\nConstraints:\n- Max 10 tables, each max 10 fields (including system fields).\n- Max 8 insights, max 8 widgets.\nRequirements:\n- Return ONLY JSON. No markdown, no backticks, no explanation.\n- Tables: [{ key, name, description, fields:[{ key, type(id|string|number|boolean|date|enum|reference|text), required, options?, ref?, semanticType?(money|quantity|countable_entity|timestamp|category|status|boolean|generic|reference), semanticRole?(transaction_value|entity_id|entity_name|time_dimension|group_dimension|state|generic|foreign_id|system_created_at|system_updated_at) }] }]\n- Relationships: [{ fromTableKey, fromFieldKey, toTableKey, toFieldKey, type("one-to-many"|"many-to-one"|"many-to-many") }]. fromFieldKey is the foreign key column (customer_id, order_id, product_id, etc.). toFieldKey should almost always be "id" (the primary key of the referenced table).\n- Insights: [{ id, title, kind("kpi"|"trend"|"breakdown"|"table"), source:{ tableKey, metric("count"|"sum"|"avg"), fieldKey?, groupByFieldKey?, timeFieldKey? }, visualization?:{ chartType("line"|"bar"|"pie") } }]\n- UI: { defaultTableKey, tableDropdownOrder, emptyStateText, widgets:[{ id, type("stat_card"|"chart"|"data_table"), title, tableKey, insightId?, fields?, layout? }] }\n- Include system fields in every table: id (primary key), created_at(date), updated_at(date). These are internal; do not duplicate them as custom fields.\n- Table library keys for inspiration (optional): ${libraryKeys}.`,
     },
     {
       role: "user",

@@ -61,6 +61,8 @@ import {
 import { toast } from "sonner";
 import "../styles/managedash-detail.css";
 import { SYSTEM_FIELDS, isSystemField } from "../../shared/systemFields";
+import { useTableFilters, type FilterGroup } from "../components/table/filters/useTableFilters";
+import { TableFiltersModal } from "../components/table/filters/TableFiltersModal";
 
 const DASHBOARD_SESSION_KEY = "socialhub:dashboards_session";
 const getSessionId = () => {
@@ -185,7 +187,11 @@ const isSelfReferencingId = (field: { key?: string; isReference?: boolean; refer
 const getVisibleFields = (fields: any[] = []) =>
   fields.filter((f) => {
     const key = (f.key || f.fieldName || f.name || "").toString();
-    return key && !isSystemKey(key);
+    if (!key) return false;
+    if (isSystemFieldName(key)) return false;
+    // keep foreign keys visible
+    if (isForeignKeyFieldName(key)) return true;
+    return !isSystemKey(key);
   });
 
 const formatMetricValue = (value: number | null | undefined, formatted?: string | null) => {
@@ -466,7 +472,11 @@ const normalizeFields = (fields: any[] = []): NormalizedField[] =>
             : undefined;
       const resolvedType = (field.type || field.fieldType || (field as any).dataType || "").toString().toLowerCase() || "string";
       const endsWithId = lowerKey.endsWith("_id");
-      const isReferenceType = resolvedType === "reference" || Boolean((field as any).references);
+      const isReferenceType =
+        resolvedType === "reference" ||
+        Boolean((field as any).references) ||
+        (field as any)?.semanticRole === "foreign_id" ||
+        (field as any)?.semanticType === "reference";
       const isReference = isReferenceType || endsWithId;
       const baseKey = endsWithId ? lowerKey.replace(/_id$/, "") : lowerKey;
       const fromRef =
@@ -492,10 +502,21 @@ const normalizeFields = (fields: any[] = []): NormalizedField[] =>
 
 const labelPreferenceOrder = ["name", "full_name", "email", "title", "code", "_id"];
 
+const isSystemFieldName = (key: string) => {
+  const lower = key.toLowerCase();
+  return lower === "id" || lower === "_id" || lower === "created_at" || lower === "updated_at";
+};
+
+const isForeignKeyFieldName = (key: string) => {
+  const lower = key.toLowerCase();
+  if (isSystemFieldName(lower)) return false;
+  return lower.endsWith("_id");
+};
+
 const validateFormValues = (fields: NormalizedField[], values: Record<string, any>, tableKey?: string) => {
   const errors: Record<string, string> = {};
   fields.forEach((field) => {
-    if (isSystemField(field) || isSelfReferencingId(field, tableKey)) return;
+    if ((!field.isReference && isSystemField(field)) || isSelfReferencingId(field, tableKey)) return;
     const raw = values[field.key];
     const isEmpty = raw === "" || raw === undefined || raw === null;
     if (field.required && isEmpty) {
@@ -525,7 +546,7 @@ const normalizeGeneratorFieldType = (value: string | undefined): TableSchema["fi
 const buildRecordPayload = (fields: NormalizedField[], values: Record<string, any>, tableKey?: string) => {
   const payload: Record<string, any> = {};
   fields.forEach((field) => {
-    if (isSystemField(field) || isSelfReferencingId(field, tableKey)) return;
+    if ((!field.isReference && isSystemField(field)) || isSelfReferencingId(field, tableKey)) return;
     const raw = values[field.key];
     if (field.type === "number") {
       if (raw === "" || raw === undefined || raw === null) return;
@@ -546,13 +567,14 @@ const MetricCard = ({
   icon: Icon,
   title,
   value = "No data",
-  description = "No data",
   onDelete,
   deletable,
   className = "",
   iconKey,
 }: MetricCardProps & { iconKey?: MetricIcon }) => {
   const iconStyle = getIconStyle(iconKey);
+  const displayTitle =
+    typeof title === "string" && title.length ? `${title.charAt(0).toUpperCase()}${title.slice(1).toLowerCase()}` : title;
   return (
     <div className={`kpiCard relative ${className}`}>
       {deletable && onDelete && (
@@ -564,9 +586,8 @@ const MetricCard = ({
         <Icon className="w-4 h-4" />
       </div>
       <div>
-        <p className="kpiTitle">{title}</p>
+        <p className="kpiTitle">{displayTitle}</p>
         <p className="kpiValue">{value}</p>
-        <p className="mdMainSubtitle">{description}</p>
       </div>
     </div>
   );
@@ -1624,7 +1645,7 @@ type AddRecordModalProps = {
   mode: "create" | "edit";
   referenceOptions: Record<
     string,
-    { options: { value: string; label: string }[]; loading?: boolean; error?: string; targetTable?: string }
+    { options: { value: string; label: string }[]; loading?: boolean; loaded?: boolean; error?: string; targetTable?: string }
   >;
   onChange: (key: string, value: any) => void;
   onSubmit: () => void;
@@ -1657,17 +1678,21 @@ const AddRecordModal = ({
   if (!open) return null;
 
   const renderFieldInput = (field: NormalizedField) => {
-    const system = isSystemField(field) || isSelfReferencingId(field, tableKey);
+    const system = isSystemFieldName(field.key) || isSelfReferencingId(field, tableKey);
     if (mode === "create" && system) return null;
-    const isReadOnly = mode === "edit" && system;
+    const isReferenceField = field.isReference && field.referenceTableKey;
+    const isReadOnly = mode === "edit" && (system || isReferenceField);
     const handleChange = (key: string, value: any) => {
       if (isReadOnly) return;
       onChange(key, value);
     };
     if (field.isReference && field.referenceTableKey) {
-      const refData = referenceOptions[field.key] || { options: [], loading: true };
+      const refKey = `${tableKey}:${field.key}`;
+      const refData = referenceOptions[refKey] || referenceOptions[field.key] || { options: [], loading: true };
       const opts = refData.options || [];
-      const placeholder = `Select ${field.label.toLowerCase()}`;
+      const base = field.key.replace(/_id$/i, "");
+      const placeholderBase = base || field.label.toLowerCase();
+      const placeholder = `Select ${placeholderBase}`;
       const targetTable = refData.targetTable || field.referenceTableKey;
       return (
         <Select
@@ -1769,12 +1794,24 @@ const AddRecordModal = ({
         </div>
         <div className="mdModalBody">
           {fields
-            .filter((field) => !(isSystemField(field) || isSelfReferencingId(field, tableKey)))
+            .filter(
+              (field) =>
+                !(
+                  (!field.isReference && isSystemField(field)) ||
+                  isSelfReferencingId(field, tableKey)
+                ),
+            )
             .map((field) => (
+              // readonly for edit mode on system/self-reference/reference ids
+              (() => {
+                const isReadOnlyField =
+                  mode === "edit" &&
+                  (isSystemField(field) || isSelfReferencingId(field, tableKey) || (field.isReference && field.referenceTableKey));
+                return (
               <div
                 key={field.key}
                 className={`mdFormGroup ${
-                  mode === "edit" && (isSystemField(field) || isSelfReferencingId(field, tableKey)) ? "opacity-70" : ""
+                  isReadOnlyField ? "opacity-70" : ""
                 }`}
               >
                 <label className="mdFormLabel">
@@ -1783,6 +1820,8 @@ const AddRecordModal = ({
                 {renderFieldInput(field)}
                 {errors[field.key] && <p className="mdInputError">{errors[field.key]}</p>}
               </div>
+                );
+              })()
             ))}
         </div>
         <div className="mdModalFooter">
@@ -1804,7 +1843,10 @@ type ViewRecordModalProps = {
   record: Record<string, any> | null;
   fields: NormalizedField[];
   entityName?: string;
-  referenceOptions: Record<string, { options: { value: string; label: string }[]; loading?: boolean; error?: string; targetTable?: string }>;
+  referenceOptions: Record<
+    string,
+    { options: { value: string; label: string }[]; loading?: boolean; loaded?: boolean; error?: string; targetTable?: string }
+  >;
   onOpenReference?: (tableKey: string, id: string) => void;
 };
 
@@ -1961,6 +2003,9 @@ export default function ManageDashDetail() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [tableSearch, setTableSearch] = useState("");
+  const { filtersByTable, setTableFilters, activeCounts: filterCounts } = useTableFilters();
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [selectedRecordTableKey, setSelectedRecordTableKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1969,7 +2014,10 @@ export default function ManageDashDetail() {
   const [recordsByTable, setRecordsByTable] = useState<Record<string, any[]>>({});
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [referenceOptions, setReferenceOptions] = useState<
-    Record<string, { options: { value: string; label: string }[]; loading?: boolean; error?: string; targetTable?: string }>
+    Record<
+      string,
+      { options: { value: string; label: string }[]; loading?: boolean; loaded?: boolean; error?: string; targetTable?: string }
+    >
   >({});
   const [widgetResults, setWidgetResults] = useState<WidgetResult[]>([]);
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfig[]>([]);
@@ -2253,10 +2301,16 @@ export default function ManageDashDetail() {
   }, [mergedInsights, tableSchemas]);
 
   const fetchTableRecords = useCallback(
-    async (tableKey: string) => {
+    async (tableKey: string, filterGroup?: FilterGroup | null) => {
       if (!dashId || !tableKey) return;
       try {
-        const res = await dashboardApi.listRecords({ dashboardId: dashId, tableKey, sessionId, userId: currentUser?.id });
+        const res = await dashboardApi.listRecords({
+          dashboardId: dashId,
+          tableKey,
+          sessionId,
+          userId: currentUser?.id,
+          filters: filterGroup || null,
+        });
         setRecordsByTable((prev) => ({ ...prev, [tableKey]: res.records || [] }));
       } catch {
         // Best-effort; sampleRows will be used as fallback.
@@ -2281,8 +2335,8 @@ export default function ManageDashDetail() {
     if (!dashId || !activeTable) return;
     const tableKey = activeTable.key || activeTable.id || "";
     if (!tableKey) return;
-    fetchTableRecords(tableKey);
-  }, [dashId, activeTableId, tableOptions, sessionId, fetchTableRecords]);
+    fetchTableRecords(tableKey, filtersByTable[tableKey] || null);
+  }, [dashId, activeTableId, tableOptions, sessionId, filtersByTable, fetchTableRecords]);
 
   useEffect(() => {
     if (!dashId) return;
@@ -2325,7 +2379,7 @@ export default function ManageDashDetail() {
       const fieldKey = field.key;
       setReferenceOptions((prev) => ({
         ...prev,
-        [fieldKey]: { ...(prev[fieldKey] || {}), loading: true, error: undefined, targetTable },
+        [fieldKey]: { ...(prev[fieldKey] || {}), loading: true, loaded: false, error: undefined, targetTable },
       }));
       try {
         const res = await dashboardApi.listRecords({
@@ -2357,14 +2411,14 @@ export default function ManageDashDetail() {
         console.log("reference options", fieldKey, mapped);
         setReferenceOptions((prev) => ({
           ...prev,
-          [fieldKey]: { options: mapped, loading: false, targetTable },
+          [fieldKey]: { options: mapped, loading: false, loaded: true, targetTable },
         }));
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to load reference data";
         toast.error(message);
         setReferenceOptions((prev) => ({
           ...prev,
-          [fieldKey]: { options: [], loading: false, error: message, targetTable },
+          [fieldKey]: { options: [], loading: false, loaded: true, error: message, targetTable },
         }));
       }
     },
@@ -2396,12 +2450,24 @@ export default function ManageDashDetail() {
         return { ...prev, tables: nextTables };
       });
       setReferenceOptions({});
-      fetchTableRecords(targetKey);
+      fetchTableRecords(targetKey, filtersByTable[targetKey] || null);
     },
-    [schemaTargetKey, activeTableKey, fetchTableRecords],
+    [schemaTargetKey, activeTableKey, fetchTableRecords, filtersByTable],
   );
   const normalizedActiveFields = useMemo(() => normalizeFields(activeTable?.fields || []), [activeTable]);
   const visibleFields = useMemo(() => getVisibleFields(activeTable?.fields || []), [activeTable]);
+  const filterFields = useMemo(
+    () =>
+      normalizedActiveFields.map((f) => ({
+        key: f.key,
+        type: f.type,
+        label: f.label,
+        enumValues: f.enumValues,
+        isReference: f.isReference,
+        referenceTableKey: f.referenceTableKey,
+      })),
+    [normalizedActiveFields],
+  );
   const widgetResultMap = useMemo<Record<string, WidgetResult>>(
     () =>
       widgetResults.reduce((acc, item) => {
@@ -2431,6 +2497,87 @@ export default function ManageDashDetail() {
     [tableRecords],
   );
 
+  const activeFieldMap = useMemo(() => {
+    const map = new Map<string, NormalizedField>();
+    normalizedActiveFields.forEach((f) => {
+      if (f.key) map.set(f.key, f);
+    });
+    return map;
+  }, [normalizedActiveFields]);
+
+  const filteredRecords = useMemo(() => {
+    const group = filtersByTable[activeTableKey] || null;
+    const term = tableSearch.toLowerCase();
+
+    const matchCondition = (val: any, cond: any, fieldMeta?: NormalizedField) => {
+      const op = cond.operator;
+      if (val === undefined || val === null) return false;
+      const raw = typeof val === "string" ? val : String(val);
+      const targetType = (fieldMeta?.type || "").toLowerCase();
+      const asNumber = Number(raw);
+      const normalizeStr = (v: any) => String(v ?? "").toLowerCase();
+      switch (op) {
+        case "contains":
+          return normalizeStr(raw).includes(normalizeStr(cond.value));
+        case "starts_with":
+          return normalizeStr(raw).startsWith(normalizeStr(cond.value));
+        case "equals":
+          return normalizeStr(raw) === normalizeStr(cond.value);
+        case "not_equals":
+          return normalizeStr(raw) !== normalizeStr(cond.value);
+        case "gt":
+          return targetType === "date" ? new Date(raw) > new Date(cond.value) : asNumber > Number(cond.value);
+        case "gte":
+          return targetType === "date" ? new Date(raw) >= new Date(cond.value) : asNumber >= Number(cond.value);
+        case "lt":
+          return targetType === "date" ? new Date(raw) < new Date(cond.value) : asNumber < Number(cond.value);
+        case "lte":
+          return targetType === "date" ? new Date(raw) <= new Date(cond.value) : asNumber <= Number(cond.value);
+        case "between":
+          if (targetType === "date") {
+            const d = new Date(raw).getTime();
+            return d >= new Date(cond.value).getTime() && d <= new Date(cond.valueTo).getTime();
+          }
+          return asNumber >= Number(cond.value) && asNumber <= Number(cond.valueTo);
+        case "in":
+          return Array.isArray(cond.value) && cond.value.map((v: any) => normalizeStr(v)).includes(normalizeStr(raw));
+        default:
+          return true;
+      }
+    };
+
+    const passesFilters = (rec: any) => {
+      if (!group || !group.conditions.length) return true;
+      const results = group.conditions.map((cond) => {
+        const fieldMeta = activeFieldMap.get(cond.field);
+        const val = rec?.[cond.field];
+        return matchCondition(val, cond, fieldMeta);
+      });
+      return group.mode === "AND" ? results.every(Boolean) : results.some(Boolean);
+    };
+
+    return tableDisplayRecords
+      .filter((rec) => {
+        if (!rec || typeof rec !== "object") return false;
+        return passesFilters(rec);
+      })
+      .filter((rec) => {
+        if (!tableSearch.trim()) return true;
+        return Object.entries(rec).some(([key, value]) => {
+          if (key === "__meta") return false;
+          const valueStr = value === null || value === undefined ? "" : String(value);
+          if (valueStr.toLowerCase().includes(term)) return true;
+          const fieldMeta = activeFieldMap.get(key);
+          if (fieldMeta?.isReference) {
+            const opts = referenceOptions[key]?.options || [];
+            const matched = opts.find((opt) => String(opt.value) === valueStr);
+            if (matched?.label && matched.label.toLowerCase().includes(term)) return true;
+          }
+          return false;
+        });
+      });
+  }, [activeFieldMap, activeTableKey, filtersByTable, referenceOptions, tableDisplayRecords, tableSearch]);
+
   const recordColumns = useMemo(() => {
     if (visibleFields.length) {
       return visibleFields
@@ -2448,13 +2595,6 @@ export default function ManageDashDetail() {
   }, [tableRecords, visibleFields]);
 
   const recordColumnCount = (recordColumns.length || 1) + 1;
-  const activeFieldMap = useMemo(() => {
-    const map = new Map<string, NormalizedField>();
-    normalizedActiveFields.forEach((f) => {
-      if (f.key) map.set(f.key, f);
-    });
-    return map;
-  }, [normalizedActiveFields]);
   const viewFields = useMemo(() => {
     const targetKey = selectedRecordTableKey || activeTableKey;
     const targetTable = mergedTables.find((t) => (t.key || t.id || "") === targetKey);
@@ -2505,7 +2645,7 @@ export default function ManageDashDetail() {
       toast.success("Record updated");
       setIsEditOpen(false);
       setSelectedRecord(null);
-      await fetchTableRecords(activeTableKey);
+      await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
     } catch (err) {
       const message =
@@ -2525,7 +2665,7 @@ export default function ManageDashDetail() {
       .forEach((f) => {
         const cache = referenceOptions[f.key];
         if (cache?.loading) return;
-        if (cache && (cache.options?.length || cache.loading === false)) return;
+        if (cache?.loaded) return;
         fetchReferenceOptions(f);
       });
   }, [isAddOpen, normalizedActiveFields, referenceOptions, fetchReferenceOptions]);
@@ -2536,7 +2676,7 @@ export default function ManageDashDetail() {
       .forEach((f) => {
         const cache = referenceOptions[f.key];
         if (cache?.loading) return;
-        if (cache && cache.options && cache.options.length) return;
+        if (cache?.loaded) return;
         fetchReferenceOptions(f);
       });
   }, [activeTableKey, normalizedActiveFields, referenceOptions, fetchReferenceOptions]);
@@ -2586,7 +2726,7 @@ export default function ManageDashDetail() {
       setFormValues({});
       setFormErrors({});
       toast.success("Record added successfully");
-      await fetchTableRecords(activeTableKey);
+      await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
     } catch (err) {
       const status = (err as any)?.status;
@@ -2677,7 +2817,7 @@ export default function ManageDashDetail() {
       toast.success("Record deleted");
       setIsDeleteOpen(false);
       setSelectedRecord(null);
-      await fetchTableRecords(activeTableKey);
+      await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
     } catch (err) {
       const message =
@@ -3034,29 +3174,27 @@ export default function ManageDashDetail() {
                 <p className="mdMainSubtitle">Key metrics and analytics</p>
               </div>
               <div className="tableActions">
-                {totalWidgetPages > 1 && (
-                  <div className="flex items-center gap-2 mr-2 text-sm text-slate-600">
-                    <span>Page {widgetPage} of {totalWidgetPages}</span>
-                    <Button
-                      variant="outline"
-                      className="mdGhostBtn"
-                      size="sm"
-                      disabled={widgetPage === 1}
-                      onClick={() => setWidgetPage((p) => Math.max(1, p - 1))}
-                    >
-                      &lt;
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="mdGhostBtn"
-                      size="sm"
-                      disabled={widgetPage === totalWidgetPages}
-                      onClick={() => setWidgetPage((p) => Math.min(totalWidgetPages, p + 1))}
-                    >
-                      &gt;
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 mr-2 text-sm text-slate-600">
+                  <span>Page {widgetPage} of {totalWidgetPages}</span>
+                  <Button
+                    variant="outline"
+                    className="mdGhostBtn"
+                    size="sm"
+                    disabled={widgetPage === 1}
+                    onClick={() => setWidgetPage((p) => Math.max(1, p - 1))}
+                  >
+                    &lt;
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="mdGhostBtn"
+                    size="sm"
+                    disabled={widgetPage === totalWidgetPages}
+                    onClick={() => setWidgetPage((p) => Math.min(totalWidgetPages, p + 1))}
+                  >
+                    &gt;
+                  </Button>
+                </div>
                 <Button
                   variant="outline"
                   className="mdGhostBtn"
@@ -3267,7 +3405,12 @@ export default function ManageDashDetail() {
           <div className="tableActions">
             <div className="mdSearch">
               <Search className="searchIcon" />
-              <Input placeholder="Search records..." className="searchInput" />
+              <Input
+                placeholder="Search records..."
+                className="searchInput"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+              />
             </div>
             <Button
               variant="ghost"
@@ -3281,9 +3424,19 @@ export default function ManageDashDetail() {
               <Settings2 className="w-4 h-4 mr-2" />
               Edit columns
             </Button>
-            <Button variant="outline" className="mdGhostBtn">
+            <Button
+              variant="outline"
+              className="mdGhostBtn relative"
+              onClick={() => setIsFiltersOpen(true)}
+              disabled={!tableKey}
+            >
               <Filter className="w-4 h-4 mr-2" />
               Filters
+              {filterCounts[tableKey] ? (
+                <span className="ml-2 rounded-full bg-indigo-500 px-2 text-xs font-semibold text-white">
+                  {filterCounts[tableKey]}
+                </span>
+              ) : null}
             </Button>
             <Button className="primaryBtn" onClick={handleOpenAdd} disabled={!tableKey}>
               <Plus className="w-4 h-4 mr-2" />
@@ -3302,8 +3455,8 @@ export default function ManageDashDetail() {
               ))}
               <div className="recordCell header">Actions</div>
             </div>
-            {tableDisplayRecords.length ? (
-              tableDisplayRecords.map((record, idx) => {
+            {filteredRecords.length ? (
+              filteredRecords.map((record, idx) => {
                 const meta = (record as any).__meta;
                 return (
                   <div
@@ -3353,7 +3506,11 @@ export default function ManageDashDetail() {
                 );
               })
             ) : (
-              <div className="tableEmpty padded">No data yet. Add your first record to populate this table.</div>
+              <div className="tableEmpty padded">
+                {tableDisplayRecords.length
+                  ? "No records match your search."
+                  : "No data yet. Add your first record to populate this table."}
+              </div>
             )}
           </div>
         </div>
@@ -3464,6 +3621,15 @@ export default function ManageDashDetail() {
         sessionId={sessionId}
         userId={currentUser?.id}
         onSaved={handleSchemaSaved}
+      />
+
+      <TableFiltersModal
+        isOpen={isFiltersOpen}
+        onClose={() => setIsFiltersOpen(false)}
+        tableKey={activeTableKey}
+        fields={filterFields}
+        value={filtersByTable[activeTableKey] || null}
+        onChange={(next) => setTableFilters(activeTableKey, next)}
       />
 
       <AddRecordModal

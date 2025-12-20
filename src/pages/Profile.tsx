@@ -30,6 +30,7 @@ type ProfilePayload = {
   phone?: string;
   company?: string;
   job_title?: string;
+  jobTitle?: string;
   location?: string;
   bio?: string;
   website?: string;
@@ -70,35 +71,60 @@ export default function Profile() {
       .catch((err) => console.error("Failed to load profile", err));
   }, []);
 
+  const isUnchanged = () => {
+    const keys: (keyof ProfilePayload)[] = ["fullName", "email", "phone", "company", "job_title", "jobTitle", "location", "bio", "website", "avatarUrl", "avatar_url"];
+    return keys.every((k) => (profile?.[k] || "") === (originalProfile?.[k] || ""));
+  };
+
+  const validateProfile = () => {
+    if (!profile.fullName?.trim()) return "Full name is required";
+    if (!profile.email?.trim()) return "Email is required";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (profile.email && !emailRegex.test(profile.email)) return "Email is not valid";
+    return null;
+  };
+
   const handleSave = async () => {
+    const validationError = validateProfile();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    if (isUnchanged()) {
+      toast.info("No changes to save");
+      setIsEditing(false);
+      return;
+    }
     setIsSaving(true);
     try {
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) {
-        toast.error("Bạn cần đăng nhập để lưu thay đổi");
+        toast.error("You need to sign in to save changes");
         setIsSaving(false);
         return;
       }
 
-      const payload = {
-        fullName: profile.fullName,
-        email: profile.email,
-        phone: profile.phone,
-        company: profile.company,
-        job_title: profile.job_title,
-        location: profile.location,
-        bio: profile.bio,
-        website: profile.website,
-      };
+    const payload = {
+      fullName: profile.fullName,
+      email: profile.email,
+      phone: profile.phone,
+      company: profile.company,
+      job_title: profile.job_title || profile.jobTitle,
+      jobTitle: profile.job_title || profile.jobTitle,
+      location: profile.location,
+      bio: profile.bio,
+      website: profile.website,
+      avatarUrl: profile.avatarUrl || profile.avatar_url || avatarPreview || null,
+    };
 
       await api.patch("/profile", payload, token);
       setOriginalProfile(profile);
       setIsEditing(false);
-      toast.success("Đã lưu hồ sơ");
+      toast.success("Profile updated");
     } catch (err) {
       console.error(err);
-      toast.error("Không thể lưu hồ sơ");
+      toast.error("Failed to save profile");
     } finally {
       setIsSaving(false);
     }
@@ -107,6 +133,7 @@ export default function Profile() {
   const handleCancel = () => {
     setProfile(originalProfile);
     setIsEditing(false);
+    setAvatarPreview(null);
   };
 
   const handleBack = () => {
@@ -213,28 +240,37 @@ export default function Profile() {
                     {getInitials(profile.fullName)}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <label
-                    className={`${secondaryBtn} cursor-pointer flex items-center justify-center gap-2 text-xs font-medium px-3 py-1.5 shadow-sm`}
-                    htmlFor="avatar-upload"
-                    aria-label="Change photo"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </label>
-                  <input
-                    id="avatar-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const url = URL.createObjectURL(file);
-                        setAvatarPreview(url);
-                      }
-                    }}
-                  />
-                </div>
+                {isEditing && (
+                  <div>
+                    <label
+                      className={`${secondaryBtn} cursor-pointer flex items-center justify-center gap-2 text-xs font-medium px-3 py-1.5 shadow-sm`}
+                      htmlFor="avatar-upload"
+                      aria-label="Change photo"
+                    >
+                      <Camera className="h-4 w-4" />
+                    </label>
+                    <input
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const dataUrl = typeof reader.result === "string" ? reader.result : null;
+                            if (dataUrl) {
+                              setAvatarPreview(dataUrl);
+                              setProfile((prev) => ({ ...prev, avatarUrl: dataUrl, avatar_url: dataUrl }));
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 space-y-2">
@@ -337,11 +373,11 @@ export default function Profile() {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
-                    disabled={!isEditing}
-                    className={inputClass("pl-10")}
+                    disabled
+                    readOnly
+                    className={inputClass("pl-10 bg-white/60")}
                     type="email"
                     value={profile.email || ""}
-                    onChange={(e) => setProfile({ ...profile, email: (e.target as HTMLInputElement).value })}
                     placeholder="you@example.com"
                   />
                 </div>

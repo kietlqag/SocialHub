@@ -230,11 +230,32 @@ export default function ManageDashList() {
     const tableFields = Array.isArray(d.tables) ? d.tables.flatMap((t) => t.fields || []) : [];
     const fieldCount = d.fields?.length ? d.fields.length : tableFields.length;
     const widgets = Array.isArray(d.widgets) ? d.widgets : [];
+    const metricWidgets = widgets.filter((w: any) => {
+      const type = (w.type || "").toString().toLowerCase();
+      const variant = (w.variant || "").toString().toLowerCase();
+      return !w.hidden && (type === "metric" || variant === "metric");
+    });
+    const metricCount = metricWidgets.length;
+    const chartWidgets = widgets.filter((w: any) => {
+      const type = (w.type || "").toString().toLowerCase();
+      const variant = (w.variant || "").toString().toLowerCase();
+      const visualType = (w.visualType || "").toString().toLowerCase();
+      return (
+        !w.hidden &&
+        (type === "chart" ||
+          variant === "chart" ||
+          type.includes("chart") ||
+          variant.includes("chart") ||
+          visualType.includes("chart"))
+      );
+    });
+    const chartCount = chartWidgets.length;
     const widgetCount = widgets.length;
-    const metricCount = widgets.filter((w: any) => (w as any)?.type === "metric").length;
-    const chartCount = widgets.filter((w: any) => (w as any)?.type === "chart").length;
+    const insightsArr = Array.isArray((d as any).insights) ? (d as any).insights : [];
+    const visibleInsightsCount = insightsArr.filter((i: any) => !(i as any)?.hidden).length;
+    const totalInsightsCount = insightsArr.length;
     const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
-    const insightsCount = Array.isArray((d as any).insights) ? (d as any).insights.length : chartCount;
+    const insightsCount = chartCount || visibleInsightsCount || totalInsightsCount;
     const overviewCount = metricCount || widgetCount || Math.max(1, tableCount || 1);
     const domain = detectDashboardDomain(d);
     const visual = domainVisuals[domain] ?? domainVisuals.general;

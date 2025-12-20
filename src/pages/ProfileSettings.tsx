@@ -3,7 +3,6 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Card } from "../components/ui/card";
-import { Switch } from "../components/ui/switch";
 import { Separator } from "../components/ui/separator";
 import { Badge } from "../components/ui/badge";
 import {
@@ -33,6 +32,7 @@ import { getCurrentSession } from "../services/auth";
 import { api } from "../services/api";
 import { toast } from "sonner";
 import "../styles/settings.css";
+import { ToggleSwitch } from "../components/ToggleSwitch";
 
 interface ProfileSettingsProps {
   onBack?: () => void;
@@ -188,17 +188,18 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                           <p className="settingsRowTitle">{item.title}</p>
                           <p className="settingsRowDesc">{item.desc}</p>
                         </div>
-                        <Switch
+                        <ToggleSwitch
                           checked={(notifications as any)[item.key]}
-                          onCheckedChange={(isChecked: boolean) =>
+                          onChange={(isChecked: boolean) =>
                             setNotifications({ ...notifications, [item.key]: isChecked } as NotificationsState)
                           }
+                          aria-label={item.title}
                         />
                       </div>
                     ))}
                     <Separator />
                     <div className="settingsActions">
-                      <Button onClick={handleSave} disabled={isSaving} className={`${primaryBtn} gap-2`}>
+                      <Button onClick={handleSave} disabled={isSaving} className={`${primaryBtn} gap-2 savePreferencesBtn`}>
                         {isSaving ? "Saving..." : (
                           <>
                             <Save className="w-4 h-4" />
@@ -284,7 +285,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                     </div>
                   </div>
                   <div className="settingsActions">
-                    <Button onClick={handleSave} disabled={isSaving} className={`${primaryBtn} gap-2`}>
+                    <Button onClick={handleSave} disabled={isSaving} className={`${primaryBtn} gap-2 savePreferencesBtn`}>
                       {isSaving ? "Saving..." : (
                         <>
                           <Save className="w-4 h-4" />
@@ -314,7 +315,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                       <Label htmlFor="confirmPassword">Confirm New Password</Label>
                       <Input id="confirmPassword" type="password" className={inputClass} />
                     </div>
-                    <Button className={`${primaryBtn} gap-2`}>
+                    <Button className={`${primaryBtn} gap-2 savePreferencesBtn`}>
                       <KeyRound className="w-4 h-4" />
                       Update Password
                     </Button>
@@ -328,7 +329,7 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                       <p className="text-sm text-slate-900">Add an extra layer of security to your account.</p>
                       <p className="text-sm text-slate-600">You'll enter a code from your phone in addition to your password.</p>
                     </div>
-                    <Button variant="ghost" className={`${secondaryBtn} px-4 py-2`}>
+                    <Button variant="ghost" className={`${secondaryBtn} px-4 py-2 savePreferencesBtn`}>
                       <Smartphone className="w-4 h-4 mr-2" />
                       Enable 2FA
                     </Button>
@@ -339,35 +340,57 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                   {sectionTitle("Active Sessions", "Security")}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-4 bg-white/70 border border-slate-200/60 rounded-xl">
-                      <div>
-                        <p className="text-sm text-slate-900">MacBook Pro - San Francisco, CA</p>
-                        <p className="text-xs text-slate-600">Current session — Last active: Now</p>
+                      <div className="flex items-start gap-2">
+                        <span className="sessionStatusDot sessionStatusDot--active" aria-label="Active session" />
+                        <div>
+                          <p className="text-sm text-slate-900">MacBook Pro - San Francisco, CA</p>
+                          <p className="text-xs text-slate-600">Current session - Last active: Now</p>
+                        </div>
                       </div>
-                      <Badge className="bg-green-100 text-green-800">Active</Badge>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="sessionActionRevoke"
+                        >
+                          Revoke
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between p-4 bg-white/70 border border-slate-200/60 rounded-xl">
-                      <div>
-                        <p className="text-sm text-slate-900">iPhone 14 Pro - San Francisco, CA</p>
-                        <p className="text-xs text-slate-600">Last active: 2 hours ago</p>
+                      <div className="flex items-start gap-2">
+                        <span className="sessionStatusDot sessionStatusDot--inactive" aria-label="Inactive session" />
+                        <div>
+                          <p className="text-sm text-slate-900">iPhone 14 Pro - San Francisco, CA</p>
+                          <p className="text-xs text-slate-600">Last active: 2 hours ago</p>
+                        </div>
                       </div>
-                      <Button variant="ghost" size="sm" className="rounded-full px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-white">
-                        Revoke
-                      </Button>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="sessionActionRevoke"
+                        >
+                          Revoke
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </Card>
 
                 <Card className="settingsCard dangerCard">
-                  <div className="flex items-start gap-4">
-                    <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
-                    <div className="flex-1">
-                      <h3 className="text-lg text-red-900 mb-2">Danger Zone</h3>
-                      <p className="text-sm text-red-800 mb-4">Once you delete your account, there is no going back. Please be certain.</p>
-                      <Button className="rounded-full bg-red-600 text-white hover:bg-red-700 px-5 py-2.5 flex items-center gap-2">
-                        <Trash2 className="w-4 h-4" />
-                        Delete Account
-                      </Button>
+                  <div className="flex items-start gap-4 justify-between">
+                    <div className="flex items-start gap-4">
+                      <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <h3 className="text-lg text-red-900 mb-2">Danger Zone</h3>
+                        <p className="text-sm text-red-800">Once you delete your account, there is no going back. Please be certain.</p>
+                      </div>
                     </div>
+                    <Button className="dangerAction px-5 py-2.5 flex items-center gap-2 self-start">
+                      <Trash2 className="w-4 h-4" />
+                      Delete Account
+                    </Button>
                   </div>
                 </Card>
               </div>
@@ -399,8 +422,8 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <Button className={primaryBtn}>Change Plan</Button>
-                    <Button className={secondaryBtn}>Cancel Subscription</Button>
+                    <Button className={`${primaryBtn} from-emerald-500 to-teal-500 savePreferencesBtn`}>Change Plan</Button>
+                    <Button className={`${secondaryBtn} savePreferencesBtn`}>Cancel Subscription</Button>
                   </div>
                 </Card>
 
@@ -408,20 +431,25 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
                   {sectionTitle("Payment Method", "Billing")}
                   <div className="flex items-center justify-between p-4 bg-white/70 border border-slate-200/60 rounded-xl mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded flex items-center justify-center">
-                        <CreditCard className="w-6 h-6 text-white" />
+                      <div className="paymentCardIcon">
+                        <CreditCard className="w-6 h-6 text-black drop-shadow" />
                       </div>
                       <div>
                         <p className="text-sm text-slate-900">•••• •••• •••• 4242</p>
                         <p className="text-xs text-slate-600">Expires 12/2025</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="rounded-full px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-white">
+                    <Button variant="ghost" size="sm" className="rounded-full px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-white savePreferencesBtn">
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
                   </div>
-                  <Button variant="ghost" size="sm" className="rounded-full px-4 py-2 border border-slate-200 text-slate-700 hover:bg-white">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full px-4 py-2 border border-slate-200 text-slate-700 hover:bg-white savePreferencesBtn w-auto"
+                    style={{ alignSelf: "flex-start" }}
+                  >
                     <Plus className="w-4 h-4 mr-2" />
                     Add Payment Method
                   </Button>

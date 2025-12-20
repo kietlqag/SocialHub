@@ -23,19 +23,39 @@ export async function selectProfileByUserId(userId) {
   return res.rows[0] || null;
 }
 
-export async function upsertProfile(userId, { fullName, company, avatarUrl, phone, jobTitle, location, bio, website, preferences }) {
-  // update core user fields (full_name, company, avatar_url)
-  if (fullName || company || avatarUrl) {
+export async function upsertProfile(
+  userId,
+  { fullName, company, avatarUrl, email, phone, jobTitle, job_title, location, bio, website, preferences },
+) {
+  const normalizedJobTitle = jobTitle || job_title || null;
+
+  // update core user fields (full_name, company, avatar_url, email)
+  if (fullName || company || avatarUrl || email) {
     await query(
-      `UPDATE users SET full_name = COALESCE($1, full_name), company = COALESCE($2, company), avatar_url = COALESCE($3, avatar_url), updated_at = NOW() WHERE id = $4`,
-      [fullName || null, company || null, avatarUrl || null, userId]
+      `UPDATE users
+         SET full_name = COALESCE($1, full_name),
+             company   = COALESCE($2, company),
+             avatar_url= COALESCE($3, avatar_url),
+             email     = COALESCE($4, email),
+             updated_at= NOW()
+       WHERE id = $5`,
+      [fullName || null, company || null, avatarUrl || null, email || null, userId],
     );
   }
 
   // ensure a row exists in user_profiles
   await query(
-    `INSERT INTO user_profiles (user_id, phone, job_title, location, bio, website, preferences) VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, '{}'::jsonb)) ON CONFLICT (user_id) DO UPDATE SET phone = COALESCE(EXCLUDED.phone, user_profiles.phone), job_title = COALESCE(EXCLUDED.job_title, user_profiles.job_title), location = COALESCE(EXCLUDED.location, user_profiles.location), bio = COALESCE(EXCLUDED.bio, user_profiles.bio), website = COALESCE(EXCLUDED.website, user_profiles.website), preferences = COALESCE(EXCLUDED.preferences, user_profiles.preferences), updated_at = NOW()`,
-    [userId, phone || null, jobTitle || null, location || null, bio || null, website || null, preferences ? JSON.stringify(preferences) : null]
+    `INSERT INTO user_profiles (user_id, phone, job_title, location, bio, website, preferences)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, '{}'::jsonb))
+     ON CONFLICT (user_id) DO UPDATE SET
+       phone       = COALESCE(EXCLUDED.phone, user_profiles.phone),
+       job_title   = COALESCE(EXCLUDED.job_title, user_profiles.job_title),
+       location    = COALESCE(EXCLUDED.location, user_profiles.location),
+       bio         = COALESCE(EXCLUDED.bio, user_profiles.bio),
+       website     = COALESCE(EXCLUDED.website, user_profiles.website),
+       preferences = COALESCE(EXCLUDED.preferences, user_profiles.preferences),
+       updated_at  = NOW()`,
+    [userId, phone || null, normalizedJobTitle, location || null, bio || null, website || null, preferences ? JSON.stringify(preferences) : null],
   );
 
   return selectProfileByUserId(userId);

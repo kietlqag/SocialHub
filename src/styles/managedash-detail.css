@@ -878,3 +878,432 @@
     flex-direction: column;
   }
 }
+
+/* Filters modal styling */
+.filterModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.filterModalCard {
+  width: 100%;
+  max-width: 900px;
+  background: linear-gradient(135deg, #ffffff, #f7f7ff);
+  border-radius: 20px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+  padding: 20px 22px;
+  border: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.filterModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filterModalEyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0;
+}
+
+.filterModalTitle {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.filterCloseBtn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 18px;
+  padding: 6px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.filterCloseBtn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: #1f2937;
+}
+
+.filterMatchRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.filterLabel {
+  font-size: 14px;
+  color: #475569;
+}
+
+.filterModeGroup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filterModeBtn {
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  background: #f8fafc;
+  color: #475569;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 150ms ease;
+}
+
+.filterModeBtn.active {
+  background: linear-gradient(135deg, #c7a8ff, #7c5cff);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 10px 22px rgba(124, 92, 255, 0.25);
+}
+
+.filterModeBtn:hover {
+  transform: translateY(-1px);
+}
+
+.filterConditions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filterConditionRow {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(124, 92, 255, 0.03);
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+}
+
+.filterFieldCol {
+  grid-column: span 12;
+}
+
+.filterOperatorCol {
+  grid-column: span 12;
+}
+
+.filterValueCol {
+  grid-column: span 12;
+}
+
+@media (min-width: 768px) {
+  .filterFieldCol {
+    grid-column: span 3;
+  }
+  .filterOperatorCol {
+    grid-column: span 3;
+  }
+  .filterValueCol {
+    grid-column: span 5;
+  }
+}
+
+.filterRemoveCol {
+  grid-column: span 12;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.filterInput {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: white;
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.filterInput:focus {
+  outline: none;
+  border-color: #7c5cff;
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.18);
+}
+
+.filterRemoveBtn {
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 10px;
+  transition: background 150ms ease;
+}
+
+.filterRemoveBtn:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.filterFooter {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filterGhostBtn {
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: white;
+  color: #1f2937;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 150ms ease;
+}
+
+.filterGhostBtn:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.filterPrimaryBtn {
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 12px 26px rgba(99, 102, 241, 0.25);
+  transition: transform 150ms ease, filter 150ms ease;
+}
+
+.filterPrimaryBtn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+/* Compact filters panel floating under toolbar */
+.mdFiltersOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 16px 24px;
+  pointer-events: none;
+}
+
+.mdFiltersPanel {
+  position: relative;
+  top: 3.5rem;
+  right: 0;
+  width: 420px;
+  max-height: 70vh;
+  padding: 1.25rem 1.5rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(18px);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  pointer-events: auto;
+}
+
+.mdFiltersHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mdFiltersTitle {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6366f1;
+  margin: 0;
+}
+
+.mdFiltersSubtitle {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.mdFiltersClose {
+  border-radius: 999px;
+  border: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  cursor: pointer;
+}
+
+.mdFilterRow {
+  display: grid;
+  grid-template-columns: 1.4fr 1.1fr 2.1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.mdFilterValue {
+  width: 100%;
+}
+
+.mdFilterRemoveCol {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.mdFilterRemove {
+  color: #ef4444;
+}
+
+.mdFiltersFooter {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  padding-top: 0.75rem;
+}
+
+.mdFiltersMatchToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.mdFiltersMatchLabel {
+  color: #6b7280;
+}
+
+.mdFiltersChip {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: white;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.mdFiltersChip--active {
+  background: linear-gradient(135deg, #c4b5fd, #818cf8);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.2);
+}
+
+.mdFiltersActions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.mdBtnGhost {
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: transparent;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.mdBtnPrimary {
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(79, 70, 229, 0.35);
+}
+
+.mdIconButton {
+  border: none;
+  background: transparent;
+  padding: 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.mdIconButton:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.match-group {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 4px;
+}
+
+.match-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.match-btn.active {
+  background: linear-gradient(135deg, #c4b5fd, #818cf8);
+  color: white;
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.35);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.btn-reset {
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  font-size: 0.8rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.btn-apply {
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}

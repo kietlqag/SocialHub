@@ -1,0 +1,52 @@
+.toggle {
+  position: relative;
+  display: inline-flex;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  align-items: center;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #e5e7eb;
+  transition: background 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out;
+  padding: 0 3px;
+}
+
+.toggle__thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out, background 200ms ease-out;
+  transform: translateX(0);
+}
+
+.toggle--on {
+  background: linear-gradient(135deg, #c7a8ff, #7c5cff);
+  border-color: transparent;
+  box-shadow: 0 8px 22px rgba(124, 106, 242, 0.35);
+}
+
+.toggle--on .toggle__thumb {
+  transform: translateX(18px);
+  box-shadow: 0 3px 10px rgba(124, 106, 242, 0.35);
+}
+
+.toggle--off .toggle__thumb {
+  transform: translateX(0);
+}
+
+.toggle:hover:not(.toggle--disabled) {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(199, 168, 255, 0.45), 0 10px 24px rgba(124, 106, 242, 0.2);
+}
+
+.toggle--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
