@@ -42,6 +42,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
 }
 
 .mdAvatar {
@@ -64,6 +65,23 @@
 .mdSidebarSubtitle {
   font-size: 13px;
   color: #64748b;
+}
+
+.mdBackIcon {
+  margin-left: auto;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 12px;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.mdBackIcon:hover {
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .mdSidebarSearch {
@@ -115,6 +133,12 @@
   background: linear-gradient(135deg, #7c6af2, #5a8dee);
   color: #fff;
   box-shadow: 0 18px 36px rgba(124, 106, 242, 0.28);
+}
+
+.mdNavItemGhost {
+  border: 1px dashed rgba(124, 106, 242, 0.35);
+  background: rgba(124, 106, 242, 0.08);
+  color: #4f46e5;
 }
 
 .mdNavBadge {
@@ -876,6 +900,59 @@
   }
   .schemaRow {
     flex-direction: column;
+  }
+}
+
+.fieldBuilder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f9f9ff;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  position: relative;
+}
+
+.fieldCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldCol.inline {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.fieldActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.fieldRowTop {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fieldDeleteBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+@media (max-width: 900px) {
+  .fieldRowTop {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

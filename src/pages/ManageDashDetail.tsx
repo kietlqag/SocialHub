@@ -51,6 +51,7 @@ import { generateDetailedInsights, type InsightWidget, type TableSchema } from "
 import { useDynamicDashboardMetrics } from "../dashboard/useDynamicDashboardMetrics";
 import { Input } from "../components/ui/input";
 import { EditTableStructureModal } from "../components/EditTableStructureModal";
+import { CreateTableModal } from "../components/CreateTableModal";
 import {
   Select,
   SelectContent,
@@ -2002,6 +2003,7 @@ export default function ManageDashDetail() {
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const { filtersByTable, setTableFilters, activeCounts: filterCounts } = useTableFilters();
@@ -2111,6 +2113,22 @@ export default function ManageDashDetail() {
   const mergedTables = useMemo(
     () => (safeDashboard.tables && safeDashboard.tables.length > 0 ? safeDashboard.tables : []),
     [safeDashboard],
+  );
+
+  const handleTableCreated = useCallback(
+    (table: DashboardTable | any) => {
+      setDashboard((prev) => {
+        if (!prev) return prev;
+        const nextTables = [...(prev.tables || []), table];
+        return { ...prev, tables: nextTables };
+      });
+      const nextId = table.key || table.id;
+      if (nextId) {
+        setActiveTableId(nextId);
+        setActiveSection(nextId);
+      }
+    },
+    [],
   );
 
   const tableSchemas = useMemo<TableSchema[]>(() => {
@@ -3527,6 +3545,7 @@ export default function ManageDashDetail() {
         icon: TableIcon,
         count: table.count,
       })),
+      { id: "add-table", label: "Add table", icon: Plus, add: true },
     ],
     [filteredTableOptions],
   );
@@ -3558,6 +3577,9 @@ export default function ManageDashDetail() {
               <div className="mdSidebarTitle">{safeDashboard.name || "AI dashboard"}</div>
               <div className="mdSidebarSubtitle">{safeDashboard.type || "healthcare"}</div>
             </div>
+            <button className="mdBackIcon" onClick={() => navigate("/managedash")} aria-label="Back to dashboards">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
           </div>
           <div className="mdSidebarSearch">
             <Search className="w-4 h-4 text-slate-400" />
@@ -3572,8 +3594,12 @@ export default function ManageDashDetail() {
             {sidebarItems.map((item) => (
               <button
                 key={item.id}
-                className={`mdNavItem ${activeSection === item.id ? "active" : ""}`}
+                className={`mdNavItem ${!item.add && activeSection === item.id ? "active" : ""} ${item.add ? "mdNavItemGhost" : ""}`}
                 onClick={() => {
+                  if (item.add) {
+                    setIsCreateTableOpen(true);
+                    return;
+                  }
                   setActiveSection(item.id);
                   if (item.id !== "overview") setActiveTableId(item.id);
                 }}
@@ -3584,15 +3610,6 @@ export default function ManageDashDetail() {
               </button>
             ))}
           </nav>
-          <div className="mdSidebarFooter">
-            <Button
-              variant="outline"
-              className="mdFooterBtn"
-              onClick={() => navigate("/managedash")}
-            >
-              <ArrowLeft className="w-4 h-4" /> Back to dashboards
-            </Button>
-          </div>
         </aside>
 
         <main className="mdDetailMain">
@@ -3621,6 +3638,16 @@ export default function ManageDashDetail() {
         sessionId={sessionId}
         userId={currentUser?.id}
         onSaved={handleSchemaSaved}
+      />
+
+      <CreateTableModal
+        isOpen={isCreateTableOpen}
+        onClose={() => setIsCreateTableOpen(false)}
+        dashboardId={dashId || ""}
+        existingTables={mergedTables as DashboardTable[]}
+        sessionId={sessionId}
+        userId={currentUser?.id}
+        onCreated={handleTableCreated}
       />
 
       <TableFiltersModal

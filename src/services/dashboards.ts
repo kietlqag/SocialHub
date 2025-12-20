@@ -44,6 +44,24 @@ export type DashboardTable = Omit<TableConfig, "fields"> & {
   sampleRows?: Record<string, any>[];
 };
 
+export type NewFieldDefinition = {
+  key: string;
+  label: string;
+  type: "string" | "number" | "boolean" | "date" | "enum" | "reference";
+  required: boolean;
+  isUnique?: boolean;
+  isReference?: boolean;
+  referenceTableKey?: string | null;
+  enumOptions?: string[];
+};
+
+export type TableDefinition = {
+  key: string;
+  name: string;
+  description?: string;
+  fields: NewFieldDefinition[];
+};
+
 export type Dashboard = Omit<SharedDashboard, "tables"> & {
   id: string;
   fields?: DashboardField[];
@@ -222,6 +240,17 @@ export const dashboardApi = {
     return api.delete<{ success: boolean }>(
       `/api/dashboards/${dashboardId}/tables/${tableKey}/records/${recordId}${queryString}`,
     );
+  },
+  createDashboardTable: (
+    dashboardId: string,
+    table: TableDefinition,
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.post<{ table: TableDefinition }>(`/api/dashboards/${dashboardId}/tables${queryString}`, table);
   },
   getTableSchema: (dashboardId: string, tableKey: string, params: { sessionId?: string; userId?: string | null } = {}) => {
     const query = new URLSearchParams();
