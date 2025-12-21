@@ -25,11 +25,42 @@ import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { mongoose } from "../mongoose.js";
 import { getSocialhubDb } from "../mongo.js";
 import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
+import {
+  canCreateRecords,
+  canDeleteRecords,
+  canEditRecords,
+  canManageDashboardAccess,
+  canViewDashboardData,
+} from "../access/dashboardPermissions.js";
+import { findDashboardById as findDashboardByIdRepo } from "../repositories/dashboardRepository.js";
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
   userId: req.user?.id || req.body.userId || req.query.userId || null,
 });
+
+const sanitizeDashboardForPublicView = (dashboard) => {
+  if (!dashboard) return dashboard;
+  const clone = { ...dashboard };
+
+  if (Array.isArray(clone.tables)) {
+    clone.tables = clone.tables.map((t) => ({
+      ...t,
+      sampleRows: [],
+    }));
+  }
+
+  if (Array.isArray(clone.insights)) {
+    clone.insights = clone.insights.map((i) => {
+      const copy = { ...i };
+      if (Array.isArray(copy.data)) copy.data = [];
+      if (Array.isArray(copy.series)) copy.series = [];
+      return copy;
+    });
+  }
+
+  return clone;
+};
 
 export async function generateStructure(req, res) {
   const { name, description, type, sessionId, userId } = req.body;
@@ -61,7 +92,9 @@ export async function getDashboardByIdController(req, res) {
   const { id } = req.params;
   if (!id) throw new HttpError(400, "dashboardId required");
   const dashboard = await getDashboardByIdForViewer(id, owner.userId);
-  res.json({ dashboard });
+  const canViewData = canViewDashboardData(dashboard, owner.userId);
+  const result = canViewData ? dashboard : sanitizeDashboardForPublicView(dashboard);
+  res.json({ dashboard: result });
 }
 
 export async function listDashboardTables(req, res) {
@@ -125,7 +158,7 @@ export async function createDashboardTable(req, res) {
   if (!dashboard) {
     throw new HttpError(404, "Dashboard not found");
   }
-  if (!canEditDashboard(dashboard, owner.userId)) {
+  if (!canManageDashboardAccess(dashboard, owner.userId)) {
     throw new HttpError(403, "Forbidden");
   }
 
@@ -177,6 +210,10 @@ export async function deleteDashboard(req, res) {
   if (!owner.sessionId && !owner.userId) {
     throw new HttpError(400, "sessionId or userId required");
   }
+  const dashboard = await findDashboardById(req.params.id);
+  if (!canManageDashboardAccess(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
+  }
   await removeDashboard(req.params.id, owner);
   res.json({ success: true });
 }
@@ -186,6 +223,10 @@ export async function createDashboardRecord(req, res) {
   const { tableKey, record, dashboardId: bodyDashboardId } = req.body;
   const { id: paramId } = req.params;
   const dashboardId = paramId || bodyDashboardId;
+  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  if (!canCreateRecords(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
+  }
   const inserted = await addDashboardRecord({
     dashboardId,
     tableKey,
@@ -199,6 +240,14 @@ export async function createDashboardRecord(req, res) {
 export async function getDashboardRecords(req, res) {
   const owner = parseOwner(req);
   const { dashboardId, tableKey } = req.query;
+  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  const canViewData = canViewDashboardData(dashboard, owner.userId);
+  if (!canViewData) {
+    return res.json({
+      records: [],
+      message: "Public viewers can only see the dashboard structure, not the underlying data.",
+    });
+  }
   const records = await listDashboardRecords({
     dashboardId,
     tableKey,
@@ -211,6 +260,14 @@ export async function getDashboardRecords(req, res) {
 export async function getDashboardRecordController(req, res) {
   const owner = parseOwner(req);
   const { id: dashboardId, tableKey, recordId } = req.params;
+  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  const canViewData = canViewDashboardData(dashboard, owner.userId);
+  if (!canViewData) {
+    return res.json({
+      record: null,
+      message: "Public viewers can only see the dashboard structure, not the underlying data.",
+    });
+  }
   const record = await getDashboardRecord({
     dashboardId,
     tableKey,
@@ -224,6 +281,10 @@ export async function getDashboardRecordController(req, res) {
 export async function updateDashboardRecordController(req, res) {
   const owner = parseOwner(req);
   const { id: dashboardId, tableKey, recordId } = req.params;
+  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  if (!canEditRecords(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
+  }
   const { record } = req.body || {};
   const updated = await updateDashboardRecordService({
     dashboardId,
@@ -239,6 +300,10 @@ export async function updateDashboardRecordController(req, res) {
 export async function deleteDashboardRecordController(req, res) {
   const owner = parseOwner(req);
   const { id: dashboardId, tableKey, recordId } = req.params;
+  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  if (!canDeleteRecords(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
+  }
   await deleteDashboardRecordService({
     dashboardId,
     tableKey,
@@ -261,6 +326,14 @@ export async function getDashboardData(req, res) {
     }
     if (!canViewDashboard(dashboard, owner.userId)) {
       throw new HttpError(403, "Forbidden");
+    }
+    const canViewData = canViewDashboardData(dashboard, owner.userId);
+    if (!canViewData) {
+      return res.json({
+        dashboardId: req.params.id,
+        widgets: [],
+        message: "Public viewers can only see the dashboard structure, not the underlying data.",
+      });
     }
 
     const db = getSocialhubDb();

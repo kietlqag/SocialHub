@@ -2,6 +2,7 @@ import { ObjectId } from "mongodb";
 import { getSocialhubDb } from "../mongo.js";
 import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { selectUsersByIds } from "../repositories/userRepository.js";
+import { findDashboardById } from "../repositories/dashboardRepository.js";
 
 export const getPublicDashboards = async (req, res) => {
   try {
