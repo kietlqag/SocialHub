@@ -16,6 +16,7 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [domainFilter, setDomainFilter] = useState<"all" | "commerce" | "healthcare" | "analytics" | "education">("all");
   const navigate = useNavigate();
 
   const fetchDashboards = async () => {
@@ -39,7 +40,34 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
     const term = search.toLowerCase();
     const list = dashboards.filter((d) => {
       const matchesTerm = !term || d.name.toLowerCase().includes(term) || (d.ownerName || "").toLowerCase().includes(term);
-      return matchesTerm;
+
+      const normalized = `${d.type || ""} ${d.description || ""}`.toLowerCase();
+      const matchesDomain =
+        domainFilter === "all" ||
+        (domainFilter === "commerce" &&
+          (normalized.includes("commerce") ||
+            normalized.includes("e-commerce") ||
+            normalized.includes("ecommerce") ||
+            normalized.includes("order") ||
+            normalized.includes("orders") ||
+            normalized.includes("customer") ||
+            normalized.includes("customers") ||
+            normalized.includes("product") ||
+            normalized.includes("products"))) ||
+        (domainFilter === "healthcare" &&
+          (normalized.includes("health") || normalized.includes("clinic") || normalized.includes("patient"))) ||
+        (domainFilter === "analytics" &&
+          (normalized.includes("analytics") ||
+            normalized.includes("insight") ||
+            normalized.includes("kpi") ||
+            normalized.includes("finance"))) ||
+        (domainFilter === "education" &&
+          (normalized.includes("education") ||
+            normalized.includes("school") ||
+            normalized.includes("student") ||
+            normalized.includes("class")));
+
+      return matchesTerm && matchesDomain;
     });
     const sorted = [...list].sort((a, b) => {
       const aDate = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
@@ -47,7 +75,7 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
       return sortOrder === "newest" ? bDate - aDate : aDate - bDate;
     });
     return sorted;
-  }, [dashboards, search, sortOrder]);
+  }, [dashboards, search, sortOrder, domainFilter]);
 
   const decoratedDashboards: DecoratedDashboard[] = useMemo(
     () =>
@@ -87,19 +115,16 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
       />
       <div className="explore-page">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.18em] text-indigo-400 uppercase">Browse public dashboards</p>
-              <h1 className="mt-1 text-3xl font-bold text-slate-900">Explore dashboards</h1>
-              <p className="mt-1 text-sm text-slate-500">Browse dashboards that have been shared publicly.</p>
+          <div className="flex justify-between items-end mb-8">
+            <div className="space-y-2">
+              <h1 className="text-4xl font-semibold text-slate-900 leading-tight">Explore dashboards</h1>
+              <p className="text-base text-indigo-500 max-w-xl">Browse dashboards that have been shared publicly.</p>
             </div>
 
             <div className="px-5 py-2 rounded-full bg-indigo-100/80 text-xs font-semibold text-indigo-700 shadow-sm">
               {filtered.length} public dashboards
             </div>
           </div>
-
-          {/* Search/sort bar removed per request */}
         </div>
 
         {loading ? (
@@ -109,32 +134,113 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
             <p>{error}</p>
             <Button onClick={fetchDashboards}>Retry</Button>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="explore-empty">
-            <p>No public dashboards yet.</p>
-            <p className="explore-hint">You can make your dashboard public from the Access control tab.</p>
-          </div>
         ) : (
           <div className="max-w-6xl mx-auto px-6">
-            <section className="dashboard-section">
-              <div className="dashboard-section-frame">
-                <div className="dashboard-grid">
-                  {decoratedDashboards.map((d) => (
-                    <CardDash
-                      key={d.id}
-                      id={d.id}
-                      title={d.displayTitle}
-                      domainLabel={d.domainLabel}
-                      status={d.statusLabel}
-                      isFavorite={false}
-                      iconPreset={d.iconPreset}
-                      lastUpdatedLabel={d.lastViewedLabel}
-                      createdBy={d.ownerName}
-                      hideStats
-                      onOpen={() => openDashboard(d.id)}
-                    />
-                  ))}
+            <section className="flex gap-8 mt-8 items-stretch">
+              {/* Sidebar filters */}
+              <aside className="w-64 shrink-0">
+                <div className="explore-filter-card space-y-6">
+                  {/* Search */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-600">Search</p>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <circle cx="11" cy="11" r="7" />
+                          <line x1="16.65" y1="16.65" x2="21" y2="21" />
+                        </svg>
+                      </span>
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search by name or owner"
+                        className="explore-search-input w-full rounded-2xl border border-slate-200 bg-white/90 px-9 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/70 focus:border-indigo-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Filter checkboxes */}
+                  <div className="space-y-3 pt-3 border-t border-slate-100">
+                    <p className="text-xs font-semibold text-slate-600">Filter</p>
+
+                    <div className="space-y-2 text-sm text-slate-700">
+                      {(
+                        [
+                          ["all", "All"],
+                          ["commerce", "Commerce"],
+                          ["healthcare", "Healthcare"],
+                          ["analytics", "Analytics"],
+                          ["education", "Education"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="domain-filter"
+                            value={key}
+                            checked={domainFilter === key}
+                            onChange={() => setDomainFilter(key)}
+                            className="h-4 w-4 rounded border-slate-300 text-indigo-500 focus:ring-indigo-400"
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sort by */}
+                  <div className="space-y-3 pt-4 border-t border-slate-100">
+                    <p className="text-xs font-semibold text-slate-600">Sort by</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSortOrder("newest")}
+                        className={`sort-button ${sortOrder === "newest" ? "sort-button--active" : ""}`}
+                      >
+                        Newest
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSortOrder("oldest")}
+                        className={`sort-button ${sortOrder === "oldest" ? "sort-button--active" : ""}`}
+                      >
+                        Oldest
+                      </button>
+                    </div>
+                  </div>
                 </div>
+              </aside>
+
+              {/* Dashboard list */}
+              <div className="flex-1">
+                {filtered.length === 0 ? (
+                  <div className="explore-empty">
+                    <p>No public dashboards yet.</p>
+                    <p className="explore-hint">You can make your dashboard public from the Access control tab.</p>
+                  </div>
+                ) : (
+                  <section className="dashboard-section">
+                    <div className="dashboard-section-frame">
+                      <div className="dashboard-grid">
+                        {decoratedDashboards.map((d) => (
+                          <CardDash
+                            key={d.id}
+                            id={d.id}
+                            title={d.displayTitle}
+                            domainLabel={d.domainLabel}
+                            status={d.statusLabel}
+                            isFavorite={false}
+                            iconPreset={d.iconPreset}
+                            lastUpdatedLabel={d.lastViewedLabel}
+                            createdBy={d.ownerName}
+                            hideStats
+                            onOpen={() => openDashboard(d.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                )}
               </div>
             </section>
           </div>

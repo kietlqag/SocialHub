@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, Users, Lock, Unlock, UserPlus, X } from "lucide-react";
+import { ShieldCheck, Users, Lock, Unlock, UserPlus, X, Pencil, Trash2, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   dashboardApi,
@@ -41,6 +41,7 @@ const accessModeOptions: AccessModeOption[] = [
 export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAccessControlProps) {
   const [accessMode, setAccessMode] = useState<DashboardAccessMode>("restricted");
   const [rolePermissions, setRolePermissions] = useState<DashboardRolePermission[]>(DEFAULT_ROLE_PERMS);
+  const [roleBaseline, setRoleBaseline] = useState<DashboardRolePermission[]>(DEFAULT_ROLE_PERMS);
   const [assignments, setAssignments] = useState<DashboardUserAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,18 +51,26 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
   const [showModal, setShowModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>("Viewer");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  const [permissionsEditable, setPermissionsEditable] = useState(false);
+  const [pendingAccessMode, setPendingAccessMode] = useState<DashboardAccessMode | null>(null);
+  const [showAccessModeConfirm, setShowAccessModeConfirm] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] = useState<null>(null);
 
   const fetchAccessControl = async () => {
     try {
       const res = await dashboardApi.getAccessControl(dashboardId, { sessionId, userId: userId || undefined });
       const data = res as DashboardAccessPayload;
       setAccessMode(data.accessMode || "restricted");
-      setRolePermissions(data.rolePermissions && data.rolePermissions.length ? data.rolePermissions : DEFAULT_ROLE_PERMS);
+      const perms = data.rolePermissions && data.rolePermissions.length ? data.rolePermissions : DEFAULT_ROLE_PERMS;
+      setRolePermissions(perms);
+      setRoleBaseline(perms);
       setAssignments(data.userAssignments || []);
     } catch (err: any) {
       const message = err?.message || "Failed to load access control. Using defaults.";
       toast.error(message);
       setRolePermissions(DEFAULT_ROLE_PERMS);
+      setRoleBaseline(DEFAULT_ROLE_PERMS);
     } finally {
       setLoading(false);
     }
@@ -71,35 +80,18 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
     fetchAccessControl();
   }, [dashboardId]);
 
-  const handleAccessModeChange = async (mode: DashboardAccessMode) => {
-    setAccessMode(mode);
-    try {
-      setSaving(true);
-      await dashboardApi.updateAccessMode(dashboardId, mode, { sessionId, userId: userId || undefined });
-      toast.success("Access mode updated");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update access mode");
-      fetchAccessControl();
-    } finally {
-      setSaving(false);
-    }
+  const handleAccessModeChange = (mode: DashboardAccessMode) => {
+    if (mode === accessMode) return;
+    setPendingAccessMode(mode);
+    setShowAccessModeConfirm(true);
   };
 
-  const handleTogglePermission = async (role: string, key: keyof DashboardRolePermission["permissions"]) => {
+  const handleTogglePermission = (role: string, key: keyof DashboardRolePermission["permissions"]) => {
+    if (!permissionsEditable) return;
     const next = rolePermissions.map((r) =>
       r.role === role ? { ...r, permissions: { ...r.permissions, [key]: !r.permissions[key] } } : r,
     );
     setRolePermissions(next);
-    try {
-      setSaving(true);
-      await dashboardApi.updateRolePermissions(dashboardId, next, { sessionId, userId: userId || undefined });
-      toast.success("Permissions updated");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update permissions");
-      fetchAccessControl();
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleSearch = async () => {
@@ -175,15 +167,71 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
   const renderToggle = (role: string, key: keyof DashboardRolePermission["permissions"]) => {
     const rolePerm = rolePermissions.find((r) => r.role === role);
     const active = rolePerm?.permissions[key];
+    const disabled = !permissionsEditable || saving;
     return (
       <button
         className={`ac-toggle ${active ? "ac-toggle-on" : ""}`}
         onClick={() => handleTogglePermission(role, key)}
+        disabled={disabled}
         type="button"
       >
         <span className="ac-toggle-handle" />
       </button>
     );
+  };
+
+  const hasUnsavedRoleChanges = useMemo(
+    () => JSON.stringify(rolePermissions) !== JSON.stringify(roleBaseline),
+    [rolePermissions, roleBaseline],
+  );
+
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+  const handlePermissionsToggleMode = () => {
+    if (!permissionsEditable) {
+      setPermissionsEditable(true);
+      return;
+    }
+    if (!hasUnsavedRoleChanges) {
+      setPermissionsEditable(false);
+      return;
+    }
+    setShowSaveConfirm(true);
+  };
+
+  const handleConfirmSavePermissions = async () => {
+    try {
+      setSaving(true);
+      await dashboardApi.updateRolePermissions(dashboardId, rolePermissions, { sessionId, userId: userId || undefined });
+      setRoleBaseline(rolePermissions);
+      toast.success("Permissions updated");
+      setPermissionsEditable(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update permissions");
+    } finally {
+      setSaving(false);
+      setShowSaveConfirm(false);
+    }
+  };
+
+  const handleConfirmAccessMode = async () => {
+    if (!pendingAccessMode) {
+      setShowAccessModeConfirm(false);
+      return;
+    }
+    try {
+      setSaving(true);
+      await dashboardApi.updateAccessMode(dashboardId, pendingAccessMode, { sessionId, userId: userId || undefined });
+      setAccessMode(pendingAccessMode);
+      toast.success("Access mode updated");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update access mode");
+      fetchAccessControl();
+    } finally {
+      setSaving(false);
+      setPendingAccessMode(null);
+      setShowAccessModeConfirm(false);
+    }
   };
 
   return (
@@ -229,12 +277,20 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
             </div>
           </div>
 
-          <div className="acCard">
-            <div className="acCardHeader">
-              <div>
-                <h3 className="acCardTitle">Roles & permissions</h3>
-                <p className="acCardSubtitle">Define what each role can do in this dashboard.</p>
+            <div className="acCard">
+      <div className="acCardHeader">
+        <div>
+          <h3 className="acCardTitle">Roles & permissions</h3>
+          <p className="acCardSubtitle">Define what each role can do in this dashboard.</p>
               </div>
+              <button
+                className={`acIconBtn ${permissionsEditable ? "primary" : ""}`}
+                title={permissionsEditable ? "Save changes" : "Edit permissions"}
+                aria-label={permissionsEditable ? "Save changes" : "Edit permissions"}
+                onClick={handlePermissionsToggleMode}
+              >
+                {permissionsEditable ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+              </button>
             </div>
             <div className="acTableWrap">
               <div className="acTable">
@@ -277,33 +333,38 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
               </button>
             </div>
             <div className="acTableWrap">
-              <div className="acTable">
-                <div className="acTableHead">
-                  <div className="acTh user">User</div>
-                  <div className="acTh email">Email</div>
-                  <div className="acTh">Role</div>
-                  <div className="acTh">Actions</div>
-                </div>
-                {assignments.length ? (
-                  assignments.map((user) => (
-                    <div className="acTr" key={user.id}>
-                      <div className="acTd user">
-                        <div className="acUser">
-                          <div className="acAvatar">{(user.fullName || user.email || "?").slice(0, 2).toUpperCase()}</div>
-                          <div>
-                            <div className="acUserName">{user.fullName || "User"}</div>
-                            <div className="acUserMeta">ID: {user.userId}</div>
+              <div className="dashboard-access-users-table">
+                <div className="acTable">
+                  <div className="acTableHead dashboard-access-users-header">
+                    <div className="acTh user">User</div>
+                    <div className="acTh email">Email</div>
+                    <div className="acTh">Role</div>
+                    <div className="acTh">Actions</div>
+                  </div>
+                  {assignments.length ? (
+                    assignments.map((user) => (
+                      <div className="acTr dashboard-access-users-row" key={user.id}>
+                        <div className="acTd user">
+                          <div className="acUser">
+                            <div className="acAvatar">{(user.fullName || user.email || "?").slice(0, 2).toUpperCase()}</div>
+                            <div>
+                              <div className="acUserName">{user.fullName || "User"}</div>
+                              <div className="acUserMeta">ID: {user.userId}</div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="acTd email">{user.email}</div>
-                      <div className="acTd">
-                        <Select
-                          value={user.role}
-                          onValueChange={(val) => handleUpdateAssignmentRole(user.id, val)}
-                          disabled={saving}
+                          <div className="acTd email">{user.email}</div>
+                          <div className="acTd">
+                            <Select
+                              value={user.role}
+                              onValueChange={(val) => {
+                            if (val === user.role) return;
+                            handleUpdateAssignmentRole(user.id, val);
+                            setEditingAssignmentId(null);
+                          }}
+                          disabled={saving || editingAssignmentId !== user.id}
                         >
-                          <SelectTrigger className="mdSelect acSelect">
+                          <SelectTrigger className="mdSelect acSelect" aria-label="Role">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="mdSelectContent">
@@ -315,16 +376,34 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="acTd">
-                        <button className="acGhostBtn danger" onClick={() => handleRemoveAssignment(user.id)}>
-                          Remove
-                        </button>
+                          <div className="acTd">
+                            <div className="acActionBtns">
+                              <button
+                            className="acIconBtn warning"
+                            title="Edit role"
+                            aria-label="Edit role"
+                            onClick={() => setEditingAssignmentId(user.id)}
+                            disabled={saving}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="acIconBtn danger"
+                            title="Remove user"
+                            aria-label="Remove user"
+                            onClick={() => handleRemoveAssignment(user.id)}
+                            disabled={saving}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))
-                ) : (
-                  <div className="acEmptyRow">No users assigned yet.</div>
-                )}
+                  ) : (
+                    <div className="acEmptyRow">No users assigned yet.</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -399,6 +478,58 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
               </button>
               <button className="acPrimaryBtn" onClick={handleAddUser} disabled={saving}>
                 {saving ? "Adding..." : "Add to dashboard"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSaveConfirm && (
+        <div className="acModalOverlay" onClick={(e) => e.target === e.currentTarget && setShowSaveConfirm(false)}>
+          <div className="acModal" role="dialog" aria-modal="true">
+            <div className="acModalHeader">
+              <div>
+                <p className="mdMainSubtitle">Confirm changes</p>
+                <h3 className="acCardTitle">Save permission changes?</h3>
+                <p className="mdMainSubtitle">You made changes to role permissions. Save and apply them now?</p>
+              </div>
+              <button className="acIconBtn" onClick={() => setShowSaveConfirm(false)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="acModalFooter">
+              <button className="acGhostBtn" onClick={() => setShowSaveConfirm(false)}>
+                Cancel
+              </button>
+              <button className="acPrimaryBtn" onClick={handleConfirmSavePermissions} disabled={saving}>
+                {saving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAccessModeConfirm && (
+        <div className="acModalOverlay" onClick={(e) => e.target === e.currentTarget && setShowAccessModeConfirm(false)}>
+          <div className="acModal" role="dialog" aria-modal="true">
+            <div className="acModalHeader">
+              <div>
+                <p className="mdMainSubtitle">Confirm change</p>
+                <h3 className="acCardTitle">Change access mode?</h3>
+                <p className="mdMainSubtitle">
+                  {pendingAccessMode ? `Switch access mode to "${pendingAccessMode}"?` : "Save access mode change?"}
+                </p>
+              </div>
+              <button className="acIconBtn" onClick={() => setShowAccessModeConfirm(false)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="acModalFooter">
+              <button className="acGhostBtn" onClick={() => setShowAccessModeConfirm(false)}>
+                Cancel
+              </button>
+              <button className="acPrimaryBtn" onClick={handleConfirmAccessMode} disabled={saving}>
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>

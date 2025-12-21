@@ -22,7 +22,14 @@ import {
   patchInsight,
   getDashboardByIdController,
 } from "../controllers/dashboardController.js";
-import { getDashboardAccess, updateDashboardAccess, updateDashboardAccessMode } from "../controllers/dashboardAccessController.js";
+import {
+  getDashboardAccess,
+  updateDashboardAccess,
+  updateDashboardAccessMode,
+  addDashboardUserAssignment,
+  updateDashboardUserAssignment,
+  removeDashboardUserAssignment,
+} from "../controllers/dashboardAccessController.js";
 import { getPublicDashboards } from "../controllers/publicDashboardController.js";
 import { getTableSchema, updateTableSchema } from "../controllers/tableSchemaController.js";
 
@@ -55,5 +62,8 @@ router.patch("/dashboards/:id/insights/:insightId", asyncHandler(patchInsight));
 router.get("/dashboards/:dashboardId/access", asyncHandler(getDashboardAccess));
 router.patch("/dashboards/:dashboardId/access", asyncHandler(updateDashboardAccess));
 router.patch("/dashboards/:dashboardId/access-mode", asyncHandler(updateDashboardAccessMode));
+router.post("/dashboards/:dashboardId/users", asyncHandler(addDashboardUserAssignment));
+router.patch("/dashboards/:dashboardId/users/:assignmentId", asyncHandler(updateDashboardUserAssignment));
+router.delete("/dashboards/:dashboardId/users/:assignmentId", asyncHandler(removeDashboardUserAssignment));
 
 export default router;

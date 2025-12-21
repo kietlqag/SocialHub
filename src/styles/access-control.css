@@ -242,6 +242,42 @@
   border-color: rgba(239, 68, 68, 0.3);
 }
 
+.acIconBtn {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f172a;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.acIconBtn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(99, 102, 241, 0.15);
+}
+.acIconBtn.danger {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #b91c1c;
+}
+.acIconBtn.primary {
+  border-color: rgba(79, 70, 229, 0.4);
+  color: #4338ca;
+}
+.acIconBtn.primary:hover:not(:disabled) {
+  background: rgba(79, 70, 229, 0.12);
+  box-shadow: 0 8px 16px rgba(79, 70, 229, 0.2);
+}
+.acModalFooter .acPrimaryBtn {
+  min-width: 120px;
+}
+.acActionBtns {
+  display: inline-flex;
+  gap: 8px;
+}
+
 .acEmptyRow {
   padding: 14px;
   color: #6b7280;
@@ -288,6 +324,65 @@
 .acTableHead .acTh.email,
 .acTr .acTd.email {
   min-width: 200px;
+}
+
+/* Users & roles table layout (4 columns) */
+.acAssignmentsTable {
+  width: 100%;
+  min-width: 100%;
+}
+.acAssignmentsTable .acTableHead,
+.acAssignmentsTable .acTr {
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+}
+.acAssignmentsTable .acTh.user,
+.acAssignmentsTable .acTd.user,
+.acAssignmentsTable .acTh.email,
+.acAssignmentsTable .acTd.email {
+  min-width: 0;
+}
+
+/* Users & roles table layout (scoped) */
+.dashboard-access-users-table {
+  width: 100%;
+  overflow-x: hidden;
+}
+.dashboard-access-users-header,
+.dashboard-access-users-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 2.2fr)
+    minmax(0, 2.5fr)
+    minmax(0, 1.4fr)
+    minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: center;
+}
+.dashboard-access-users-header {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.dashboard-access-users-row > div:nth-child(2) {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dashboard-access-users-row + .dashboard-access-users-row {
+  margin-top: 12px;
+}
+.dashboard-access-users-row > div:nth-child(3) {
+  justify-self: start;
+}
+
+.acIconBtn.warning {
+  border-color: rgba(234, 179, 8, 0.35);
+  color: #d97706;
+}
+.acIconBtn.warning:hover:not(:disabled) {
+  background: rgba(234, 179, 8, 0.12);
+  box-shadow: 0 8px 16px rgba(234, 179, 8, 0.2);
 }
 
 .acModalOverlay {

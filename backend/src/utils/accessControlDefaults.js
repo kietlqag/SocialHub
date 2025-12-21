@@ -22,4 +22,5 @@ export const buildDefaultAccessControl = () => ({
       permissions: { view: true, create: false, edit: false, delete: false, manageAccess: false },
     },
   ],
+  userAssignments: [],
 });
