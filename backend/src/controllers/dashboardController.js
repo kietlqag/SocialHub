@@ -19,6 +19,7 @@ import {
   updateInsight,
 } from "../services/dashboardService.js";
 import { getSocialhubDb } from "../mongo.js";
+import { insertActivity } from "../repositories/activityRepository.js";
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
@@ -42,6 +43,17 @@ export async function createDashboard(req, res) {
     throw new HttpError(400, "sessionId or userId required");
   }
   const dashboard = await saveDashboard({ ...owner, name, description, fields, widgets, componentCode, tables });
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "dashboard.create",
+      targetType: "dashboard",
+      targetId: dashboard.id,
+      metadata: { name: dashboard.name, type: dashboard.type },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (dashboard.create):", err.message);
+  }
   res.status(201).json({ dashboard });
 }
 
@@ -56,6 +68,17 @@ export async function deleteDashboard(req, res) {
     throw new HttpError(400, "sessionId or userId required");
   }
   await removeDashboard(req.params.id, owner);
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "dashboard.delete",
+      targetType: "dashboard",
+      targetId: req.params.id,
+      metadata: {},
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (dashboard.delete):", err.message);
+  }
   res.json({ success: true });
 }
 
@@ -71,6 +94,17 @@ export async function createDashboardRecord(req, res) {
     sessionId: owner.sessionId,
     userId: owner.userId,
   });
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "record.create",
+      targetType: "record",
+      targetId: inserted?.id || null,
+      metadata: { dashboardId, tableKey },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (record.create):", err.message);
+  }
   res.status(201).json({ record: inserted });
 }
 
@@ -111,6 +145,17 @@ export async function updateDashboardRecordController(req, res) {
     sessionId: owner.sessionId,
     userId: owner.userId,
   });
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "record.update",
+      targetType: "record",
+      targetId: recordId,
+      metadata: { dashboardId, tableKey },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (record.update):", err.message);
+  }
   res.json({ record: updated });
 }
 
@@ -124,6 +169,17 @@ export async function deleteDashboardRecordController(req, res) {
     sessionId: owner.sessionId,
     userId: owner.userId,
   });
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "record.delete",
+      targetType: "record",
+      targetId: recordId,
+      metadata: { dashboardId, tableKey },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (record.delete):", err.message);
+  }
   res.json({ success: true });
 }
 
@@ -181,12 +237,34 @@ export async function createWidget(req, res) {
   const owner = parseOwner(req);
   const { tableKey, columnKey, aggregation, title, icon } = req.body;
   const widget = await addManualWidget(req.params.id, owner, { tableKey, columnKey, aggregation, title, icon });
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "widget.create",
+      targetType: "widget",
+      targetId: widget?.id || null,
+      metadata: { dashboardId: req.params.id, title },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (widget.create):", err.message);
+  }
   res.status(201).json({ widget });
 }
 
 export async function deleteWidget(req, res) {
   const owner = parseOwner(req);
   await removeWidget(req.params.id, owner, req.params.widgetId);
+  try {
+    await insertActivity({
+      userId: owner.userId || null,
+      action: "widget.delete",
+      targetType: "widget",
+      targetId: req.params.widgetId,
+      metadata: { dashboardId: req.params.id },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (widget.delete):", err.message);
+  }
   res.json({ success: true });
 }
 
