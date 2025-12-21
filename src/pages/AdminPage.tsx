@@ -123,11 +123,15 @@ interface DashboardItem {
   id: string;
   name: string;
   owner: string;
+  ownerId?: string | null;
   tables: number;
   records: number;
   lastModified: string;
   status: "active" | "locked" | "archived";
   size: string;
+  description?: string;
+  widgets?: number;
+  insights?: number;
 }
 
 interface ActivityLog {
@@ -243,38 +247,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     },
   ]);
 
-  const [dashboards, setDashboards] = useState<DashboardItem[]>([
-    {
-      id: "1",
-      name: "Sales Dashboard",
-      owner: "Sarah Johnson",
-      tables: 8,
-      records: 15420,
-      lastModified: "2024-12-20 09:15",
-      status: "active",
-      size: "2.3 GB",
-    },
-    {
-      id: "2",
-      name: "Analytics Hub",
-      owner: "Michael Chen",
-      tables: 12,
-      records: 28900,
-      lastModified: "2024-12-19 16:30",
-      status: "active",
-      size: "4.1 GB",
-    },
-    {
-      id: "3",
-      name: "Customer Insights",
-      owner: "Emma Williams",
-      tables: 5,
-      records: 8200,
-      lastModified: "2024-12-18 11:20",
-      status: "locked",
-      size: "1.2 GB",
-    },
-  ]);
+  const [dashboards, setDashboards] = useState<DashboardItem[]>([]);
+  const [loadingDashboards, setLoadingDashboards] = useState(false);
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([
     {
@@ -374,6 +348,43 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
         toast.error(err?.message || "Failed to load users");
       })
       .finally(() => setLoadingUsers(false));
+  }, []);
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (!session?.token) return;
+    setLoadingDashboards(true);
+    api
+      .get<{ dashboards: any[] }>("/admin/dashboards", session.token)
+      .then((res) => {
+        const mapped: DashboardItem[] = (res.dashboards || []).map((d) => {
+          const updated = d.updatedAt || d.updated_at || d.lastDashboardUpdate;
+          return {
+            id: d.id,
+            name: d.name || "Untitled",
+            description: d.description || "",
+            owner: d.ownerName || d.owner || "—",
+            ownerId: d.ownerId || null,
+            tables: d.tableCount || (Array.isArray(d.tables) ? d.tables.length : 0),
+            records: d.records || 0,
+            lastModified: updated
+              ? new Date(updated).toLocaleString()
+              : d.createdAt
+                ? new Date(d.createdAt).toLocaleString()
+                : "—",
+            status: "active",
+            size: d.size || "—",
+            widgets: d.widgetCount || 0,
+            insights: d.insightCount || 0,
+          };
+        });
+        setDashboards(mapped);
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(err?.message || "Failed to load dashboards");
+      })
+      .finally(() => setLoadingDashboards(false));
   }, []);
 
   // Helper functions

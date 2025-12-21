@@ -65,6 +65,26 @@ CREATE TABLE IF NOT EXISTS organization_members (
     joined_at TIMESTAMPTZ,
     UNIQUE (organization_id, user_id)
 );
+
+-- Trigger to ensure organization owner is also a member with 'owner' role
+CREATE OR REPLACE FUNCTION ensure_owner_membership()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO organization_members (organization_id, user_id, role, invited_at, joined_at)
+  VALUES (NEW.id, NEW.owner_id, 'owner', NOW(), NOW())
+  ON CONFLICT (organization_id, user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_ensure_owner_membership ON organizations;
+
+CREATE TRIGGER trg_ensure_owner_membership
+AFTER INSERT ON organizations
+FOR EACH ROW
+EXECUTE FUNCTION ensure_owner_membership();
+-- --
 CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id);
 

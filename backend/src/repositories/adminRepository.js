@@ -15,3 +15,19 @@ export async function listUsers() {
   );
   return res.rows;
 }
+
+export async function getUsersByIds(ids = []) {
+  if (!ids.length) return [];
+  const res = await query(
+    `SELECT id,
+            email,
+            role,
+            full_name AS "name",
+            company,
+            is_verified AS "isVerified"
+     FROM users
+     WHERE id = ANY($1::uuid[])`,
+    [ids]
+  );
+  return res.rows;
+}
