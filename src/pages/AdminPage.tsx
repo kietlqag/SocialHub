@@ -252,41 +252,10 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [dashboards, setDashboards] = useState<DashboardItem[]>([]);
   const [loadingDashboards, setLoadingDashboards] = useState(false);
   const [loadingDashboardDetail, setLoadingDashboardDetail] = useState(false);
+  const [dashboardSearch, setDashboardSearch] = useState("");
 
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([
-    {
-      id: "1",
-      user: "Sarah Johnson",
-      action: "Created",
-      target: "Dashboard: Q4 Sales",
-      timestamp: "2024-12-20 09:30",
-      details: "New dashboard created with 5 tables",
-    },
-    {
-      id: "2",
-      user: "Michael Chen",
-      action: "Edited",
-      target: "Record #1234",
-      timestamp: "2024-12-20 09:15",
-      details: "Updated customer data",
-    },
-    {
-      id: "3",
-      user: "Emma Williams",
-      action: "Deleted",
-      target: "Widget: Revenue Chart",
-      timestamp: "2024-12-20 08:45",
-      details: "Removed outdated widget",
-    },
-    {
-      id: "4",
-      user: "System",
-      action: "Alert",
-      target: "Traffic Spike",
-      timestamp: "2024-12-20 08:00",
-      details: "Unusual traffic detected on Dashboard #2",
-    },
-  ]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   const [systemHealth, setSystemHealth] = useState<SystemHealth[]>([
     {
@@ -362,14 +331,19 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
       .then((res) => {
         const mapped: DashboardItem[] = (res.dashboards || []).map((d) => {
           const updated = d.updatedAt || d.updated_at || d.lastDashboardUpdate;
+          const tables = Array.isArray(d.tables) ? d.tables : [];
+          const recordCount = tables.reduce((sum: number, t: any) => {
+            if (Array.isArray(t.sampleRows)) return sum + t.sampleRows.length;
+            return sum;
+          }, 0);
           return {
             id: d.id,
             name: d.name || "Untitled",
             description: d.description || "",
             owner: d.ownerName || d.owner || "—",
             ownerId: d.ownerId || null,
-            tables: d.tableCount || (Array.isArray(d.tables) ? d.tables.length : 0),
-            records: d.records || 0,
+            tables: d.tableCount || tables.length,
+            records: d.records || recordCount,
             lastModified: updated
               ? new Date(updated).toLocaleString()
               : d.createdAt
@@ -388,6 +362,30 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
         toast.error(err?.message || "Failed to load dashboards");
       })
       .finally(() => setLoadingDashboards(false));
+  }, []);
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (!session?.token) return;
+    setLoadingActivity(true);
+    api
+      .get<{ logs: any[] }>("/admin/activity", session.token)
+      .then((res) => {
+        const mapped: ActivityLog[] = (res.logs || []).map((log) => ({
+          id: log.id,
+          user: log.userName || log.userEmail || "System",
+          action: log.action || "event",
+          target: log.targetName || log.targetType || "",
+          timestamp: log.createdAt ? new Date(log.createdAt).toLocaleString() : "",
+          details: log.metadata ? JSON.stringify(log.metadata) : "",
+        }));
+        setActivityLogs(mapped);
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(err?.message || "Failed to load activity logs");
+      })
+      .finally(() => setLoadingActivity(false));
   }, []);
 
   const handleViewDashboard = (dashboard: DashboardItem) => {
@@ -615,6 +613,16 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const handleExport = (type: string) => {
     toast.success(`${type} data exported successfully`);
   };
+
+  const filteredDashboards = dashboards.filter((d) => {
+    if (!dashboardSearch.trim()) return true;
+    const q = dashboardSearch.toLowerCase();
+    return (
+      d.name.toLowerCase().includes(q) ||
+      (d.owner || "").toLowerCase().includes(q) ||
+      (d.description || "").toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1146,6 +1154,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                     <Input
                       placeholder="Search dashboards..."
                       className="pl-10"
+                      value={dashboardSearch}
+                      onChange={(e) => setDashboardSearch(e.target.value)}
                     />
                   </div>
                   <Button variant="outline" onClick={() => handleExport("Dashboards")}>
@@ -1156,94 +1166,98 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                 
                 {/* DASHBOARD TABLE */}
                 <div className="border rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Dashboard</TableHead>
-                        <TableHead>Owner</TableHead>
-                        <TableHead>Tables</TableHead>
-                        <TableHead>Records</TableHead>
-                        <TableHead>Size</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Last Modified</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dashboards.map((dashboard) => (
-                        <TableRow key={dashboard.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <LayoutDashboard className="h-5 w-5 text-gray-400" />
-                              <div className="font-medium">{dashboard.name}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {dashboard.owner}
-                          </TableCell>
-                          <TableCell>{dashboard.tables}</TableCell>
-                          <TableCell>{dashboard.records.toLocaleString()}</TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {dashboard.size}
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={getStatusColor(dashboard.status)}>
-                              {dashboard.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {dashboard.lastModified}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleViewDashboard(dashboard)}
-                            title="View tables"
-                          >
-                            <FolderTree className="h-4 w-4" />
-                          </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => toast.success("Dashboard duplicated")}
-                                title="Duplicate"
-                              >
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  toast.success(
-                                    dashboard.status === "locked"
-                                      ? "Dashboard unlocked"
-                                      : "Dashboard locked"
-                                  )
-                                }
-                                title={dashboard.status === "locked" ? "Unlock" : "Lock"}
-                              >
-                                {dashboard.status === "locked" ? (
-                                  <Unlock className="h-4 w-4" />
-                                ) : (
-                                  <Lock className="h-4 w-4" />
-                                )}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openDialog("export-dashboard", dashboard)}
-                                title="Export Data"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
+                  {loadingDashboards ? (
+                    <div className="py-10 text-center text-gray-500">Loading dashboards...</div>
+                  ) : filteredDashboards.length === 0 ? (
+                    <div className="py-10 text-center text-gray-500">No dashboards found</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Dashboard</TableHead>
+                          <TableHead>Owner</TableHead>
+                          <TableHead>Tables</TableHead>
+                          <TableHead>Records</TableHead>
+                          <TableHead>Widgets</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Last Modified</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredDashboards.map((dashboard) => (
+                          <TableRow key={dashboard.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <LayoutDashboard className="h-5 w-5 text-gray-400" />
+                                <div className="font-medium">{dashboard.name}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {dashboard.owner}
+                            </TableCell>
+                            <TableCell>{dashboard.tables}</TableCell>
+                            <TableCell>{dashboard.records?.toLocaleString?.() || dashboard.records || 0}</TableCell>
+                            <TableCell>{dashboard.widgets ?? 0}</TableCell>
+                            <TableCell>
+                              <Badge className={getStatusColor(dashboard.status)}>
+                                {dashboard.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {dashboard.lastModified}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleViewDashboard(dashboard)}
+                                  title="View tables"
+                                >
+                                  <FolderTree className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => toast.success("Dashboard duplicated")}
+                                  title="Duplicate"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    toast.success(
+                                      dashboard.status === "locked"
+                                        ? "Dashboard unlocked"
+                                        : "Dashboard locked"
+                                    )
+                                  }
+                                  title={dashboard.status === "locked" ? "Unlock" : "Lock"}
+                                >
+                                  {dashboard.status === "locked" ? (
+                                    <Unlock className="h-4 w-4" />
+                                  ) : (
+                                    <Lock className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openDialog("export-dashboard", dashboard)}
+                                  title="Export Data"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
                 </div>
               </div>
             </Card>
@@ -1317,55 +1331,56 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                   </Button>
                 </div>
 
-                <div className="space-y-3">
-                  {activityLogs.map((log) => (
-                    <Card key={log.id} className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3">
-                          <div
-                            className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                              log.action === "Alert"
-                                ? "bg-red-100"
-                                : log.action === "Created"
-                                  ? "bg-green-100"
-                                  : log.action === "Edited"
-                                    ? "bg-blue-100"
-                                    : "bg-gray-100"
-                            }`}
-                          >
-                            {log.action === "Alert" ? (
-                              <AlertTriangle className="h-5 w-5 text-red-600" />
-                            ) : log.action === "Created" ? (
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                            ) : log.action === "Edited" ? (
-                              <Edit className="h-5 w-5 text-blue-600" />
-                            ) : (
-                              <Trash2 className="h-5 w-5 text-gray-600" />
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{log.user}</span>
-                              <Badge variant="outline">{log.action}</Badge>
-                              <span className="text-sm text-gray-600">
-                                {log.target}
-                              </span>
+                {loadingActivity ? (
+                  <div className="py-10 text-center text-gray-500">Loading activity...</div>
+                ) : activityLogs.length === 0 ? (
+                  <div className="py-10 text-center text-gray-500">No activity logs</div>
+                ) : (
+                  <div className="space-y-3">
+                    {activityLogs.map((log) => {
+                      const action = (log.action || "").toLowerCase();
+                      const tone =
+                        action.includes("delete") || action === "alert"
+                          ? "bg-red-100 text-red-600"
+                          : action.includes("create")
+                            ? "bg-green-100 text-green-600"
+                            : action.includes("update")
+                              ? "bg-blue-100 text-blue-600"
+                              : "bg-gray-100 text-gray-600";
+                      const [bgClass, textClass] = tone.split(" ");
+                      return (
+                        <Card key={log.id} className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-3">
+                              <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${bgClass}`}>
+                                <Activity className={`h-5 w-5 ${textClass}`} />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{log.user}</span>
+                                  <Badge variant="outline">{log.action}</Badge>
+                                  {log.target && (
+                                    <span className="text-sm text-gray-600">
+                                      {log.target}
+                                    </span>
+                                  )}
+                                </div>
+                                {log.details && (
+                                  <p className="text-sm text-gray-600 mt-1">
+                                    {log.details}
+                                  </p>
+                                )}
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {log.timestamp}
+                                </p>
+                              </div>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              {log.details}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {log.timestamp}
-                            </p>
                           </div>
-                        </div>
-                        <Button variant="ghost" size="icon">
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </Card>
           </TabsContent>

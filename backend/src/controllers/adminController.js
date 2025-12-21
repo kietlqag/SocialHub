@@ -4,6 +4,7 @@ import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { findUserByEmail } from "../repositories/userRepository.js";
 import { HttpError } from "../utils/httpError.js";
+import { listActivities, insertActivity } from "../repositories/activityRepository.js";
 
 export async function getUsers(req, res) {
   const users = await listUsers();
@@ -180,6 +181,17 @@ export async function createUser(req, res) {
   const pw = password && password.length >= 6 ? password : Math.random().toString(36).slice(2, 10);
   const passwordHash = await bcrypt.hash(pw, 10);
   const user = await createUserAdmin({ email, passwordHash, fullName, company, role, isVerified });
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "user.create",
+      targetType: "user",
+      targetId: user.id,
+      metadata: { email, role: user.role, company: user.company },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (create user):", err.message);
+  }
   res.status(201).json({ user, tempPassword: password ? undefined : pw });
 }
 
@@ -188,11 +200,58 @@ export async function updateUser(req, res) {
   const { fullName, company, role, isVerified } = req.body || {};
   const user = await updateUserAdmin(id, { fullName, company, role, isVerified });
   if (!user) return res.status(404).json({ error: "User not found" });
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "user.update",
+      targetType: "user",
+      targetId: user.id,
+      metadata: { fullName, company, role, isVerified },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (update user):", err.message);
+  }
   res.json({ user });
 }
 
 export async function deleteUser(req, res) {
   const ok = await deleteUserAdmin(req.params.id);
   if (!ok) return res.status(404).json({ error: "User not found" });
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "user.delete",
+      targetType: "user",
+      targetId: req.params.id,
+      metadata: {},
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (delete user):", err.message);
+  }
   res.json({ success: true });
+}
+
+export async function getActivity(req, res) {
+  try {
+    const logs = await listActivities({ limit: 200 });
+    const userIds = Array.from(new Set(logs.map((l) => l.userId).filter(Boolean))).map(String);
+    const users = userIds.length ? await getUsersByIds(userIds) : [];
+    const userMap = new Map(users.map((u) => [String(u.id), u]));
+    const decorated = logs.map((l) => {
+      const owner = l.userId ? userMap.get(String(l.userId)) : null;
+      return {
+        ...l,
+        userName: owner ? owner.name || owner.email : "System",
+        userEmail: owner?.email || null,
+      };
+    });
+    res.json({ logs: decorated });
+  } catch (err) {
+    // If the activity_logs table doesn't exist yet, avoid crashing the API
+    if (err.code === "42P01") {
+      console.warn("activity_logs table missing; returning empty activity list");
+      return res.json({ logs: [] });
+    }
+    throw err;
+  }
 }
