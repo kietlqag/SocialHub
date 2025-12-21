@@ -4,7 +4,7 @@ import { dashboardApi, type PublicDashboardSummary } from "../services/dashboard
 import { Header } from "../components/Header";
 import type { AuthUser } from "../services/auth";
 import { Button } from "../components/ui/button";
-import DashboardCard from "../components/dashboard/DashboardCard";
+import CardDash from "../components/dashboard/CardDash";
 import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
 import type { Dashboard } from "../services/dashboards";
 import "../styles/explore.css";
@@ -117,11 +117,18 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
               <div className="dashboard-section-frame">
                 <div className="dashboard-grid">
                   {decoratedDashboards.map((d) => (
-                    <DashboardCard
-                      {...d}
+                    <CardDash
                       key={d.id}
-                      icon={d.iconPreset}
+                      id={d.id}
+                      title={d.displayTitle}
+                      domainLabel={d.domainLabel}
+                      overviewCount={d.overviewCount}
+                      chartsCount={d.insightsCount}
+                      tableCount={d.tableCount}
+                      status={d.statusLabel}
                       isFavorite={false}
+                      iconPreset={d.iconPreset}
+                      lastUpdatedLabel={d.lastViewedLabel}
                       onOpen={() => openDashboard(d.id)}
                     />
                   ))}

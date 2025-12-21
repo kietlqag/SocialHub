@@ -4,7 +4,7 @@ import { AIDashboardGenerator } from "../components/AIDashboardGenerator";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Header } from "../components/Header";
-import DashboardCard from "../components/dashboard/DashboardCard";
+import CardDash from "../components/dashboard/CardDash";
 import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
 import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
@@ -271,19 +271,18 @@ export default function ManageDashList() {
                 {hasDashboards ? (
                   <div className="dashboard-grid">
                     {recentlyViewed.map((dashboard) => (
-                      <DashboardCard
+                      <CardDash
                         key={dashboard.id}
                         id={dashboard.id}
                         title={dashboard.displayTitle}
-                        typeLabel={dashboard.domainLabel}
+                        domainLabel={dashboard.domainLabel}
                         overviewCount={dashboard.overviewCount}
-                        insightCount={dashboard.insightsCount}
+                        chartsCount={dashboard.insightsCount}
                         tableCount={dashboard.tableCount}
                         status={dashboard.statusLabel}
                         isFavorite={favoriteIds.has(dashboard.id)}
-                        variant="recent"
-                        icon={dashboard.iconPreset}
-                        lastViewed={dashboard.lastViewedLabel}
+                        iconPreset={dashboard.iconPreset}
+                        lastUpdatedLabel={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
                         onToggleFavorite={toggleFavorite}
                       />
@@ -304,19 +303,18 @@ export default function ManageDashList() {
                 {favoriteDashboards.length ? (
                   <div className="dashboard-grid">
                     {favoriteDashboards.map((dashboard) => (
-                      <DashboardCard
+                      <CardDash
                         key={dashboard.id}
                         id={dashboard.id}
                         title={dashboard.displayTitle}
-                        typeLabel={dashboard.domainLabel}
+                        domainLabel={dashboard.domainLabel}
                         overviewCount={dashboard.overviewCount}
-                        insightCount={dashboard.insightsCount}
+                        chartsCount={dashboard.insightsCount}
                         tableCount={dashboard.tableCount}
                         status={dashboard.statusLabel}
                         isFavorite={favoriteIds.has(dashboard.id)}
-                        variant="favorite"
-                        icon={dashboard.iconPreset}
-                        lastViewed={dashboard.lastViewedLabel}
+                        iconPreset={dashboard.iconPreset}
+                        lastUpdatedLabel={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
                         onToggleFavorite={toggleFavorite}
                       />
@@ -351,18 +349,18 @@ export default function ManageDashList() {
                   filteredDashboards.length ? (
                     <div className="dashboard-grid">
                       {filteredDashboards.map((dashboard) => (
-                        <DashboardCard
+                        <CardDash
                           key={dashboard.id}
                           id={dashboard.id}
                           title={dashboard.displayTitle}
-                          typeLabel={dashboard.domainLabel}
+                          domainLabel={dashboard.domainLabel}
                           overviewCount={dashboard.overviewCount}
-                          insightCount={dashboard.insightsCount}
+                          chartsCount={dashboard.insightsCount}
                           tableCount={dashboard.tableCount}
                           status={dashboard.statusLabel}
                           isFavorite={favoriteIds.has(dashboard.id)}
-                          icon={dashboard.iconPreset}
-                          lastViewed={dashboard.lastViewedLabel}
+                          iconPreset={dashboard.iconPreset}
+                          lastUpdatedLabel={dashboard.lastViewedLabel}
                           onOpen={openDashboard}
                           onToggleFavorite={toggleFavorite}
                         />
