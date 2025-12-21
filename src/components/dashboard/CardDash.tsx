@@ -8,6 +8,7 @@ export type CardDashProps = {
   id: string;
   title: string;
   domainLabel?: string;
+  typeLabel?: string;
   overviewCount?: number;
   chartsCount?: number;
   tableCount?: number;
@@ -15,6 +16,9 @@ export type CardDashProps = {
   lastUpdatedLabel?: string | null;
   isFavorite?: boolean;
   iconPreset?: DashboardCardIconPreset | keyof typeof domainVisuals;
+  icon?: DashboardCardIconPreset | keyof typeof domainVisuals;
+  createdBy?: string;
+  hideStats?: boolean;
   onOpen?: (id: string) => void;
   onToggleFavorite?: (id: string) => void;
 };
@@ -40,10 +44,13 @@ export const CardDash = ({
   lastUpdatedLabel,
   isFavorite = false,
   iconPreset,
+  icon,
   onOpen,
   onToggleFavorite,
+  createdBy,
+  hideStats = false,
 }: CardDashProps) => {
-  const { Icon, toneClass } = resolveIconPreset(iconPreset);
+  const { Icon, toneClass } = resolveIconPreset(iconPreset ?? icon);
   const metaChips = [
     { label: "Key metrics", value: overviewCount },
     { label: "Charts", value: chartsCount },
@@ -73,8 +80,13 @@ export const CardDash = ({
           <Icon className="w-6 h-6 text-white drop-shadow" />
         </div>
         <div className="dashboard-card__title-group">
-          {domainLabel && <p className="dashboard-card__type">{domainLabel}</p>}
+          {(domainLabel || typeLabel) && <p className="dashboard-card__type">{domainLabel || typeLabel}</p>}
           <h4 className="dashboard-card__title">{title}</h4>
+          {createdBy && (
+            <p className="text-sm text-slate-500">
+              Created by <span className="text-indigo-600 font-medium">{createdBy}</span>
+            </p>
+          )}
         </div>
         <div className="dashboard-card__header-actions">
           {status && <span className={`dashboard-status ${status.toLowerCase() === "active" ? "dashboard-status--active" : "dashboard-status--draft"}`}>{status}</span>}
@@ -94,14 +106,16 @@ export const CardDash = ({
         </div>
       </div>
 
-      <div className="dashboard-card__meta">
-        {metaChips.map((chip) => (
-          <span key={chip.label} className="dashboard-chip">
-            <span>{chip.label}</span>
-            <strong>{chip.value}</strong>
-          </span>
-        ))}
-      </div>
+      {!hideStats && (
+        <div className="dashboard-card__meta">
+          {metaChips.map((chip) => (
+            <span key={chip.label} className="dashboard-chip">
+              <span>{chip.label}</span>
+              <strong>{chip.value}</strong>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="dashboard-card__footer">
         {lastUpdatedLabel && <p className="dashboard-card__timestamp">Updated {lastUpdatedLabel}</p>}

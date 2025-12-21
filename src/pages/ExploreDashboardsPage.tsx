@@ -51,20 +51,23 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
 
   const decoratedDashboards: DecoratedDashboard[] = useMemo(
     () =>
-      filtered.map((d) =>
-        decorateDashboardForList({
+      filtered.map((d) => {
+        const base = decorateDashboardForList({
           id: d._id,
           userId: d.userId,
           name: d.name,
-          description: (d as any).description || "",
-          type: d.type || "",
+          description: d.description,
+          type: d.type,
+          status: (d as any).status,
+          ui: d.ui,
           fields: [],
-          widgets: [],
-          tables: [],
-          createdAt: (d as any).createdAt,
+          widgets: d.widgets || [],
+          tables: d.tables || [],
+          createdAt: d.createdAt,
           updatedAt: d.updatedAt,
-        } as Dashboard),
-      ),
+        } as Dashboard);
+        return { ...base, ownerName: d.ownerName };
+      }),
     [filtered],
   );
 
@@ -122,13 +125,12 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
                       id={d.id}
                       title={d.displayTitle}
                       domainLabel={d.domainLabel}
-                      overviewCount={d.overviewCount}
-                      chartsCount={d.insightsCount}
-                      tableCount={d.tableCount}
                       status={d.statusLabel}
                       isFavorite={false}
                       iconPreset={d.iconPreset}
                       lastUpdatedLabel={d.lastViewedLabel}
+                      createdBy={d.ownerName}
+                      hideStats
                       onOpen={() => openDashboard(d.id)}
                     />
                   ))}

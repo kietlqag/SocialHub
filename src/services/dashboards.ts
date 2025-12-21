@@ -148,9 +148,15 @@ export type TableSchemaResponse = {
 export type PublicDashboardSummary = {
   _id: string;
   name: string;
-  userId: string;
-  ownerName: string;
-  updatedAt?: string;
+  userId?: string;
+  ownerName?: string;
+  description?: string;
+  status?: string;
+  ui?: Dashboard["ui"];
+  widgets?: Dashboard["widgets"];
+  tables?: Dashboard["tables"];
+  createdAt?: string | null;
+  updatedAt?: string | null;
   tablesCount?: number;
   widgetsCount?: number;
   type?: string;

@@ -63,15 +63,21 @@ export const getPublicDashboards = async (req, res) => {
       _id: d._id.toString(),
       name: d.name,
       userId: d.userId,
+      description: d.description,
       ownerName:
         d.userFullName ||
         d.userName ||
         d.ownerName ||
         userMap.get(d.userId) ||
         "Unknown owner",
-      type: d.type || "",
+      type: d.type,
+      status: d.status || (d.accessControl?.accessMode === "public" ? "Public" : d.accessControl?.accessMode) || "Active",
+      ui: d.ui,
+      widgets: d.widgets,
+      tables: d.tables,
       widgetsCount: Array.isArray(d.widgets) ? d.widgets.length : undefined,
-      updatedAt: d.updatedAt || d.createdAt,
+      createdAt: d.createdAt || null,
+      updatedAt: d.updatedAt || d.createdAt || null,
       tablesCount: tableCountMap.get(d._id.toString()) || (Array.isArray(d.tables) ? d.tables.length : 0) || 0,
     }));
 

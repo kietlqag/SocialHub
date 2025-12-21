@@ -28,6 +28,7 @@ export type DecoratedDashboard = Dashboard & {
   displayTitle: string;
   overviewCount: number;
   insightsCount: number;
+  ownerName?: string;
 };
 
 export const domainVisuals: Record<DashboardDomain, DomainVisual> = {
@@ -43,7 +44,23 @@ export const detectDashboardDomain = (
 ): DashboardDomain => {
   const normalized = `${dashboard.type || ""} ${dashboard.name || ""} ${dashboard.description || ""}`.toLowerCase();
   if (normalized.includes("health") || normalized.includes("clinic") || normalized.includes("patient")) return "healthcare";
-  if (normalized.includes("commerce") || normalized.includes("shop") || normalized.includes("sale") || normalized.includes("store")) return "commerce";
+  if (
+    normalized.includes("commerce") ||
+    normalized.includes("e-commerce") ||
+    normalized.includes("ecommerce") ||
+    normalized.includes("shop") ||
+    normalized.includes("store") ||
+    normalized.includes("sale") ||
+    normalized.includes("order") ||
+    normalized.includes("orders") ||
+    normalized.includes("customer") ||
+    normalized.includes("customers") ||
+    normalized.includes("product") ||
+    normalized.includes("products") ||
+    normalized.includes("cart") ||
+    normalized.includes("saas")
+  )
+    return "commerce";
   if (normalized.includes("analytics") || normalized.includes("insight") || normalized.includes("kpi") || normalized.includes("finance")) return "analytics";
   if (normalized.includes("school") || normalized.includes("education") || normalized.includes("student") || normalized.includes("class")) return "education";
   return "general";
@@ -94,6 +111,7 @@ export const decorateDashboardForList = (dashboard: Dashboard): DecoratedDashboa
   const updatedLabel = dashboard.updatedAt ? new Date(dashboard.updatedAt).toLocaleString() : null;
   const statusLabel = (dashboard as any).status || "Active";
   const displayTitle = dashboard.name?.trim() || visual.label;
+  const ownerName = (dashboard as any).ownerName;
 
   return {
     ...dashboard,
@@ -110,5 +128,6 @@ export const decorateDashboardForList = (dashboard: Dashboard): DecoratedDashboa
     statusLabel,
     lastViewedLabel: updatedLabel || createdLabel,
     displayTitle,
+    ownerName,
   };
 };
