@@ -30,7 +30,7 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!dashboardId) return;
+    if (!dashboardId || !opts.userId) return;
     setLoading(true);
     dashboardApi
       .getAccessControl(dashboardId, { sessionId: opts.sessionId, userId: opts.userId || undefined })
@@ -42,6 +42,11 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
         setError(null);
       })
       .catch((err: any) => {
+        const status = err?.response?.status || err?.status;
+        if (status === 403) {
+          setError(null);
+          return;
+        }
         const message = err?.message || "Failed to load permissions";
         setError(message);
       })

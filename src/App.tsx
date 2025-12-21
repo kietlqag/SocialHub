@@ -185,7 +185,7 @@ function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/explore" element={<ExploreDashboardsPage />} />
+        <Route path="/explore" element={<ExploreDashboardsPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route
           path="/managedash"
           element={

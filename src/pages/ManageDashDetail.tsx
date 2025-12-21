@@ -149,6 +149,7 @@ type ChartCardProps = {
   valueLabel?: string;
   onChangeType?: (next: ChartType) => void;
   onRemove?: () => void;
+  readOnly?: boolean;
 };
 
 type AddWidgetFormState = {
@@ -294,7 +295,7 @@ const getIconStyle = (icon?: MetricIcon) => {
 const CHART_CARD_HEIGHT = 240;
 const CHART_BODY_MIN_HEIGHT = 200;
 
-const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData, valueLabel, onChangeType, onRemove }: ChartCardProps) => {
+const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData, valueLabel, onChangeType, onRemove, readOnly }: ChartCardProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const data = (dataset || [])
     .map((d) => ({
@@ -305,6 +306,7 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
 
   const showEmpty = !isLoading && !data.length;
   const colors = ["#6366F1", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#0EA5E9", "#F97316"];
+  const hasMenuActions = !readOnly && (onChangeType || onRemove);
 
   return (
     <div
@@ -325,76 +327,84 @@ const ChartCard = ({ title, description, type, dataset, unit, isLoading, hasData
         </div>
         <div />
       </div>
-      <button
-        type="button"
-        className="insightCloseBtn"
-        aria-label="More"
-        onClick={() => setMenuOpen((p) => !p)}
-        style={{ position: "absolute", top: 10, right: 10 }}
-      >
-        <MoreHorizontal className="w-4 h-4 text-slate-500" />
-      </button>
-      {menuOpen && (
-        <div
-          className="tableCardGlass"
-          style={{
-            position: "absolute",
-            top: 36,
-            right: 12,
-            minWidth: 170,
-            padding: 6,
-            zIndex: 20,
-            boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
-            borderRadius: 12,
-          }}
-        >
-          <p className="mdMainSubtitle" style={{ marginBottom: 6, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 }}>Chart type</p>
-          {([
-            { key: "bar", icon: ChartBar },
-            { key: "line", icon: LineChart },
-            { key: "pie", icon: PieChart },
-            { key: "horizontal-bar", icon: BarChartHorizontal },
-          ] as { key: ChartType; icon: LucideIcon }[]).map(({ key, icon: Icon }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onChangeType?.(key);
-              }}
-              className="mdGhostBtn"
+      {hasMenuActions && (
+        <>
+          <button
+            type="button"
+            className="insightCloseBtn"
+            aria-label="More"
+            onClick={() => setMenuOpen((p) => !p)}
+            style={{ position: "absolute", top: 10, right: 10 }}
+          >
+            <MoreHorizontal className="w-4 h-4 text-slate-500" />
+          </button>
+          {menuOpen && (
+            <div
+              className="tableCardGlass"
               style={{
-                width: "100%",
-                textAlign: "left",
-                padding: "6px 8px",
-                borderRadius: 10,
-                color: key === type ? "#4f46e5" : "#0f172a",
-                fontWeight: key === type ? 700 : 500,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontSize: 13,
+                position: "absolute",
+                top: 36,
+                right: 12,
+                minWidth: 170,
+                padding: 6,
+                zIndex: 20,
+                boxShadow: "0 12px 30px rgba(15,23,42,0.12)",
+                borderRadius: 12,
               }}
             >
-              <Icon className="w-4 h-4" />
-              {beautifyLabel(key)}
-            </button>
-          ))}
-          <div className="mt-2 border-t border-slate-200 pt-2">
-            <button
-              type="button"
-              className="mdGhostBtn text-red-600"
-              style={{ width: "100%", textAlign: "left", padding: "6px 8px", fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
-              onClick={() => {
-                setMenuOpen(false);
-                onRemove?.();
-              }}
-            >
-              <Trash2 className="w-4 h-4" />
-              Remove chart
-            </button>
-          </div>
-        </div>
+              <p className="mdMainSubtitle" style={{ marginBottom: 6, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 }}>Chart type</p>
+              {onChangeType
+                ? ([
+                    { key: "bar", icon: ChartBar },
+                    { key: "line", icon: LineChart },
+                    { key: "pie", icon: PieChart },
+                    { key: "horizontal-bar", icon: BarChartHorizontal },
+                  ] as { key: ChartType; icon: LucideIcon }[]).map(({ key, icon: Icon }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onChangeType?.(key);
+                      }}
+                      className="mdGhostBtn"
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "6px 8px",
+                        borderRadius: 10,
+                        color: key === type ? "#4f46e5" : "#0f172a",
+                        fontWeight: key === type ? 700 : 500,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 13,
+                      }}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {beautifyLabel(key)}
+                    </button>
+                  ))
+                : null}
+              {onRemove ? (
+                <div className="mt-2 border-t border-slate-200 pt-2">
+                  <button
+                    type="button"
+                    className="mdGhostBtn text-red-600"
+                    style={{ width: "100%", textAlign: "left", padding: "6px 8px", fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onRemove?.();
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Remove chart
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </>
       )}
       <div
         style={{
@@ -2084,10 +2094,19 @@ export default function ManageDashDetail() {
   const [widgetPage, setWidgetPage] = useState(1);
   const [chartPage, setChartPage] = useState(1);
   const permissions = useDashboardPermissions(dashId, { userId: currentUser?.id ?? null, sessionId });
-  const canCreate = permissions.hasPermission("create");
-  const canEdit = permissions.hasPermission("edit");
-  const canDelete = permissions.hasPermission("delete");
-  const canManageAccess = permissions.hasPermission("manageAccess");
+  const isOwner = Boolean(dashboard?.userId && currentUser?.id && dashboard.userId === currentUser.id);
+  const canCreate = isOwner;
+  const canEdit = isOwner;
+  const canDelete = isOwner;
+  const canManageAccess = isOwner;
+  const handleForbidden = (err: any) => {
+    const status = err?.response?.status || err?.status;
+    if (status === 403) {
+      toast.error("You can only view this public dashboard. Only the owner can make changes.");
+      return true;
+    }
+    return false;
+  };
 
   // Reset modals when navigating to a different dashboard or landing
   useEffect(() => {
@@ -2116,12 +2135,20 @@ export default function ManageDashDetail() {
     if (!dashId || !sessionId) return;
     let active = true;
     setLoading(true);
-    dashboardApi
-      .list(sessionId, currentUser?.id || undefined)
-      .then((res) => {
+    const load = async () => {
+      try {
+        const res = await dashboardApi.list(sessionId, currentUser?.id || undefined);
+        let found = (res.dashboards || []).find((d) => d.id === dashId) as Dashboard | undefined;
+        if (!found) {
+          const fallback = await dashboardApi.getById(dashId, { sessionId, userId: currentUser?.id || undefined });
+          found = (fallback as any)?.dashboard;
+        }
         if (!active) return;
-        const found = (res.dashboards || []).find((d) => d.id === dashId);
-        if (!found) setError("Dashboard not found");
+        if (!found) {
+          setError("Dashboard not found");
+          setDashboard(null);
+          return;
+        }
         const normalized =
           found && found.tables
             ? {
@@ -2133,15 +2160,17 @@ export default function ManageDashDetail() {
               }
             : found || null;
         setDashboard(normalized as Dashboard | null);
-      })
-      .catch((err) => {
+        setError(null);
+      } catch (err) {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load dashboard");
-      })
-      .finally(() => {
+        const message = err instanceof Error ? err.message : "Failed to load dashboard";
+        setError(message);
+      } finally {
         if (!active) return;
         setLoading(false);
-      });
+      }
+    };
+    load();
     return () => {
       active = false;
     };
@@ -2734,6 +2763,7 @@ export default function ManageDashDetail() {
       await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
     } catch (err) {
+      if (handleForbidden(err)) return;
       const message =
         (err as any)?.response?.data?.message ||
         (err as any)?.message ||
@@ -2779,7 +2809,7 @@ export default function ManageDashDetail() {
   };
 
   const handleOpenAdd = () => {
-    if (!activeTable) return;
+    if (!isOwner || !activeTable) return;
     setIsAddOpen(true);
   };
 
@@ -2815,7 +2845,8 @@ export default function ManageDashDetail() {
       await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
     } catch (err) {
-      const status = (err as any)?.status;
+      if (handleForbidden(err)) return;
+      const status = (err as any)?.response?.status || (err as any)?.status;
       const message =
         (err as any)?.response?.data?.message ||
         (err as any)?.data?.error ||
@@ -2906,6 +2937,7 @@ export default function ManageDashDetail() {
       await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
     } catch (err) {
+      if (handleForbidden(err)) return;
       const message =
         (err as any)?.response?.data?.message ||
         (err as any)?.message ||
@@ -2938,6 +2970,7 @@ export default function ManageDashDetail() {
       }
       await fetchDashboardData();
     } catch (err) {
+      if (handleForbidden(err)) return;
       const message = (err as any)?.message || "Failed to delete widget";
       toast.error(message);
     } finally {
@@ -2974,6 +3007,7 @@ export default function ManageDashDetail() {
       setIsAddWidgetOpen(false);
       await fetchDashboardData();
     } catch (err) {
+      if (handleForbidden(err)) return;
       const message = (err as any)?.message || "Failed to save widget";
       toast.error(message);
     } finally {
@@ -2999,6 +3033,7 @@ export default function ManageDashDetail() {
       setChartConfigs((prev) => [...prev, res.insight].filter((i) => !i.hidden));
       setIsAddInsightOpen(false);
     } catch (err) {
+      if (handleForbidden(err)) return;
       const message = (err as any)?.message || "Failed to save insight";
       toast.error(message);
     } finally {
@@ -3017,6 +3052,7 @@ export default function ManageDashDetail() {
         setChartConfigs((prev) => prev.filter((i) => i.id !== insight.id));
       }
     } catch (err) {
+      if (handleForbidden(err)) return;
       const status = (err as any)?.response?.status || (err as any)?.status;
       const nextState = (prev: InsightWidget[]) =>
         insight.autoGenerated
@@ -3180,6 +3216,7 @@ export default function ManageDashDetail() {
         prev.map((i) => (i.id === insight.id ? { ...i, chartType: backendType } : i)),
       );
     } catch (err) {
+      if (handleForbidden(err)) return;
       toast.error((err as any)?.message || "Failed to update chart type");
     }
   };
@@ -3281,21 +3318,23 @@ export default function ManageDashDetail() {
                     &gt;
                   </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  className="mdGhostBtn"
-                  disabled={widgetsLimitReached || !mergedTables.length}
-                  title={
-                    widgetsLimitReached
-                      ? "You reached the maximum number of overview widgets."
-                      : !mergedTables.length
-                        ? "Add a table first to create widgets."
-                        : ""
-                  }
-                  onClick={() => setIsAddWidgetOpen(true)}
-                >
-                  Add widget
-                </Button>
+                {isOwner && (
+                  <Button
+                    variant="outline"
+                    className="mdGhostBtn"
+                    disabled={widgetsLimitReached || !mergedTables.length}
+                    title={
+                      widgetsLimitReached
+                        ? "You reached the maximum number of overview widgets."
+                        : !mergedTables.length
+                          ? "Add a table first to create widgets."
+                          : ""
+                    }
+                    onClick={() => setIsAddWidgetOpen(true)}
+                  >
+                    Add widget
+                  </Button>
+                )}
                 <Button variant="ghost" className="mdGhostBtn">
                   <Clock className="w-4 h-4 mr-2" />
                   Last 30 days
@@ -3311,7 +3350,7 @@ export default function ManageDashDetail() {
                   const hasData = Boolean(result?.hasData && (result?.value !== null && result?.value !== undefined));
                 const displayValue = formatMetricValue(result?.value, result?.formattedValue as string | undefined);
                 const Icon = pickMetricIcon(widget.title || "", widget.icon as MetricIcon | undefined);
-                  const deletable = widget.source !== "hidden";
+                  const deletable = isOwner && widget.source !== "hidden";
                 return (
                   <MetricCard
                     key={widget.id}
@@ -3369,15 +3408,17 @@ export default function ManageDashDetail() {
                     </Button>
                   </div>
                 )}
-                <Button
-                  variant="outline"
-                  className="mdGhostBtn"
-                  disabled={!mergedTables.length}
-                  onClick={() => setIsAddInsightOpen(true)}
-                  title={!mergedTables.length ? "Add a table first to create charts" : ""}
-                >
-                  Add chart
-                </Button>
+                {isOwner && (
+                  <Button
+                    variant="outline"
+                    className="mdGhostBtn"
+                    disabled={!mergedTables.length}
+                    onClick={() => setIsAddInsightOpen(true)}
+                    title={!mergedTables.length ? "Add a table first to create charts" : ""}
+                  >
+                    Add chart
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   className="mdGhostBtn"
@@ -3431,19 +3472,14 @@ export default function ManageDashDetail() {
 
                 const isLoading = isWidget ? result === undefined && !dataset.length : false;
 
-                const handleChangeType = (next: ChartType) => {
-                  if (!isWidget) {
-                    handleUpdateInsightType(insight, next);
-                  }
-                };
+                const handleChangeType = isOwner && !isWidget ? (next: ChartType) => handleUpdateInsightType(insight, next) : undefined;
 
-                const handleRemove = () => {
-                  if (isWidget) {
-                    setConfirmWidgetId((c as WidgetConfig).id || "");
-                  } else {
-                    setConfirmInsight(insight);
-                  }
-                };
+                const handleRemove =
+                  isOwner && isWidget
+                    ? () => setConfirmWidgetId((c as WidgetConfig).id || "")
+                    : isOwner
+                      ? () => setConfirmInsight(insight)
+                      : undefined;
 
                 return (
                   <ChartCard
@@ -3456,6 +3492,7 @@ export default function ManageDashDetail() {
                     isLoading={isLoading}
                     onChangeType={handleChangeType}
                     onRemove={handleRemove}
+                    readOnly={!isOwner}
                   />
                 );
               })}
@@ -3465,7 +3502,7 @@ export default function ManageDashDetail() {
       );
     }
 
-    if (activeSection === "access-control" && dashId) {
+    if (activeSection === "access-control" && dashId && isOwner) {
       return <AccessControlTab dashboardId={dashId} sessionId={sessionId} userId={currentUser?.id} />;
     }
 
@@ -3502,18 +3539,20 @@ export default function ManageDashDetail() {
                 onChange={(e) => setTableSearch(e.target.value)}
               />
             </div>
-            <Button
-              variant="ghost"
-              className="mdGhostBtn"
-              disabled={!tableKey}
-              onClick={() => {
-                setSchemaTargetKey(tableKey);
-                setIsEditSchemaOpen(true);
-              }}
-            >
-              <Settings2 className="w-4 h-4 mr-2" />
-              Edit columns
-            </Button>
+            {isOwner && (
+              <Button
+                variant="ghost"
+                className="mdGhostBtn"
+                disabled={!tableKey}
+                onClick={() => {
+                  setSchemaTargetKey(tableKey);
+                  setIsEditSchemaOpen(true);
+                }}
+              >
+                <Settings2 className="w-4 h-4 mr-2" />
+                Edit columns
+              </Button>
+            )}
             <Button
               variant="outline"
               className="mdGhostBtn relative"
@@ -3627,11 +3666,13 @@ export default function ManageDashDetail() {
           count: table.count,
         })),
       );
-      items.push({ id: "add-table", label: "Add table", icon: Plus, add: true });
-      items.push({ id: "access-control", label: "Access control", icon: ShieldCheck });
+      if (isOwner) {
+        items.push({ id: "add-table", label: "Add table", icon: Plus, add: true });
+        items.push({ id: "access-control", label: "Access control", icon: ShieldCheck });
+      }
       return items;
     },
-    [filteredTableOptions],
+    [filteredTableOptions, isOwner],
   );
 
   if (!dashId) {
@@ -3726,7 +3767,7 @@ export default function ManageDashDetail() {
       />
 
       <CreateTableModal
-        isOpen={isCreateTableOpen}
+        isOpen={isOwner && isCreateTableOpen}
         onClose={() => setIsCreateTableOpen(false)}
         dashboardId={dashId || ""}
         existingTables={mergedTables as DashboardTable[]}
@@ -3745,7 +3786,7 @@ export default function ManageDashDetail() {
       />
 
       <AddRecordModal
-        open={isAddOpen}
+        open={isOwner && isAddOpen}
         onClose={() => setIsAddOpen(false)}
         tableName={activeTable?.name || "table"}
         tableKey={activeTableKey}

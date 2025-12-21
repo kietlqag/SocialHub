@@ -20,6 +20,7 @@ import {
   createInsight,
   deleteInsight,
   patchInsight,
+  getDashboardByIdController,
 } from "../controllers/dashboardController.js";
 import { getDashboardAccess, updateDashboardAccess, updateDashboardAccessMode } from "../controllers/dashboardAccessController.js";
 import { getPublicDashboards } from "../controllers/publicDashboardController.js";
@@ -30,6 +31,8 @@ const router = Router();
 router.post("/dashboards/generate", asyncHandler(generateStructure));
 router.post("/dashboards", asyncHandler(createDashboard));
 router.get("/dashboards", asyncHandler(listDashboard));
+router.get("/dashboards/public", asyncHandler(getPublicDashboards));
+router.get("/dashboards/:id", asyncHandler(getDashboardByIdController));
 router.get("/dashboards/:dashboardId/tables", asyncHandler(listDashboardTables));
 router.post("/dashboards/:dashboardId/tables/create", asyncHandler(createDashboardTable));
 router.delete("/dashboards/:id", asyncHandler(deleteDashboard));
@@ -52,6 +55,5 @@ router.patch("/dashboards/:id/insights/:insightId", asyncHandler(patchInsight));
 router.get("/dashboards/:dashboardId/access", asyncHandler(getDashboardAccess));
 router.patch("/dashboards/:dashboardId/access", asyncHandler(updateDashboardAccess));
 router.patch("/dashboards/:dashboardId/access-mode", asyncHandler(updateDashboardAccessMode));
-router.get("/dashboards/public", asyncHandler(getPublicDashboards));
 
 export default router;

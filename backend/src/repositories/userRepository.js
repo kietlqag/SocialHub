@@ -80,3 +80,13 @@ export async function updateOAuthProfile(userId, { provider, providerId, avatarU
     [provider, providerId || null, avatarUrl || null, userId]
   );
 }
+
+export async function selectUsersByIds(ids = []) {
+  if (!Array.isArray(ids) || !ids.length) return [];
+  const res = await query(
+    `${baseSelect}
+     WHERE id = ANY($1::uuid[])`,
+    [ids]
+  );
+  return res.rows || [];
+}

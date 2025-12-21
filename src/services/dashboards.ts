@@ -91,6 +91,7 @@ export type TableDefinition = {
 
 export type Dashboard = Omit<SharedDashboard, "tables"> & {
   id: string;
+  userId?: string;
   fields?: DashboardField[];
   tables?: DashboardTable[];
   insights?: InsightWidget[];
@@ -147,10 +148,12 @@ export type TableSchemaResponse = {
 export type PublicDashboardSummary = {
   _id: string;
   name: string;
-  description?: string;
-  owner?: { id?: string; fullName?: string } | null;
+  userId: string;
+  ownerName: string;
   updatedAt?: string;
   tablesCount?: number;
+  widgetsCount?: number;
+  type?: string;
   favoriteCount?: number;
   tags?: string[];
 };
@@ -210,6 +213,13 @@ export const dashboardApi = {
   }) => api.post<{ dashboard: Dashboard }>("/api/dashboards", payload),
   list: (sessionId: string, userId?: string | null) =>
     api.get<{ dashboards: Dashboard[] }>(`/api/dashboards${withOwnerParams(sessionId, userId || undefined)}`),
+  getById: (id: string, params: { sessionId?: string; userId?: string | null } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.get<{ dashboard: Dashboard }>(`/api/dashboards/${id}${queryString}`);
+  },
   delete: (id: string, sessionId: string, userId?: string | null) =>
     api.delete<{ success: boolean }>(`/api/dashboards/${id}${withOwnerParams(sessionId, userId || undefined)}`),
   listRecords: (params: { dashboardId: string; tableKey: string; sessionId?: string; userId?: string | null }) => {

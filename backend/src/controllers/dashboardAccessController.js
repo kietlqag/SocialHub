@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getSocialhubDb } from "../mongo.js";
 import { buildDefaultAccessControl } from "../utils/accessControlDefaults.js";
+import { canEditDashboard } from "../utils/dashboardAuth.js";
 
 const dashboards = () => getSocialhubDb().collection("dashboards");
 
@@ -14,11 +15,17 @@ const findDashboardById = async (dashboardId) => {
   return dashboards().findOne({ _id: objectId });
 };
 
+const resolveUserId = (req) => req.user?.id || req.body?.userId || req.query?.userId || null;
+
 export const getDashboardAccess = async (req, res) => {
   const { dashboardId } = req.params;
   const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) {
     return res.status(404).json({ message: "Dashboard not found" });
+  }
+  const currentUserId = resolveUserId(req);
+  if (!canEditDashboard(dashboard, currentUserId)) {
+    return res.status(403).json({ message: "Forbidden" });
   }
 
   let accessControl = dashboard.accessControl;
@@ -41,6 +48,10 @@ export const updateDashboardAccess = async (req, res) => {
   if (!dashboard) {
     return res.status(404).json({ message: "Dashboard not found" });
   }
+  const currentUserId = resolveUserId(req);
+  if (!canEditDashboard(dashboard, currentUserId)) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
 
   const nextAccess = dashboard.accessControl || buildDefaultAccessControl();
   if (accessMode) nextAccess.accessMode = accessMode;
@@ -61,6 +72,10 @@ export const updateDashboardAccessMode = async (req, res) => {
   const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) {
     return res.status(404).json({ message: "Dashboard not found" });
+  }
+  const currentUserId = resolveUserId(req);
+  if (!canEditDashboard(dashboard, currentUserId)) {
+    return res.status(403).json({ message: "Forbidden" });
   }
   const nextAccess = dashboard.accessControl || buildDefaultAccessControl();
   if (accessMode) nextAccess.accessMode = accessMode;

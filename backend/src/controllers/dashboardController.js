@@ -17,16 +17,18 @@ import {
   addInsight,
   removeInsight,
   updateInsight,
+  getDashboardByIdForViewer,
 } from "../services/dashboardService.js";
-import { findDashboardForOwner } from "../repositories/dashboardRepository.js";
+import { findDashboardForOwner, findDashboardById } from "../repositories/dashboardRepository.js";
 import { listTablesByDashboard } from "../repositories/dashboardTableRepository.js";
 import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { mongoose } from "../mongoose.js";
 import { getSocialhubDb } from "../mongo.js";
+import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
-  userId: req.body.userId || req.query.userId || null,
+  userId: req.user?.id || req.body.userId || req.query.userId || null,
 });
 
 export async function generateStructure(req, res) {
@@ -54,16 +56,22 @@ export async function listDashboard(req, res) {
   res.json({ dashboards });
 }
 
+export async function getDashboardByIdController(req, res) {
+  const owner = parseOwner(req);
+  const { id } = req.params;
+  if (!id) throw new HttpError(400, "dashboardId required");
+  const dashboard = await getDashboardByIdForViewer(id, owner.userId);
+  res.json({ dashboard });
+}
+
 export async function listDashboardTables(req, res) {
   const owner = parseOwner(req);
   const { dashboardId } = req.params;
   if (!dashboardId) throw new HttpError(400, "dashboardId required");
-  if (!owner.sessionId && !owner.userId) {
-    throw new HttpError(400, "sessionId or userId required");
-  }
-  const dashboard = await findDashboardForOwner(dashboardId, owner);
-  if (!dashboard) {
-    throw new HttpError(404, "Dashboard not found");
+  const dashboard = await findDashboardById(dashboardId);
+  if (!dashboard) throw new HttpError(404, "Dashboard not found");
+  if (!canViewDashboard(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
   }
   const tables = await listTablesByDashboard(dashboardId);
   res.json({ tables });
@@ -107,15 +115,18 @@ export async function createDashboardTable(req, res) {
     },
   ];
   if (!dashboardId) throw new HttpError(400, "dashboardId required");
-  if (!owner.sessionId && !owner.userId) {
-    throw new HttpError(400, "sessionId or userId required");
+  if (!owner.userId) {
+    throw new HttpError(400, "userId required");
   }
   if (!mongoose.Types.ObjectId.isValid(dashboardId)) {
     throw new HttpError(404, "Dashboard not found");
   }
-  const dashboard = await findDashboardForOwner(dashboardId, owner);
+  const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) {
     throw new HttpError(404, "Dashboard not found");
+  }
+  if (!canEditDashboard(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
   }
 
   const normalizedKey = (key || "").toString().trim();
@@ -242,26 +253,17 @@ export async function getDashboardData(req, res) {
   console.log("getDashboardData hit", req.params.id, "query", req.query);
   const owner = parseOwner(req);
   const { from, to } = req.query;
-  const db = getSocialhubDb();
   try {
-    let dashboards = await db
-      .collection("dashboards")
-      .find({
-        _id: new ObjectId(req.params.id),
-        ...(owner.userId ? { userId: owner.userId } : owner.sessionId ? { sessionId: owner.sessionId } : {}),
-      })
-      .toArray();
-
-    if (!dashboards.length) {
-      dashboards = await db.collection("dashboards").find({ _id: new ObjectId(req.params.id) }).toArray();
-    }
-
-    if (!dashboards.length) {
+    const dashboard = await findDashboardById(req.params.id);
+    if (!dashboard) {
       console.warn("Dashboard not found for data route", req.params.id);
       return res.json({ dashboardId: req.params.id, widgets: [] });
     }
+    if (!canViewDashboard(dashboard, owner.userId)) {
+      throw new HttpError(403, "Forbidden");
+    }
 
-    const dashboard = dashboards[0];
+    const db = getSocialhubDb();
     const widgets = await listDashboardWidgets(req.params.id, owner);
     const dateRange = {
       from: from ? new Date(from) : undefined,

@@ -4,7 +4,8 @@ import { AIDashboardGenerator } from "../components/AIDashboardGenerator";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Header } from "../components/Header";
-import DashboardCard, { type DashboardCardIconPreset } from "../components/dashboard/DashboardCard";
+import DashboardCard from "../components/dashboard/DashboardCard";
+import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
 import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
   LayoutDashboard,
@@ -13,10 +14,6 @@ import {
   Clock,
   Star,
   Loader2,
-  ShoppingCart,
-  BarChart3,
-  GraduationCap,
-  HeartPulse,
 } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
 import "../styles/managedash.css";
@@ -47,43 +44,6 @@ type DraftDashboard = {
     tableDropdownOrder?: string[];
     emptyStateText?: string;
   };
-};
-
-type DecoratedDashboard = Dashboard & {
-  fieldCount: number;
-  widgetCount: number;
-  tableCount: number;
-  createdLabel: string;
-  updatedLabel: string | null;
-  domain: DashboardDomain;
-  domainLabel: string;
-  iconPreset: DomainVisual;
-  statusLabel: string;
-  lastViewedLabel: string | null;
-  displayTitle: string;
-};
-
-type DashboardDomain = "healthcare" | "commerce" | "analytics" | "education" | "general";
-
-type DomainVisual = DashboardCardIconPreset & {
-  label: string;
-};
-
-const domainVisuals: Record<DashboardDomain, DomainVisual> = {
-  healthcare: { Icon: HeartPulse, toneClass: "tone-healthcare", label: "Healthcare" },
-  commerce: { Icon: ShoppingCart, toneClass: "tone-commerce", label: "Commerce" },
-  analytics: { Icon: BarChart3, toneClass: "tone-analytics", label: "Analytics" },
-  education: { Icon: GraduationCap, toneClass: "tone-education", label: "Education" },
-  general: { Icon: LayoutDashboard, toneClass: "tone-general", label: "Dashboard" },
-};
-
-const detectDashboardDomain = (dashboard: Dashboard): DashboardDomain => {
-  const normalized = `${dashboard.type || ""} ${dashboard.name || ""} ${dashboard.description || ""}`.toLowerCase();
-  if (normalized.includes("health") || normalized.includes("clinic") || normalized.includes("patient")) return "healthcare";
-  if (normalized.includes("commerce") || normalized.includes("shop") || normalized.includes("sale") || normalized.includes("store")) return "commerce";
-  if (normalized.includes("analytics") || normalized.includes("insight") || normalized.includes("kpi") || normalized.includes("finance")) return "analytics";
-  if (normalized.includes("school") || normalized.includes("education") || normalized.includes("student") || normalized.includes("class")) return "education";
-  return "general";
 };
 
 export default function ManageDashList() {
@@ -226,60 +186,7 @@ export default function ManageDashList() {
     });
   };
 
-  const derivedDashboards: DecoratedDashboard[] = dashboards.map((d) => {
-    const tableFields = Array.isArray(d.tables) ? d.tables.flatMap((t) => t.fields || []) : [];
-    const fieldCount = d.fields?.length ? d.fields.length : tableFields.length;
-    const widgets = Array.isArray(d.widgets) ? d.widgets : [];
-    const metricWidgets = widgets.filter((w: any) => {
-      const type = (w.type || "").toString().toLowerCase();
-      const variant = (w.variant || "").toString().toLowerCase();
-      return !w.hidden && (type === "metric" || variant === "metric");
-    });
-    const metricCount = metricWidgets.length;
-    const chartWidgets = widgets.filter((w: any) => {
-      const type = (w.type || "").toString().toLowerCase();
-      const variant = (w.variant || "").toString().toLowerCase();
-      const visualType = (w.visualType || "").toString().toLowerCase();
-      return (
-        !w.hidden &&
-        (type === "chart" ||
-          variant === "chart" ||
-          type.includes("chart") ||
-          variant.includes("chart") ||
-          visualType.includes("chart"))
-      );
-    });
-    const chartCount = chartWidgets.length;
-    const widgetCount = widgets.length;
-    const insightsArr = Array.isArray((d as any).insights) ? (d as any).insights : [];
-    const visibleInsightsCount = insightsArr.filter((i: any) => !(i as any)?.hidden).length;
-    const totalInsightsCount = insightsArr.length;
-    const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
-    const insightsCount = chartCount || visibleInsightsCount || totalInsightsCount;
-    const overviewCount = metricCount || widgetCount || Math.max(1, tableCount || 1);
-    const domain = detectDashboardDomain(d);
-    const visual = domainVisuals[domain] ?? domainVisuals.general;
-    const createdLabel = d.createdAt ? new Date(d.createdAt).toLocaleString() : "Just now";
-    const updatedLabel = d.updatedAt ? new Date(d.updatedAt).toLocaleString() : null;
-    const statusLabel = (d as any).status || "Active";
-    const displayTitle = d.name?.trim() || visual.label;
-    return {
-      ...d,
-      fieldCount,
-      widgetCount,
-      tableCount,
-      overviewCount,
-      insightsCount,
-      createdLabel,
-      updatedLabel,
-      domain,
-      domainLabel: visual.label,
-      iconPreset: visual,
-      statusLabel,
-      lastViewedLabel: updatedLabel || createdLabel,
-      displayTitle,
-    };
-  });
+  const derivedDashboards: DecoratedDashboard[] = dashboards.map(decorateDashboardForList);
 
   const hasDashboards = derivedDashboards.length > 0;
   const recentlyViewed = derivedDashboards.slice(0, 4);

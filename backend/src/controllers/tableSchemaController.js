@@ -1,17 +1,18 @@
 import { randomUUID } from "crypto";
 import { HttpError } from "../utils/httpError.js";
-import { findDashboardForOwner } from "../repositories/dashboardRepository.js";
+import { findDashboardById } from "../repositories/dashboardRepository.js";
 import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { migrateFieldRenames } from "../utils/schemaMigration.js";
 import { mongoose } from "../mongoose.js";
 import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
+import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
 
 const FIELD_TYPES = new Set(["string", "number", "boolean", "date", "enum", "reference", "id"]);
 const RESERVED_KEYS = new Set(["_id", "created_at", "updated_at", ...SYSTEM_FIELDS]);
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
-  userId: req.body.userId || req.query.userId || null,
+  userId: req.user?.id || req.body.userId || req.query.userId || null,
 });
 
 const normalizeKey = (key = "") => key.toString().trim();
@@ -76,12 +77,12 @@ export async function getTableSchema(req, res) {
   if (!mongoose.Types.ObjectId.isValid(dashboardId)) {
     throw new HttpError(400, "Invalid dashboardId");
   }
-  if (!owner.sessionId && !owner.userId) {
-    throw new HttpError(400, "sessionId or userId required");
-  }
-  const dashboard = await findDashboardForOwner(dashboardId, owner);
+  const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) {
     throw new HttpError(404, "Dashboard not found");
+  }
+  if (!canViewDashboard(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
   }
   const tableFilter = {
     dashboardId: new mongoose.Types.ObjectId(dashboardId),
@@ -104,13 +105,16 @@ export async function updateTableSchema(req, res) {
   const owner = parseOwner(req);
   const { dashboardId, tableKey } = req.params;
   if (!dashboardId || !tableKey) throw new HttpError(400, "dashboardId and tableKey are required");
-  if (!owner.sessionId && !owner.userId) throw new HttpError(400, "sessionId or userId required");
+  if (!owner.userId) throw new HttpError(400, "userId required");
   if (!mongoose.Types.ObjectId.isValid(dashboardId)) throw new HttpError(400, "Invalid dashboardId");
   const incomingFields = Array.isArray(req.body?.fields) ? req.body.fields : [];
   if (!incomingFields.length) throw new HttpError(400, "fields array is required");
 
-  const dashboard = await findDashboardForOwner(dashboardId, owner);
+  const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) throw new HttpError(404, "Dashboard not found");
+  if (!canEditDashboard(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
+  }
 
   const tableFilter = {
     dashboardId: new mongoose.Types.ObjectId(dashboardId),
