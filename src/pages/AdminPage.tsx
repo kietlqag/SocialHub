@@ -164,6 +164,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [dialogType, setDialogType] = useState<string>("");
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [formUser, setFormUser] = useState<User | null>(null);
+  const [savingUser, setSavingUser] = useState(false);
 
   // Mock Data
   const [users, setUsers] = useState<User[]>([
@@ -249,6 +251,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
 
   const [dashboards, setDashboards] = useState<DashboardItem[]>([]);
   const [loadingDashboards, setLoadingDashboards] = useState(false);
+  const [loadingDashboardDetail, setLoadingDashboardDetail] = useState(false);
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([
     {
@@ -337,7 +340,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
             storage: "—",
             avatar: fullName.slice(0, 2).toUpperCase(),
             owner: u.owner || "",
-            team: u.team || "—",
+            team: u.company || u.team || "—",
             loginHistory: Array.isArray(u.loginHistory) ? u.loginHistory : [],
           } as User;
         });
@@ -386,6 +389,27 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
       })
       .finally(() => setLoadingDashboards(false));
   }, []);
+
+  const handleViewDashboard = (dashboard: DashboardItem) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
+    setLoadingDashboardDetail(true);
+    api
+      .get<{ dashboard: any }>(`/admin/dashboards/${dashboard.id}`, session.token)
+      .then((res) => {
+        setSelectedItem(res.dashboard);
+        setDialogType("dashboard-details");
+        setIsDialogOpen(true);
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(err?.message || "Failed to load dashboard");
+      })
+      .finally(() => setLoadingDashboardDetail(false));
+  };
 
   // Helper functions
   const getStatusColor = (status: string) => {
@@ -448,8 +472,93 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     setIsDialogOpen(true);
   };
 
+  const handleEditUser = (user?: User) => {
+    const base: User = user || {
+      id: "",
+      name: "",
+      email: "",
+      role: "user",
+      status: "pending",
+      plan: "free",
+      joinDate: new Date().toISOString().slice(0, 10),
+      lastActive: "—",
+      lastLogin: "—",
+      dashboards: 0,
+      storage: "—",
+      avatar: "NA",
+      owner: "",
+      team: "",
+      loginHistory: [],
+    };
+    setFormUser(base);
+    setDialogType("edit-user");
+    setIsDialogOpen(true);
+  };
+
   const handleResetPassword = (user: User) => {
     toast.success(`Password reset link sent to ${user.email}`);
+  };
+
+  const handleSaveUser = async () => {
+    if (!formUser) return;
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
+    setSavingUser(true);
+    try {
+      if (formUser.id) {
+        const res = await api.patch<{ user: any }>(`/admin/users/${formUser.id}`, {
+          fullName: formUser.name,
+          company: formUser.team,
+          role: formUser.role,
+          isVerified: formUser.status === "active",
+        }, session.token);
+        setUsers((prev) => prev.map((u) => (u.id === formUser.id ? {
+          ...u,
+          ...res.user,
+          name: res.user.name || res.user.fullName || u.name,
+          status: res.user.isVerified ? "active" : "pending",
+          avatar: (res.user.name || res.user.email || "").slice(0, 2).toUpperCase(),
+        } : u)));
+        toast.success("User updated");
+      } else {
+        const res = await api.post<{ user: any; tempPassword?: string }>("/admin/users", {
+          email: formUser.email,
+          fullName: formUser.name,
+          company: formUser.team,
+          role: formUser.role,
+          isVerified: formUser.status === "active",
+        }, session.token);
+        const newUser: User = {
+          id: res.user.id,
+          name: res.user.name || res.user.fullName || res.user.email,
+          email: res.user.email,
+          role: res.user.role || "user",
+          status: res.user.isVerified ? "active" : "pending",
+          plan: "free",
+          joinDate: res.user.joinDate || new Date().toISOString().slice(0, 10),
+          lastActive: "—",
+          lastLogin: "—",
+          dashboards: 0,
+          storage: "—",
+          avatar: (res.user.name || res.user.email || "?").slice(0, 2).toUpperCase(),
+          owner: "",
+          team: res.user.company || "",
+          loginHistory: [],
+        };
+        setUsers((prev) => [newUser, ...prev]);
+        toast.success(res.tempPassword ? `User created. Temp password: ${res.tempPassword}` : "User created");
+      }
+      setIsDialogOpen(false);
+      setFormUser(null);
+      setDialogType("");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save user");
+    } finally {
+      setSavingUser(false);
+    }
   };
 
   const handleAssignOwner = (user: User, owner: string) => {
@@ -457,10 +566,50 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     toast.success(`Owner assigned to ${user.name}`);
   };
 
-  const handleBulkAction = (action: string) => {
+  const handleDeleteUser = async (user: User) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
+    try {
+      await api.delete(`/admin/users/${user.id}`, session.token);
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      toast.success("User deleted");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete user");
+    }
+  };
+
+  const handleBulkAction = async (action: string) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
     const selectedCount = selectedUsers.size;
-    toast.success(`${action} applied to ${selectedCount} user(s)`);
-    setSelectedUsers(new Set());
+    const updates: Record<string, any> = {};
+    if (action === "Activated") updates.isVerified = true;
+    if (action === "Suspended") updates.isVerified = false;
+    try {
+      await Promise.all(
+        Array.from(selectedUsers).map((id) =>
+          api.patch(`/admin/users/${id}`, updates, session.token)
+        )
+      );
+      setUsers((prev) =>
+        prev.map((u) =>
+          selectedUsers.has(u.id)
+            ? { ...u, status: updates.isVerified ? "active" : "pending", isVerified: updates.isVerified }
+            : u
+        )
+      );
+      toast.success(`${action} applied to ${selectedCount} user(s)`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update users");
+    } finally {
+      setSelectedUsers(new Set());
+    }
   };
 
   const handleExport = (type: string) => {
@@ -496,9 +645,9 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                 </div>
               </div>
             </div>
-            <Button className="gap-2">
-              <Download className="h-4 w-4" />
-              Export All Data
+            <Button className="gap-2" onClick={() => handleEditUser()}>
+              <UserPlus className="h-4 w-4" />
+              Add User
             </Button>
           </div>
         </div>
@@ -681,7 +830,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                         <TableHead>Status</TableHead>
                         <TableHead>Owner</TableHead>
                         <TableHead>Team</TableHead>
-                        <TableHead>Created Date</TableHead>
+                        <TableHead>Last Login</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -767,9 +916,17 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => openDialog("edit-user", user)}
+                                  onClick={() => handleEditUser(user)}
                                 >
                                   <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteUser(user)}
+                                  title="Delete user"
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-600" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1039,14 +1196,14 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openDialog("dashboard-schema", dashboard)}
-                                title="View Schema"
-                              >
-                                <FolderTree className="h-4 w-4" />
-                              </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleViewDashboard(dashboard)}
+                            title="View tables"
+                          >
+                            <FolderTree className="h-4 w-4" />
+                          </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1725,14 +1882,14 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               {dialogType === "user-details" && "User Details"}
               {dialogType === "login-history" && "Login History"}
               {dialogType === "edit-user" && "Edit User"}
-              {dialogType === "dashboard-schema" && "Dashboard Schema"}
+              {dialogType === "dashboard-details" && "Dashboard Details"}
               {dialogType === "health-details" && "System Health Details"}
             </DialogTitle>
             <DialogDescription>
               {dialogType === "user-details" && "View detailed user information"}
               {dialogType === "login-history" && "Recent login activity"}
               {dialogType === "edit-user" && "Update user information"}
-              {dialogType === "dashboard-schema" && "Tables and fields configuration"}
+              {dialogType === "dashboard-details" && "Tables and fields configuration"}
               {dialogType === "health-details" && "Detailed system status"}
             </DialogDescription>
           </DialogHeader>
@@ -1798,40 +1955,134 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               </div>
             )}
 
-            {dialogType === "dashboard-schema" && selectedItem && (
+            {dialogType === "dashboard-details" && selectedItem && (
               <div className="space-y-4">
                 <div>
                   <Label className="text-sm text-gray-600">Dashboard Name</Label>
                   <p className="font-medium">{selectedItem.name}</p>
                 </div>
+                {selectedItem.ownerName && (
+                  <div>
+                    <Label className="text-sm text-gray-600">Owner</Label>
+                    <p>{selectedItem.ownerName}</p>
+                  </div>
+                )}
                 <div>
                   <Label className="text-sm text-gray-600 mb-2 block">
-                    Tables ({selectedItem.tables})
+                    Tables ({selectedItem.tableCount || selectedItem.tables?.length || 0})
                   </Label>
                   <div className="space-y-2">
-                    {["Customers", "Orders", "Products"].map((table) => (
-                      <div key={table} className="p-3 border rounded-lg">
+                    {(selectedItem.tables || []).map((table: any) => (
+                      <div key={table.key || table.name} className="p-3 border rounded-lg">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Database className="h-4 w-4 text-gray-400" />
-                            <span>{table}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Database className="h-4 w-4 text-gray-400" />
+                              <span className="font-medium">{table.name || table.key}</span>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              {table.fields?.length || 0} fields
+                            </p>
                           </div>
-                          <Button variant="ghost" size="sm">
-                            View Fields
-                          </Button>
+                          {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
+                            <Badge variant="outline">Sample rows</Badge>
+                          )}
                         </div>
+                        {Array.isArray(table.fields) && table.fields.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {table.fields.map((f: any) => (
+                              <Badge key={f.key || f.name} variant="secondary" className="text-xs">
+                                {f.name || f.key} • {f.type}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             )}
+
+            {dialogType === "edit-user" && formUser && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input
+                    value={formUser.name}
+                    onChange={(e) => setFormUser({ ...formUser, name: e.target.value })}
+                    placeholder="Full name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={formUser.email}
+                    onChange={(e) => setFormUser({ ...formUser, email: e.target.value })}
+                    placeholder="user@example.com"
+                    disabled={!!formUser.id}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select
+                      value={formUser.role}
+                      onValueChange={(val) => setFormUser({ ...formUser, role: val as User["role"] })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="editor">Editor</SelectItem>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                        <SelectItem value="user">User</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={formUser.status}
+                      onValueChange={(val) =>
+                        setFormUser({ ...formUser, status: val as User["status"] })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Company / Team</Label>
+                  <Input
+                    value={formUser.team || ""}
+                    onChange={(e) => setFormUser({ ...formUser, team: e.target.value })}
+                    placeholder="Company or team"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => { setIsDialogOpen(false); setFormUser(null); }}>
               Close
             </Button>
+            {dialogType === "edit-user" && (
+              <Button onClick={handleSaveUser} disabled={savingUser}>
+                {savingUser ? "Saving..." : "Save"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

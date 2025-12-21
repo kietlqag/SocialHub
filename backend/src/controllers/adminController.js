@@ -1,6 +1,9 @@
-import { listUsers, getUsersByIds } from "../repositories/adminRepository.js";
+import { listUsers, getUsersByIds, createUserAdmin, updateUserAdmin, deleteUserAdmin } from "../repositories/adminRepository.js";
 import { getSocialhubDb } from "../mongo.js";
 import { ObjectId } from "mongodb";
+import bcrypt from "bcryptjs";
+import { findUserByEmail } from "../repositories/userRepository.js";
+import { HttpError } from "../utils/httpError.js";
 
 export async function getUsers(req, res) {
   const users = await listUsers();
@@ -99,4 +102,97 @@ export async function getDashboards(req, res) {
   });
 
   res.json({ dashboards });
+}
+
+export async function getDashboardDetail(req, res) {
+  const db = getSocialhubDb();
+  let objectId;
+  try {
+    objectId = new ObjectId(req.params.id);
+  } catch {
+    return res.status(400).json({ error: "Invalid dashboard id" });
+  }
+
+  const doc = await db.collection("dashboards").findOne(
+    { _id: objectId },
+    {
+      projection: {
+        name: 1,
+        description: 1,
+        type: 1,
+        widgets: 1,
+        insights: 1,
+        tables: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        userId: 1,
+        ownerId: 1,
+        "ui.userId": 1,
+      },
+    }
+  );
+
+  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+
+  const ownerId = doc.userId || doc.ownerId || doc.ui?.userId || null;
+  let owner = null;
+  if (ownerId) {
+    const owners = await getUsersByIds([String(ownerId)]);
+    owner = owners?.[0] || null;
+  }
+
+  const tables = Array.isArray(doc.tables) ? doc.tables.map((t) => ({
+    key: t.key || t.id || t.name,
+    name: t.name || t.tableName || t.key || "Table",
+    fields: Array.isArray(t.fields)
+      ? t.fields.map((f) => ({
+          key: f.key || f.id || f.name,
+          name: f.name || f.fieldName || f.key,
+          type: f.type || f.fieldType || "Text",
+        }))
+      : [],
+    sampleRows: Array.isArray(t.sampleRows) ? t.sampleRows.slice(0, 3) : [],
+  })) : [];
+
+  res.json({
+    dashboard: {
+      id: doc._id.toString(),
+      name: doc.name,
+      description: doc.description || "",
+      type: doc.type || "",
+      ownerId: ownerId || null,
+      ownerName: owner?.name || owner?.email || null,
+      tableCount: tables.length,
+      widgetCount: Array.isArray(doc.widgets) ? doc.widgets.length : 0,
+      insightCount: Array.isArray(doc.insights) ? doc.insights.length : 0,
+      createdAt: doc.createdAt || null,
+      updatedAt: doc.updatedAt || null,
+      tables,
+    },
+  });
+}
+
+export async function createUser(req, res) {
+  const { email, password, fullName, company, role, isVerified } = req.body || {};
+  if (!email) throw new HttpError(400, "Email is required");
+  const existing = await findUserByEmail(email);
+  if (existing) throw new HttpError(409, "Email already exists");
+  const pw = password && password.length >= 6 ? password : Math.random().toString(36).slice(2, 10);
+  const passwordHash = await bcrypt.hash(pw, 10);
+  const user = await createUserAdmin({ email, passwordHash, fullName, company, role, isVerified });
+  res.status(201).json({ user, tempPassword: password ? undefined : pw });
+}
+
+export async function updateUser(req, res) {
+  const { id } = req.params;
+  const { fullName, company, role, isVerified } = req.body || {};
+  const user = await updateUserAdmin(id, { fullName, company, role, isVerified });
+  if (!user) return res.status(404).json({ error: "User not found" });
+  res.json({ user });
+}
+
+export async function deleteUser(req, res) {
+  const ok = await deleteUserAdmin(req.params.id);
+  if (!ok) return res.status(404).json({ error: "User not found" });
+  res.json({ success: true });
 }
