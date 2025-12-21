@@ -654,6 +654,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                   </div>
                 )}
 
+                {/* USER TABLE */}
                 <div className="border rounded-lg">
                   <Table>
                     <TableHeader>
@@ -669,7 +670,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                         <TableHead>Status</TableHead>
                         <TableHead>Owner</TableHead>
                         <TableHead>Team</TableHead>
-                        <TableHead>Last Login</TableHead>
+                        <TableHead>Created Date</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -984,7 +985,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                     Export
                   </Button>
                 </div>
-
+                
+                {/* DASHBOARD TABLE */}
                 <div className="border rounded-lg">
                   <Table>
                     <TableHeader>
@@ -1738,7 +1740,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                     <p className="text-sm text-gray-600">{selectedItem.email}</p>
                   </div>
                 </div>
-
+                
+                {/* USER DETAIL DIALOG */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm text-gray-600">Role</Label>
