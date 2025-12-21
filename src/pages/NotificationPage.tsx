@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
+import { getCurrentSession } from "../services/auth";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -32,6 +33,7 @@ import {
   Archive,
   Star,
   Clock,
+  PlusCircle,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import "../styles/notifications.css";
@@ -53,19 +55,35 @@ interface NotificationItem {
 export function NotificationPage({ onBack }: { onBack?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [processing, setProcessing] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTab, setSelectedTab] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedNotifications, setSelectedNotifications] = useState<Set<string>>(new Set());
+  const [newTitle, setNewTitle] = useState("");
+  const [newMessage, setNewMessage] = useState("");
+  const [newType, setNewType] = useState<NotificationType>("info");
 
   useEffect(() => {
     setLoading(true);
+    const session = getCurrentSession();
+    const token = session?.token || null;
     api
-      .get<{ data: any[] }>("/notifications")
+      .get<{ notifications: any[] }>("/admin/notifications", token || undefined)
       .then((res) => {
-        const rows = res?.data || [];
-        const mapped = rows.map((r: any) => ({ id: r.id, type: r.type || "info", category: r.category || "updates", title: r.title || r.message || "Notification", message: r.message || r.body || "", time: r.time || new Date(r.created_at || r.updated_at || Date.now()).toLocaleString(), timestamp: r.created_at || r.updated_at || new Date().toISOString(), read: !!r.read, starred: !!r.starred })) as NotificationItem[];
+        const rows = res?.notifications || [];
+        const mapped = rows.map((r: any) => ({
+          id: r.id,
+          type: (r.type || "info") as NotificationType,
+          category: r.metadata?.category || r.category || "updates",
+          title: r.title || r.message || "Notification",
+          message: r.message || r.body || "",
+          time: r.time || new Date(r.created_at || r.updated_at || Date.now()).toLocaleString(),
+          timestamp: r.created_at || r.updated_at || new Date().toISOString(),
+          read: !!r.read,
+          starred: !!r.starred,
+        })) as NotificationItem[];
         setNotifications(mapped);
       })
       .catch((e) => {
@@ -83,13 +101,116 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
   };
 
   const markAsRead = async (id: string) => {
+    const session = getCurrentSession();
+    const token = session?.token || undefined;
     updateLocal(id, { read: true });
     try {
-      await api.patch(`/notifications/${id}`, { read: true });
+      await api.patch(`/admin/notifications/${id}`, { read: true }, token);
       toast.success("Marked as read");
     } catch (err) {
       console.error(err);
       toast.error("Could not mark read");
+    }
+  };
+
+  const markAllAsRead = async () => {
+    const session = getCurrentSession();
+    const token = session?.token || undefined;
+    if (!token) {
+      toast.error("Please sign in");
+      return;
+    }
+    setProcessing(true);
+    try {
+      await Promise.all(
+        notifications.filter((n) => !n.read).map((n) => api.patch(`/admin/notifications/${n.id}`, { read: true }, token))
+      );
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setSelectedNotifications(new Set());
+      toast.success("All notifications marked as read");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to mark all as read");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    const session = getCurrentSession();
+    const token = session?.token || undefined;
+    updateLocal(id, {}); // optimistic removal below
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    try {
+      await api.delete(`/admin/notifications/${id}`, token);
+      toast.success("Notification deleted");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not delete notification");
+    }
+  };
+
+  const deleteSelected = async () => {
+    const session = getCurrentSession();
+    const token = session?.token || undefined;
+    if (!selectedNotifications.size) return;
+    setProcessing(true);
+    try {
+      await Promise.all(
+        Array.from(selectedNotifications).map((id) => api.delete(`/admin/notifications/${id}`, token))
+      );
+      setNotifications((prev) => prev.filter((n) => !selectedNotifications.has(n.id)));
+      setSelectedNotifications(new Set());
+      toast.success("Deleted selected notifications");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete selected");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const createNotification = async () => {
+    const session = getCurrentSession();
+    const token = session?.token || undefined;
+    if (!newTitle.trim()) {
+      toast.error("Title is required");
+      return;
+    }
+    setProcessing(true);
+    try {
+      const res = await api.post<{ notification: any }>(
+        "/admin/notifications",
+        {
+          title: newTitle,
+          message: newMessage,
+          type: newType,
+          read: false,
+        },
+        token
+      );
+      const n = res.notification;
+      const mapped: NotificationItem = {
+        id: n.id,
+        type: (n.type || "info") as NotificationType,
+        category: n.metadata?.category || "updates",
+        title: n.title || "Notification",
+        message: n.message || "",
+        time: new Date(n.created_at || Date.now()).toLocaleString(),
+        timestamp: n.created_at || new Date().toISOString(),
+        read: !!n.read,
+        starred: false,
+      };
+      setNotifications((prev) => [mapped, ...prev]);
+      setNewTitle("");
+      setNewMessage("");
+      setNewType("info");
+      toast.success("Notification created");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to create notification");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -112,11 +233,11 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     <div className="notificationsPage">
       <div className="notificationsBg" />
       <div className="notificationsContainer">
-        <div className="notificationsHeader">
-          <div className="headerLeft">
-            <div className="headerIcon">
-              <Bell className="w-6 h-6" />
-            </div>
+            <div className="notificationsHeader">
+              <div className="headerLeft">
+                <div className="headerIcon">
+                  <Bell className="w-6 h-6" />
+                </div>
             <div>
               <h1 className="headerTitle">Notifications</h1>
               <p className="headerSubtitle">
@@ -125,25 +246,29 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
             </div>
             <Badge className="headerBadge">{notifications.length}</Badge>
           </div>
-          <div className="headerActions">
-            {unreadCount > 0 && (
-              <Button onClick={() => {}} variant="outline" size="sm" className="ghostBtn">
-                <CheckCheck className="w-4 h-4 mr-2" />
-                Mark all as read
-              </Button>
-            )}
-            <Button variant="outline" size="sm" className="ghostBtn">
-              <SettingsIcon className="w-4 h-4 mr-2" />
-              Settings
-            </Button>
-          </div>
+              <div className="headerActions">
+                {unreadCount > 0 && (
+                  <Button onClick={markAllAsRead} variant="outline" size="sm" className="ghostBtn" disabled={processing}>
+                    <CheckCheck className="w-4 h-4 mr-2" />
+                    Mark all as read
+                  </Button>
+                )}
+                <Button variant="default" size="sm" className="ghostBtn" onClick={createNotification} disabled={processing}>
+                  <PlusCircle className="w-4 h-4 mr-2" />
+                  Send Test
+                </Button>
+                <Button variant="outline" size="sm" className="ghostBtn">
+                  <SettingsIcon className="w-4 h-4 mr-2" />
+                  Settings
+                </Button>
+              </div>
         </div>
 
-        <div className="notificationsCard filtersCard">
-          <div className="filtersRow">
-            <div className="searchBox">
-              <Search className="searchIcon" />
-              <Input
+              <div className="notificationsCard filtersCard">
+                <div className="filtersRow">
+                  <div className="searchBox">
+                    <Search className="searchIcon" />
+                    <Input
                 type="text"
                 placeholder="Search notifications..."
                 value={searchQuery}
@@ -151,20 +276,30 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 className="searchInput"
               />
             </div>
-            <div className="sortBox">
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="sortTrigger">
-                  <Clock className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">Newest first</SelectItem>
-                  <SelectItem value="oldest">Oldest first</SelectItem>
-                  <SelectItem value="unread">Unread first</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                <div className="sortBox">
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="sortTrigger">
+                      <Clock className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest first</SelectItem>
+                      <SelectItem value="oldest">Oldest first</SelectItem>
+                      <SelectItem value="unread">Unread first</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedNotifications.size > 0 && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={processing}>
+                      <Check className="w-4 h-4 mr-2" /> Mark selected read
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={deleteSelected} disabled={processing}>
+                      <Trash2 className="w-4 h-4 mr-2" /> Delete selected
+                    </Button>
+                  </div>
+                )}
+              </div>
           <Tabs value={selectedTab} onValueChange={setSelectedTab}>
             <TabsList className="pillTabs">
               <TabsTrigger value="all">
@@ -201,7 +336,13 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 <div className="selectAllRow">
                   <Checkbox
                     checked={selectedNotifications.size === filteredNotifications.length && filteredNotifications.length > 0}
-                    onCheckedChange={() => {}}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedNotifications(new Set(filteredNotifications.map((n) => n.id)));
+                      } else {
+                        setSelectedNotifications(new Set());
+                      }
+                    }}
                   />
                   <span className="selectAllText">Select all ({filteredNotifications.length})</span>
                 </div>
@@ -213,7 +354,12 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                   className={`notificationCard ${!notification.read ? "notificationUnread" : ""}`}
                 >
                   <div className="notificationLeft">
-                    <Checkbox checked={false} onCheckedChange={() => {}} />
+                    <Checkbox checked={selectedNotifications.has(notification.id)} onCheckedChange={(checked) => {
+                      const next = new Set(selectedNotifications);
+                      if (checked) next.add(notification.id);
+                      else next.delete(notification.id);
+                      setSelectedNotifications(next);
+                    }} />
                     <div
                       className={`iconCircle ${
                         notification.type === "success"
@@ -267,6 +413,37 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                       </Button>
                     )}
                   </div>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="text"
+                      placeholder="New notification title"
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      className="w-48"
+                    />
+                    <Input
+                      type="text"
+                      placeholder="Message"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="w-64"
+                    />
+                    <Select value={newType} onValueChange={(v) => setNewType(v as NotificationType)}>
+                      <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="info">Info</SelectItem>
+                        <SelectItem value="success">Success</SelectItem>
+                        <SelectItem value="warning">Warning</SelectItem>
+                        <SelectItem value="alert">Alert</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" onClick={createNotification} disabled={processing}>
+                      <PlusCircle className="w-4 h-4 mr-2" />
+                      Send
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -287,5 +464,3 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     </div>
   );
 }
-
-

@@ -152,6 +152,16 @@ interface SystemHealth {
   lastCheck: string;
 }
 
+interface AdminNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+  userName?: string | null;
+}
+
 interface AdminPageProps {
   onBack?: () => void;
 }
@@ -257,6 +267,11 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
 
+  const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [newNotifTitle, setNewNotifTitle] = useState("");
+  const [newNotifMessage, setNewNotifMessage] = useState("");
+  const [newNotifType, setNewNotifType] = useState("info");
   const [systemHealth, setSystemHealth] = useState<SystemHealth[]>([
     {
       id: "1",
@@ -387,6 +402,70 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
       })
       .finally(() => setLoadingActivity(false));
   }, []);
+
+  useEffect(() => {
+    const session = getCurrentSession();
+    if (!session?.token) return;
+    setLoadingNotifications(true);
+    api
+      .get<{ notifications: any[] }>("/admin/notifications", session.token)
+      .then((res) => {
+        const mapped: AdminNotification[] = (res.notifications || []).map((n) => ({
+          id: n.id,
+          title: n.title || "Notification",
+          message: n.message || "",
+          type: n.type || "info",
+          read: !!n.read,
+          createdAt: n.created_at || n.createdAt || new Date().toISOString(),
+          userName: n.userName || n.userEmail || null,
+        }));
+        setAdminNotifications(mapped);
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(err?.message || "Failed to load notifications");
+      })
+      .finally(() => setLoadingNotifications(false));
+  }, []);
+
+  const sendAdminNotification = async () => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in");
+      return;
+    }
+    if (!newNotifTitle.trim()) {
+      toast.error("Title is required");
+      return;
+    }
+    setLoadingNotifications(true);
+    try {
+      const res = await api.post<{ notification: any }>(
+        "/admin/notifications",
+        { title: newNotifTitle, message: newNotifMessage, type: newNotifType, read: false },
+        session.token
+      );
+      const n = res.notification;
+      const mapped: AdminNotification = {
+        id: n.id,
+        title: n.title || "Notification",
+        message: n.message || "",
+        type: n.type || "info",
+        read: !!n.read,
+        createdAt: n.created_at || n.createdAt || new Date().toISOString(),
+        userName: n.userName || n.userEmail || null,
+      };
+      setAdminNotifications((prev) => [mapped, ...prev]);
+      setNewNotifTitle("");
+      setNewNotifMessage("");
+      toast.success("Notification sent");
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.message || "Failed to send notification");
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
 
   const handleViewDashboard = (dashboard: DashboardItem) => {
     const session = getCurrentSession();
@@ -1389,47 +1468,71 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
           <TabsContent value="notifications" className="space-y-4">
             <Card>
               <div className="p-6">
-                <h3 className="text-lg mb-4">Email & Notification Templates</h3>
-                
-                <div className="space-y-4">
-                  {[
-                    { id: 1, name: "Welcome Email", channel: "Email", status: "active" },
-                    { id: 2, name: "Password Reset", channel: "Email", status: "active" },
-                    { id: 3, name: "Dashboard Alert", channel: "Slack", status: "active" },
-                    { id: 4, name: "Weekly Report", channel: "Email", status: "inactive" },
-                  ].map((template) => (
-                    <Card key={template.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <Bell className="h-5 w-5 text-gray-400" />
-                          <div>
-                            <div className="font-medium">{template.name}</div>
-                            <div className="text-sm text-gray-600">
-                              Channel: {template.channel}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Switch defaultChecked={template.status === "active"} />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => toast.success("Test notification sent")}
-                          >
-                            <Send className="h-4 w-4 mr-2" />
-                            Test
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openDialog("edit-template", template)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                <h3 className="text-lg mb-4">Notifications</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <Input
+                    placeholder="Title"
+                    value={newNotifTitle}
+                    onChange={(e) => setNewNotifTitle(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Message"
+                    value={newNotifMessage}
+                    onChange={(e) => setNewNotifMessage(e.target.value)}
+                  />
+                  <Select value={newNotifType} onValueChange={setNewNotifType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="info">Info</SelectItem>
+                      <SelectItem value="success">Success</SelectItem>
+                      <SelectItem value="warning">Warning</SelectItem>
+                      <SelectItem value="alert">Alert</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end mb-4">
+                  <Button onClick={sendAdminNotification} disabled={loadingNotifications}>
+                    Send Notification
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg">
+                  {loadingNotifications ? (
+                    <div className="py-6 text-center text-gray-500">Loading notifications...</div>
+                  ) : adminNotifications.length === 0 ? (
+                    <div className="py-6 text-center text-gray-500">No notifications</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Message</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>User</TableHead>
+                          <TableHead>Created</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {adminNotifications.map((n) => (
+                          <TableRow key={n.id}>
+                            <TableCell className="font-medium">{n.title}</TableCell>
+                            <TableCell className="text-sm text-gray-600">{n.message}</TableCell>
+                            <TableCell>
+                              <Badge>{n.type}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {n.userName || "All"}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {new Date(n.createdAt).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
                 </div>
               </div>
             </Card>
