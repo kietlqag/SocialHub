@@ -328,6 +328,8 @@ export function EditTableStructureModal({
       const payloadFields = [...systemFields, ...fields].map((f) => {
         const { tempId, isSystem, previousKey, ...rest } = f as any;
         const visible = rest.visible ?? rest.visibleInTable ?? (!rest.hidden ?? true);
+        const referenceLike = isReferenceLike(rest) || Boolean((rest as any).ref);
+        const allowEditReference = referenceLike ? rest.allowEditReference === true : undefined;
 
         return {
           ...rest,
@@ -336,6 +338,7 @@ export function EditTableStructureModal({
           visible,
           visibleInTable: visible,
           hidden: !visible,
+          ...(referenceLike ? { allowEditReference } : {}),
         };
       });
 
@@ -347,18 +350,35 @@ export function EditTableStructureModal({
       );
 
       const incoming = Array.isArray(res.fields) ? res.fields : [];
+      const allowEditMap = new Map<string, boolean>();
+      payloadFields.forEach((field) => {
+        if (!field) return;
+        const key = String((field as any).key || "");
+        const referenceLike = isReferenceLike(field) || Boolean((field as any).ref);
+        if (!key || !referenceLike) return;
+        allowEditMap.set(key, Boolean((field as any).allowEditReference));
+      });
+      const mergedIncoming = incoming.map((field) => {
+        const key = String((field as any).key || "");
+        const hasAllow = (field as any).allowEditReference !== undefined;
+        if (!hasAllow && key && allowEditMap.has(key)) {
+          return { ...field, allowEditReference: allowEditMap.get(key) };
+        }
+        return field;
+      });
+
       setSystemFields(
-        incoming
+        mergedIncoming
           .filter((f) => isSystemField(f))
           .map((f) => normalizeFieldVisibility({ ...(f as any), required: true } as DashboardField)),
       );
       setFields(
-        incoming
+        mergedIncoming
           .filter((f) => !isSystemField(f))
           .map((f) => normalizeFieldVisibility(f as DashboardField)),
       );
 
-      onSaved?.(incoming);
+      onSaved?.(mergedIncoming);
       toast.success("Table structure updated");
       onClose();
     } catch (err: any) {
