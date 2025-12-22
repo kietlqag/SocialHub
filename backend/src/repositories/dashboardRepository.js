@@ -19,7 +19,19 @@ const mapDashboard = (doc) => ({
 });
 
 const ownerFilter = ({ sessionId, userId }) => {
-  if (userId) return { userId };
+  if (userId) {
+    return {
+      $or: [
+        { userId },
+        {
+          $and: [
+            { "accessControl.userAssignments.userId": userId },
+            { "accessControl.accessMode": { $ne: "private" } },
+          ],
+        },
+      ],
+    };
+  }
   if (sessionId) return { sessionId };
   return null;
 };

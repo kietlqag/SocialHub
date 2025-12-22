@@ -12,14 +12,15 @@ export type PermissionKey = "view" | "create" | "edit" | "delete" | "manageAcces
 type UseDashboardPermissionsOptions = {
   userId?: string | null;
   sessionId?: string;
+  isGlobalAdmin?: boolean;
 };
 
 const DEFAULT_PERMS: Record<PermissionKey, boolean> = {
   view: true,
-  create: true,
-  edit: true,
-  delete: true,
-  manageAccess: true,
+  create: false,
+  edit: false,
+  delete: false,
+  manageAccess: false,
 };
 
 export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboardPermissionsOptions = {}) => {
@@ -55,7 +56,8 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
 
   const currentRole = useMemo(() => {
     if (!opts.userId) return null;
-    const matched = assignments.find((a) => a.userId === opts.userId);
+    const normalize = (val: string | number | null | undefined) => (val === null || val === undefined ? "" : String(val));
+    const matched = assignments.find((a) => normalize(a.userId) === normalize(opts.userId));
     return matched?.role || null;
   }, [assignments, opts.userId]);
 
@@ -65,19 +67,49 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
     return map;
   }, [rolePermissions]);
 
-  const hasPermission = (permission: PermissionKey) => {
-    if (!dashboardId) return false;
-    // If no assignments configured, allow everything (owner or default fallback)
-    if (!assignments.length) return DEFAULT_PERMS[permission];
-    if (permission === "view" && accessMode === "public") return true;
+  const perms = useMemo(() => {
+    const empty = { ...DEFAULT_PERMS };
+    if (!dashboardId) return empty;
+
     const roleKey = (currentRole || "").toLowerCase();
     const rolePerm = roleKey ? roleMap.get(roleKey) : undefined;
-    if (rolePerm) {
-      return !!(rolePerm.permissions as any)?.[permission];
+    const isOwner = roleKey === "owner";
+
+    // Private: only owner or global admin can see
+    if (accessMode === "private") {
+      if (!(isOwner || opts.isGlobalAdmin)) {
+        return { view: false, create: false, edit: false, delete: false, manageAccess: false };
+      }
+      if (rolePerm) return { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
+      return empty;
     }
-    // No role match -> minimal view if public, else false
-    return permission === "view" ? accessMode === "public" : false;
-  };
+
+    // Restricted: must have assignment
+    if (accessMode === "restricted") {
+      if (!rolePerm) {
+        return { view: false, create: false, edit: false, delete: false, manageAccess: false };
+      }
+      return { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
+    }
+
+    // Public: if has assignment -> role perms, else view-only
+    if (accessMode === "public") {
+      if (rolePerm) return { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
+      return { view: true, create: false, edit: false, delete: false, manageAccess: false };
+    }
+
+    return empty;
+  }, [accessMode, currentRole, dashboardId, opts.isGlobalAdmin, roleMap]);
+
+  const canViewDashboard = useMemo(() => {
+    if (!dashboardId) return false;
+    if (accessMode === "public") return true;
+    if (accessMode === "restricted") return perms.view;
+    if (accessMode === "private") return perms.view;
+    return false;
+  }, [accessMode, dashboardId, perms.view]);
+
+  const hasPermission = (permission: PermissionKey) => !!perms[permission];
 
   return {
     accessMode,
@@ -85,6 +117,8 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
     assignments,
     loading,
     error,
+    perms,
+    canViewDashboard,
     hasPermission,
     refresh: async () => {
       if (!dashboardId) return;

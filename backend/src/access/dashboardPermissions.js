@@ -9,18 +9,28 @@ export const DASHBOARD_ROLE_DEFAULTS = {
 export function getUserDashboardRoleId(dashboard, userId = null) {
   if (!dashboard || !userId) return null;
   const ac = dashboard.accessControl || {};
-  const found = Array.isArray(ac.assignments) ? ac.assignments.find((a) => a?.userId === userId) : null;
-  if (found?.role) return found.role;
+  const assignments = Array.isArray(ac.userAssignments)
+    ? ac.userAssignments
+    : Array.isArray(ac.assignments)
+      ? ac.assignments
+      : [];
+  const found = assignments.find((a) => a?.userId === userId);
+  if (found?.role) return found.role.toLowerCase();
   if (dashboard.userId && dashboard.userId === userId) return "owner";
   return null;
 }
 
 export function getRolePermissions(dashboard, roleId) {
   const ac = dashboard?.accessControl || {};
-  if (!roleId) return { view: false, create: false, edit: false, delete: false, manageAccess: false };
-  const configured = ac.roles?.[roleId];
+  const roleKey = roleId ? roleId.toLowerCase() : null;
+  if (!roleKey) return { view: false, create: false, edit: false, delete: false, manageAccess: false };
+  const fromArray = Array.isArray(ac.rolePermissions)
+    ? ac.rolePermissions.find((r) => r?.role?.toLowerCase() === roleKey)
+    : null;
+  if (fromArray?.permissions) return fromArray.permissions;
+  const configured = ac.roles?.[roleKey];
   if (configured) return configured;
-  return DASHBOARD_ROLE_DEFAULTS[roleId] || { view: false, create: false, edit: false, delete: false, manageAccess: false };
+  return DASHBOARD_ROLE_DEFAULTS[roleKey] || { view: false, create: false, edit: false, delete: false, manageAccess: false };
 }
 
 export function getDashboardPermissionsForUser(dashboard, userId = null) {

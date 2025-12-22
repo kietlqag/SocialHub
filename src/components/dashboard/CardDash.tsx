@@ -53,7 +53,6 @@ export const CardDash = ({
   const { Icon, toneClass } = resolveIconPreset(iconPreset ?? icon);
   const metaChips = [
     { label: "Key metrics", value: overviewCount },
-    { label: "Charts", value: chartsCount },
     { label: "Tables", value: tableCount },
   ];
 

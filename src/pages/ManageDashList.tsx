@@ -189,19 +189,25 @@ export default function ManageDashList() {
   const derivedDashboards: DecoratedDashboard[] = dashboards.map(decorateDashboardForList);
 
   const hasDashboards = derivedDashboards.length > 0;
-  const recentlyViewed = derivedDashboards.slice(0, 4);
-  const favoriteDashboardsSeed = favoriteIds.size
-    ? derivedDashboards.filter((dashboard) => favoriteIds.has(dashboard.id))
-    : derivedDashboards.slice(0, 3);
-  const favoriteDashboards = favoriteDashboardsSeed.length ? favoriteDashboardsSeed : derivedDashboards.slice(0, 3);
+  const recentlyViewed = [...derivedDashboards]
+    .sort((a, b) => {
+      const aDate = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bDate = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bDate - aDate;
+    })
+    .slice(0, 2);
+  const sharedDashboards =
+    currentUser?.id ? derivedDashboards.filter((dashboard) => dashboard.userId && dashboard.userId !== currentUser.id) : [];
+  const ownedDashboards =
+    currentUser?.id ? derivedDashboards.filter((dashboard) => dashboard.userId === currentUser.id) : derivedDashboards;
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredDashboards = normalizedQuery
-    ? derivedDashboards.filter((dashboard) =>
+    ? ownedDashboards.filter((dashboard) =>
         [dashboard.displayTitle, dashboard.domainLabel, dashboard.statusLabel]
           .filter(Boolean)
           .some((value) => value?.toLowerCase().includes(normalizedQuery)),
       )
-    : derivedDashboards;
+    : ownedDashboards;
 
   return (
     <div className="manage-dash-wrapper mdash-surface min-h-screen overflow-y-auto">
@@ -297,12 +303,12 @@ export default function ManageDashList() {
             <section className="dashboard-section">
               <div className="dashboard-section-header outer">
                 <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                <h3 className="text-xl font-semibold text-slate-900">Favorite dashboards</h3>
+                <h3 className="text-xl font-semibold text-slate-900">Shared dashboards</h3>
               </div>
               <div className="dashboard-section-frame">
-                {favoriteDashboards.length ? (
+                {sharedDashboards.length ? (
                   <div className="dashboard-grid">
-                    {favoriteDashboards.map((dashboard) => (
+                    {sharedDashboards.map((dashboard) => (
                       <CardDash
                         key={dashboard.id}
                         id={dashboard.id}
@@ -321,7 +327,9 @@ export default function ManageDashList() {
                     ))}
                   </div>
                 ) : (
-                  <div className="dashboard-empty">Mark dashboards as favorites to see them highlighted here.</div>
+                  <div className="dashboard-empty">
+                    Dashboards that others share with you will appear here.
+                  </div>
                 )}
               </div>
             </section>
