@@ -3,6 +3,7 @@ import { issueJwt } from "../services/tokenService.js";
 import { sendMail } from "../mailer.js";
 import { HttpError } from "../utils/httpError.js";
 import { findUserByEmail } from "../repositories/userRepository.js";
+import { insertActivity } from "../repositories/activityRepository.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -81,6 +82,17 @@ export async function login(req, res) {
   if (!email || !password) return res.status(400).json({ error: "Missing email or password" });
   try {
     const result = await loginUser(email, password);
+    try {
+      await insertActivity({
+        userId: result.user.id,
+        action: "auth.login",
+        targetType: "user",
+        targetId: result.user.id,
+        metadata: { email: result.user.email },
+      });
+    } catch (err) {
+      console.warn("Failed to log login activity:", err.message);
+    }
     res.json(result);
   } catch (err) {
     const status = err.status || 500;

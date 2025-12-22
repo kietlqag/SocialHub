@@ -70,7 +70,7 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     const session = getCurrentSession();
     const token = session?.token || null;
     api
-      .get<{ notifications: any[] }>("/admin/notifications", token || undefined)
+      .get<{ notifications: any[] }>(`/admin/notifications?unreadOnly=true`, token || undefined)
       .then((res) => {
         const rows = res?.notifications || [];
         const mapped = rows.map((r: any) => ({
@@ -84,7 +84,23 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
           read: !!r.read,
           starred: !!r.starred,
         })) as NotificationItem[];
-        setNotifications(mapped);
+        if (mapped.length === 0) {
+          setNotifications([
+            {
+              id: "welcome",
+              type: "info",
+              category: "updates",
+              title: "Welcome to SocialHub",
+              message: "Glad to have you here! We'll keep you posted with important updates.",
+              time: new Date().toLocaleString(),
+              timestamp: new Date().toISOString(),
+              read: false,
+              starred: false,
+            },
+          ]);
+        } else {
+          setNotifications(mapped);
+        }
       })
       .catch((e) => {
         console.error(e);
@@ -104,6 +120,7 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     const session = getCurrentSession();
     const token = session?.token || undefined;
     updateLocal(id, { read: true });
+    if (id === "welcome") return;
     try {
       await api.patch(`/admin/notifications/${id}`, { read: true }, token);
       toast.success("Marked as read");
@@ -123,7 +140,9 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     setProcessing(true);
     try {
       await Promise.all(
-        notifications.filter((n) => !n.read).map((n) => api.patch(`/admin/notifications/${n.id}`, { read: true }, token))
+        notifications
+          .filter((n) => !n.read && n.id !== "welcome")
+          .map((n) => api.patch(`/admin/notifications/${n.id}`, { read: true }, token))
       );
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setSelectedNotifications(new Set());
@@ -141,6 +160,7 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     const token = session?.token || undefined;
     updateLocal(id, {}); // optimistic removal below
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (id === "welcome") return;
     try {
       await api.delete(`/admin/notifications/${id}`, token);
       toast.success("Notification deleted");
@@ -157,7 +177,9 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     setProcessing(true);
     try {
       await Promise.all(
-        Array.from(selectedNotifications).map((id) => api.delete(`/admin/notifications/${id}`, token))
+        Array.from(selectedNotifications)
+          .filter((id) => id !== "welcome")
+          .map((id) => api.delete(`/admin/notifications/${id}`, token))
       );
       setNotifications((prev) => prev.filter((n) => !selectedNotifications.has(n.id)));
       setSelectedNotifications(new Set());

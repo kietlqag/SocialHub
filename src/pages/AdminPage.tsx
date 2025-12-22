@@ -139,7 +139,9 @@ interface ActivityLog {
   user: string;
   action: string;
   target: string;
+  targetId?: string;
   timestamp: string;
+  createdAt?: string;
   details: string;
 }
 
@@ -391,6 +393,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
           user: log.userName || log.userEmail || "System",
           action: log.action || "event",
           target: log.targetName || log.targetType || "",
+          targetId: log.targetId || undefined,
+          createdAt: log.createdAt || null,
           timestamp: log.createdAt ? new Date(log.createdAt).toLocaleString() : "",
           details: log.metadata ? JSON.stringify(log.metadata) : "",
         }));
@@ -520,6 +524,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
         return "bg-blue-100 text-blue-800";
       case "viewer":
         return "bg-gray-100 text-gray-800";
+      case "user":
+        return "bg-indigo-100 text-indigo-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -656,6 +662,43 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     } catch (err: any) {
       toast.error(err?.message || "Failed to delete user");
     }
+  };
+
+  const handleChangeUserRole = async (user: User, role: User["role"]) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
+    try {
+      const res = await api.patch<{ user: any }>(`/admin/users/${user.id}`, { role }, session.token);
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === user.id
+            ? {
+              ...u,
+              role: res.user?.role || role,
+              name: res.user?.name || res.user?.fullName || u.name,
+            }
+            : u
+        )
+      );
+      toast.success("Role updated");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to update role");
+    }
+  };
+
+  const getUserLoginHistory = (userId: string) => {
+    return activityLogs
+      .filter((log) => log.action?.toLowerCase() === "auth.login" && log.targetId === userId)
+      .slice(0, 5)
+      .map((log) => ({
+        date: log.timestamp,
+        ip: log.details || "",
+        device: log.user,
+      }));
   };
 
   const handleBulkAction = async (action: string) => {
@@ -1032,32 +1075,30 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Total Groups</p>
-                    <p className="text-2xl mt-1">{groups.length}</p>
+                    <p className="text-sm text-gray-600">Admins</p>
+                    <p className="text-2xl mt-1">{users.filter((u) => u.role === "admin").length}</p>
                   </div>
-                  <Users2 className="h-8 w-8 text-purple-600" />
+                  <Shield className="h-8 w-8 text-purple-600" />
                 </div>
               </Card>
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Total Members</p>
-                    <p className="text-2xl mt-1">
-                      {groups.reduce((sum, g) => sum + g.members, 0)}
-                    </p>
+                    <p className="text-sm text-gray-600">Editors</p>
+                    <p className="text-2xl mt-1">{users.filter((u) => u.role === "editor").length}</p>
                   </div>
-                  <UserCheck className="h-8 w-8 text-green-600" />
+                  <UserCog className="h-8 w-8 text-blue-600" />
                 </div>
               </Card>
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Dashboard Access</p>
+                    <p className="text-sm text-gray-600">Viewers/Users</p>
                     <p className="text-2xl mt-1">
-                      {groups.reduce((sum, g) => sum + g.dashboardAccess.length, 0)}
+                      {users.filter((u) => u.role === "viewer" || u.role === "user").length}
                     </p>
                   </div>
-                  <LayoutDashboard className="h-8 w-8 text-blue-600" />
+                  <Users2 className="h-8 w-8 text-green-600" />
                 </div>
               </Card>
             </div>
@@ -1065,114 +1106,54 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
             <Card>
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg">Groups & Permissions</h3>
-                  <Button className="gap-2">
-                    <UserPlus className="h-4 w-4" />
-                    Create Group
-                  </Button>
+                  <h3 className="text-lg">Role Management</h3>
+                  <Badge variant="outline">{users.length} users</Badge>
                 </div>
 
-                <div className="space-y-4">
-                  {groups.map((group) => (
-                    <Card key={group.id} className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <Users2 className="h-5 w-5 text-blue-600" />
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium">{u.name}</TableCell>
+                          <TableCell className="text-sm text-gray-600">{u.email}</TableCell>
+                          <TableCell>
+                            <Badge className={getRoleColor(u.role)}>{u.role}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(u.status)}>{u.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-2">
+                              <Select
+                                value={u.role}
+                                onValueChange={(value) => handleChangeUserRole(u, value as User["role"])}
+                              >
+                                <SelectTrigger className="w-[140px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                  <SelectItem value="editor">Editor</SelectItem>
+                                  <SelectItem value="user">User</SelectItem>
+                                  <SelectItem value="viewer">Viewer</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
-                            <div>
-                              <h4 className="font-medium">{group.name}</h4>
-                              <p className="text-sm text-gray-600">
-                                {group.members} members
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-4 mb-4">
-                            <div>
-                              <p className="text-xs text-gray-600 mb-1">
-                                Dashboards Quota
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-blue-600"
-                                    style={{
-                                      width: `${(group.usedQuota.dashboards / group.quota.dashboards) * 100}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span className="text-sm">
-                                  {group.usedQuota.dashboards}/{group.quota.dashboards}
-                                </span>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-600 mb-1">
-                                Tables Quota
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-green-600"
-                                    style={{
-                                      width: `${(group.usedQuota.tables / group.quota.tables) * 100}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span className="text-sm">
-                                  {group.usedQuota.tables}/{group.quota.tables}
-                                </span>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-600 mb-1">
-                                Records Quota
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full bg-purple-600"
-                                    style={{
-                                      width: `${(group.usedQuota.records / group.quota.records) * 100}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span className="text-sm">
-                                  {group.usedQuota.records.toLocaleString()}/
-                                  {group.quota.records.toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">
-                              {group.dashboardAccess.length} Dashboard(s) Access
-                            </Badge>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openDialog("edit-group", group)}
-                          >
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openDialog("group-permissions", group)}
-                          >
-                            <Shield className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </Card>
@@ -1418,48 +1399,48 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                   <div className="space-y-3">
                     {activityLogs.map((log) => {
                       const action = (log.action || "").toLowerCase();
-                      const tone =
-                        action.includes("delete") || action === "alert"
-                          ? "bg-red-100 text-red-600"
-                          : action.includes("create")
-                            ? "bg-green-100 text-green-600"
-                            : action.includes("update")
-                              ? "bg-blue-100 text-blue-600"
-                              : "bg-gray-100 text-gray-600";
-                      const [bgClass, textClass] = tone.split(" ");
-                      return (
-                        <Card key={log.id} className="p-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3">
-                              <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${bgClass}`}>
-                                <Activity className={`h-5 w-5 ${textClass}`} />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium">{log.user}</span>
-                                  <Badge variant="outline">{log.action}</Badge>
-                                  {log.target && (
-                                    <span className="text-sm text-gray-600">
-                                      {log.target}
-                                    </span>
-                                  )}
-                                </div>
-                                {log.details && (
-                                  <p className="text-sm text-gray-600 mt-1">
-                                    {log.details}
-                                  </p>
-                                )}
-                                <p className="text-xs text-gray-400 mt-1">
-                                  {log.timestamp}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
+                     const tone =
+                       action.includes("delete") || action === "alert"
+                         ? "bg-red-100 text-red-600"
+                         : action.includes("create")
+                           ? "bg-green-100 text-green-600"
+                           : action.includes("update")
+                             ? "bg-blue-100 text-blue-600"
+                             : "bg-gray-100 text-gray-600";
+                     const [bgClass, textClass] = tone.split(" ");
+                     return (
+                       <Card key={log.id} className="p-4">
+                         <div className="flex items-start justify-between">
+                           <div className="flex items-start gap-3">
+                             <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${bgClass}`}>
+                               <Activity className={`h-5 w-5 ${textClass}`} />
+                             </div>
+                             <div>
+                               <div className="flex items-center gap-2">
+                                 <span className="font-medium">{log.user}</span>
+                                 <Badge variant="outline">{log.action}</Badge>
+                                 {log.target && (
+                                   <span className="text-sm text-gray-600">
+                                     {log.target}
+                                   </span>
+                                 )}
+                               </div>
+                               {log.details && (
+                                 <p className="text-sm text-gray-600 mt-1">
+                                   {log.details}
+                                 </p>
+                               )}
+                               <p className="text-xs text-gray-400 mt-1">
+                                 {log.timestamp}
+                               </p>
+                             </div>
+                           </div>
+                         </div>
+                       </Card>
+                     );
+                   })}
+                 </div>
+               )}
               </div>
             </Card>
           </TabsContent>
@@ -2059,7 +2040,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
 
             {dialogType === "login-history" && selectedItem && (
               <div className="space-y-3">
-                {selectedItem.loginHistory?.map((login: any, idx: number) => (
+                {(getUserLoginHistory(selectedItem.id) || selectedItem.loginHistory || []).map((login: any, idx: number) => (
                   <div key={idx} className="p-3 border rounded-lg">
                     <div className="flex items-center justify-between">
                       <div>
