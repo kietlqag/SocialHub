@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -82,7 +83,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "../services/api";
-import { getCurrentSession } from "../services/auth";
+import { getCurrentSession, type AuthUser } from "../services/auth";
+import { Header } from "../components/Header";
 
 interface User {
   id: string;
@@ -164,11 +166,25 @@ interface AdminNotification {
   userName?: string | null;
 }
 
+type TicketPriority = "low" | "medium" | "high";
+type TicketStatus = "open" | "in-progress" | "resolved";
+
+interface SupportTicket {
+  id: string;
+  customer: string;
+  subject: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  created: string;
+}
+
 interface AdminPageProps {
   onBack?: () => void;
 }
 
 export function AdminPage({ onBack }: AdminPageProps = {}) {
+  const navigate = useNavigate();
+  const [headerUser, setHeaderUser] = useState<AuthUser | null>(null);
   const [activeTab, setActiveTab] = useState("users");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
@@ -274,6 +290,39 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [newNotifTitle, setNewNotifTitle] = useState("");
   const [newNotifMessage, setNewNotifMessage] = useState("");
   const [newNotifType, setNewNotifType] = useState("info");
+
+  const [tickets, setTickets] = useState<SupportTicket[]>([
+    {
+      id: "#1234",
+      customer: "Acme Corp",
+      subject: "Dashboard loading issue",
+      priority: "high",
+      status: "open",
+      created: "2024-12-20 09:00",
+    },
+    {
+      id: "#1233",
+      customer: "TechStart Inc",
+      subject: "Data export problem",
+      priority: "medium",
+      status: "in-progress",
+      created: "2024-12-20 08:30",
+    },
+    {
+      id: "#1232",
+      customer: "Global Systems",
+      subject: "User permissions question",
+      priority: "low",
+      status: "resolved",
+      created: "2024-12-19 16:00",
+    },
+  ]);
+  const [newTicketSubject, setNewTicketSubject] = useState("");
+  const [newTicketCustomer, setNewTicketCustomer] = useState("");
+  const [newTicketPriority, setNewTicketPriority] = useState<TicketPriority>("medium");
+
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<User | null>(null);
+  const [confirmText, setConfirmText] = useState("");
   const [systemHealth, setSystemHealth] = useState<SystemHealth[]>([
     {
       id: "1",
@@ -304,6 +353,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   useEffect(() => {
     const session = getCurrentSession();
     if (!session?.token) return;
+    if (session.user) setHeaderUser(session.user);
     setLoadingUsers(true);
     api
       .get<{ users: any[] }>("/admin/users", session.token)
@@ -650,18 +700,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   };
 
   const handleDeleteUser = async (user: User) => {
-    const session = getCurrentSession();
-    if (!session?.token) {
-      toast.error("Session expired. Please sign in again.");
-      return;
-    }
-    try {
-      await api.delete(`/admin/users/${user.id}`, session.token);
-      setUsers((prev) => prev.filter((u) => u.id !== user.id));
-      toast.success("User deleted");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to delete user");
-    }
+    setConfirmDeleteUser(user);
+    setConfirmText("");
   };
 
   const handleChangeUserRole = async (user: User, role: User["role"]) => {
@@ -699,6 +739,40 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
         ip: log.details || "",
         device: log.user,
       }));
+  };
+
+  const handleCreateTicket = () => {
+    const subject = newTicketSubject.trim();
+    const customer = newTicketCustomer.trim() || "Unknown";
+    if (!subject) {
+      toast.error("Subject is required");
+      return;
+    }
+    const id = `#${Math.floor(Math.random() * 9000 + 1000)}`;
+    const created = new Date().toLocaleString();
+    const ticket: SupportTicket = {
+      id,
+      subject,
+      customer,
+      priority: newTicketPriority,
+      status: "open",
+      created,
+    };
+    setTickets((prev) => [ticket, ...prev]);
+    setNewTicketSubject("");
+    setNewTicketCustomer("");
+    setNewTicketPriority("medium");
+    toast.success("Ticket created");
+  };
+
+  const handleUpdateTicketStatus = (id: string, status: TicketStatus) => {
+    setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+    toast.success(`Ticket ${status}`);
+  };
+
+  const handleDeleteTicket = (id: string) => {
+    setTickets((prev) => prev.filter((t) => t.id !== id));
+    toast.success("Ticket removed");
   };
 
   const handleBulkAction = async (action: string) => {
@@ -748,40 +822,16 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {onBack && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onBack}
-                  className="shrink-0"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              )}
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Shield className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <h1 className="text-2xl">System Administration</h1>
-                  <p className="text-sm text-gray-600">
-                    Comprehensive platform management and monitoring
-                  </p>
-                </div>
-              </div>
-            </div>
-            <Button className="gap-2" onClick={() => handleEditUser()}>
-              <UserPlus className="h-4 w-4" />
-              Add User
-            </Button>
-          </div>
-        </div>
-      </div>
+      <Header
+        onManageDash={() => navigate("/managedash")}
+        onChatOpen={() => navigate("/chat")}
+        onLoginOpen={() => navigate("/login")}
+        onSignUpOpen={() => navigate("/register")}
+        onProfileOpen={() => navigate("/profile")}
+        onSettingsOpen={() => navigate("/settings")}
+        currentUser={headerUser}
+        onLogout={() => navigate("/login")}
+      />
 
       <div className="px-6 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1841,7 +1891,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Open Tickets</p>
-                    <p className="text-2xl mt-1">12</p>
+                    <p className="text-2xl mt-1">{tickets.filter((t) => t.status === "open").length}</p>
                   </div>
                   <LifeBuoy className="h-8 w-8 text-blue-600" />
                 </div>
@@ -1849,72 +1899,65 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Resolved Today</p>
-                    <p className="text-2xl mt-1">8</p>
+                    <p className="text-sm text-gray-600">In Progress</p>
+                    <p className="text-2xl mt-1">{tickets.filter((t) => t.status === "in-progress").length}</p>
                   </div>
-                  <CheckCircle className="h-8 w-8 text-green-600" />
+                  <RefreshCw className="h-8 w-8 text-blue-600" />
                 </div>
               </Card>
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Avg Response Time</p>
-                    <p className="text-2xl mt-1">2.4h</p>
+                    <p className="text-sm text-gray-600">Resolved</p>
+                    <p className="text-2xl mt-1">{tickets.filter((t) => t.status === "resolved").length}</p>
                   </div>
-                  <Clock className="h-8 w-8 text-purple-600" />
+                  <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
               </Card>
             </div>
 
             <Card>
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <h3 className="text-lg">Support Tickets</h3>
-                  <Button className="gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    New Ticket
-                  </Button>
+                  <div className="flex gap-2 flex-wrap">
+                    <Input
+                      placeholder="Subject"
+                      value={newTicketSubject}
+                      onChange={(e) => setNewTicketSubject(e.target.value)}
+                      className="w-48"
+                    />
+                    <Input
+                      placeholder="Customer"
+                      value={newTicketCustomer}
+                      onChange={(e) => setNewTicketCustomer(e.target.value)}
+                      className="w-40"
+                    />
+                    <Select value={newTicketPriority} onValueChange={(v) => setNewTicketPriority(v as TicketPriority)}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button className="gap-2" onClick={handleCreateTicket}>
+                      <MessageSquare className="h-4 w-4" />
+                      New Ticket
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
-                  {[
-                    {
-                      id: "#1234",
-                      customer: "Acme Corp",
-                      subject: "Dashboard loading issue",
-                      priority: "high",
-                      status: "open",
-                      created: "2024-12-20 09:00",
-                    },
-                    {
-                      id: "#1233",
-                      customer: "TechStart Inc",
-                      subject: "Data export problem",
-                      priority: "medium",
-                      status: "in-progress",
-                      created: "2024-12-20 08:30",
-                    },
-                    {
-                      id: "#1232",
-                      customer: "Global Systems",
-                      subject: "User permissions question",
-                      priority: "low",
-                      status: "resolved",
-                      created: "2024-12-19 16:00",
-                    },
-                  ].map((ticket) => (
+                  {tickets.map((ticket) => (
                     <Card key={ticket.id} className="p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-medium">{ticket.id}</span>
-                            <Badge
-                              variant={
-                                ticket.priority === "high"
-                                  ? "destructive"
-                                  : "outline"
-                              }
-                            >
+                            <Badge variant={ticket.priority === "high" ? "destructive" : "outline"}>
                               {ticket.priority}
                             </Badge>
                             <Badge
@@ -1935,37 +1978,38 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                           </div>
                         </div>
                         <div className="flex gap-2">
+                          {ticket.status !== "resolved" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUpdateTicketStatus(ticket.id, "resolved")}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Resolve
+                            </Button>
+                          )}
+                          {ticket.status === "open" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUpdateTicketStatus(ticket.id, "in-progress")}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Start
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() =>
-                              toast.success("Support email sent")
-                            }
+                            onClick={() => handleDeleteTicket(ticket.id)}
                           >
-                            <Mail className="h-4 w-4 mr-2" />
-                            Email
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openDialog("ticket-logs", ticket)}
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            Logs
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
                           </Button>
                         </div>
                       </div>
                     </Card>
                   ))}
-                </div>
-
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium mb-3">Customer Notes</h4>
-                  <Textarea
-                    placeholder="Add internal notes about this customer..."
-                    className="mb-3"
-                  />
-                  <Button size="sm">Save Note</Button>
                 </div>
               </div>
             </Card>
@@ -2182,6 +2226,72 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                 {savingUser ? "Saving..." : "Save"}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!confirmDeleteUser} onOpenChange={(open) => { if (!open) { setConfirmDeleteUser(null); setConfirmText(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Type <span className="font-semibold">confirm</span> to delete {confirmDeleteUser?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Type confirm"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && confirmText === "confirm" && confirmDeleteUser) {
+                  const user = confirmDeleteUser;
+                  const session = getCurrentSession();
+                  if (!session?.token) {
+                    toast.error("Session expired. Please sign in again.");
+                    return;
+                  }
+                  api.delete(`/admin/users/${user.id}`, session.token)
+                    .then(() => {
+                      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+                      toast.success("User deleted");
+                    })
+                    .catch((err: any) => toast.error(err?.message || "Failed to delete user"))
+                    .finally(() => {
+                      setConfirmDeleteUser(null);
+                      setConfirmText("");
+                    });
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setConfirmDeleteUser(null); setConfirmText(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={confirmText !== "confirm" || !confirmDeleteUser}
+              onClick={() => {
+                if (!confirmDeleteUser) return;
+                const user = confirmDeleteUser;
+                const session = getCurrentSession();
+                if (!session?.token) {
+                  toast.error("Session expired. Please sign in again.");
+                  return;
+                }
+                api.delete(`/admin/users/${user.id}`, session.token)
+                  .then(() => {
+                    setUsers((prev) => prev.filter((u) => u.id !== user.id));
+                    toast.success("User deleted");
+                  })
+                  .catch((err: any) => toast.error(err?.message || "Failed to delete user"))
+                  .finally(() => {
+                    setConfirmDeleteUser(null);
+                    setConfirmText("");
+                  });
+              }}
+            >
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
