@@ -34,6 +34,7 @@ import {
 } from "../access/dashboardPermissions.js";
 import { findDashboardById as findDashboardByIdRepo } from "../repositories/dashboardRepository.js";
 import { parseSampleDataFile, normalizeSamplePreview } from "../services/sampleDataParser.js";
+import { notifyDashboardCreated } from "../observers/dashboardNotificationObserver.js";
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
@@ -85,6 +86,17 @@ export async function generateStructure(req, res) {
     userId: userId || req.query.userId || null,
   };
   const structure = await generateAndPersistDashboard({ name, type, description, ...owner, samplePreview });
+
+  try {
+    await notifyDashboardCreated({
+      dashboardId: structure?.dashboardId || null,
+      dashboardName: structure?.name || name || null,
+      userId: owner.userId,
+    });
+  } catch (err) {
+    console.error("[notifyDashboardCreated error]", err);
+  }
+
   res.json(structure);
 }
 

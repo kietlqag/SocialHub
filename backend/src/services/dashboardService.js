@@ -1454,21 +1454,36 @@ async function callWithRepair({
 }) {
   const client = requireOpenAI();
   let lastContent = "";
-  let currentMessages = messages;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  const baseMessages = Array.isArray(messages) ? [...messages] : [];
+  let currentMessages = baseMessages;
+  let tokens = Math.max(300, maxTokens);
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const completion = await client.chat.completions.create({
         model: OPENAI_MODEL,
         messages: currentMessages,
         temperature,
-        max_tokens: maxTokens,
+        max_tokens: tokens,
         response_format: { type: "json_object" },
       });
       const choice = completion.choices?.[0];
       const finish = choice?.finish_reason;
       const content = choice?.message?.content?.trim() || "";
       if (finish === "length") {
-        throw new HttpError(502, "AI output truncated (finish_reason=length)");
+        lastContent = content;
+        if (attempt >= 3) {
+          throw new HttpError(502, "AI output truncated (finish_reason=length)");
+        }
+        tokens = Math.min(tokens + 1200, 6000);
+        const tokenHint = Math.max(400, tokens - 200);
+        currentMessages = [
+          ...baseMessages,
+          {
+            role: "system",
+            content: `Previous ${label} response was truncated. Return concise JSON under ${tokenHint} tokens. Trim optional descriptions and keep each table to essential fields only.`,
+          },
+        ];
+        continue;
       }
       lastContent = content;
       try {
@@ -1487,7 +1502,7 @@ async function callWithRepair({
       if (err?.status === 429 || /rate limit/i.test(err?.message || "")) {
         throw new HttpError(429, "Rate limited by AI provider. Please retry in ~20s.");
       }
-      if (attempt >= 2) {
+      if (attempt >= 3) {
         if (err instanceof HttpError) throw err;
         throw new HttpError(502, err.message || "AI returned invalid JSON");
       }
