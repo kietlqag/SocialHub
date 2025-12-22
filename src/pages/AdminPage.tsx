@@ -281,6 +281,9 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [loadingDashboards, setLoadingDashboards] = useState(false);
   const [loadingDashboardDetail, setLoadingDashboardDetail] = useState(false);
   const [dashboardSearch, setDashboardSearch] = useState("");
+  const [busyDashboardIds, setBusyDashboardIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteDashboard, setConfirmDeleteDashboard] = useState<string | null>(null);
+  const [confirmDashboardText, setConfirmDashboardText] = useState("");
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
@@ -810,6 +813,99 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     toast.success(`${type} data exported successfully`);
   };
 
+  const handleDuplicateDashboard = async (dashboardId: string) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in again");
+      return;
+    }
+    setBusyDashboardIds((prev) => new Set(prev).add(dashboardId));
+    try {
+      const res = await api.post<{ dashboard: any }>(`/admin/dashboards/${dashboardId}/duplicate`, {}, session.token);
+      const d = res.dashboard;
+      const updated = {
+        id: d.id,
+        name: d.name || "Untitled",
+        description: d.description || "",
+        owner: d.ownerName || d.owner || "—",
+        ownerId: d.ownerId || null,
+        tables: d.tableCount || (Array.isArray(d.tables) ? d.tables.length : 0),
+        records: d.records || 0,
+        lastModified: d.updatedAt ? new Date(d.updatedAt).toLocaleString() : new Date().toLocaleString(),
+        status: d.status || "active",
+        size: d.size || "—",
+        widgets: d.widgetCount || 0,
+        insights: d.insightCount || 0,
+      } as DashboardItem;
+      setDashboards((prev) => [updated, ...prev]);
+      toast.success("Dashboard duplicated");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to duplicate");
+    } finally {
+      setBusyDashboardIds((prev) => {
+        const next = new Set(prev);
+        next.delete(dashboardId);
+        return next;
+      });
+    }
+  };
+
+  const handleLockToggleDashboard = async (dashboardId: string, lock: boolean) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in again");
+      return;
+    }
+    setBusyDashboardIds((prev) => new Set(prev).add(dashboardId));
+    try {
+      await api.patch(`/admin/dashboards/${dashboardId}/status`, { status: lock ? "locked" : "active" }, session.token);
+      setDashboards((prev) =>
+        prev.map((d) => (d.id === dashboardId ? { ...d, status: lock ? "locked" : "active" } : d))
+      );
+      toast.success(lock ? "Dashboard locked" : "Dashboard unlocked");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to update status");
+    } finally {
+      setBusyDashboardIds((prev) => {
+        const next = new Set(prev);
+        next.delete(dashboardId);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteDashboard = async (dashboardId: string) => {
+    setConfirmDeleteDashboard(dashboardId);
+    setConfirmDashboardText("");
+  };
+
+  const handlePreviewTable = async (dashboardId: string, tableKey: string) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in again");
+      return;
+    }
+    setLoadingDashboardDetail(true);
+    try {
+      const res = await api.get<{ rows: any[]; fields: any[] }>(
+        `/admin/dashboards/${dashboardId}/tables/${tableKey}/preview`,
+        session.token
+      );
+      setDialogType("dashboard-details");
+      setSelectedItem({
+        name: `Preview: ${tableKey}`,
+        tables: [{ key: tableKey, name: tableKey, fields: res.fields || [], sampleRows: res.rows || [] }],
+      });
+      setIsDialogOpen(true);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to preview table");
+    } finally {
+      setLoadingDashboardDetail(false);
+    }
+  };
   const filteredDashboards = dashboards.filter((d) => {
     if (!dashboardSearch.trim()) return true;
     const q = dashboardSearch.toLowerCase();
@@ -1330,7 +1426,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => toast.success("Dashboard duplicated")}
+                                  disabled={busyDashboardIds.has(dashboard.id)}
+                                  onClick={() => handleDuplicateDashboard(dashboard.id)}
                                   title="Duplicate"
                                 >
                                   <Copy className="h-4 w-4" />
@@ -1338,13 +1435,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() =>
-                                    toast.success(
-                                      dashboard.status === "locked"
-                                        ? "Dashboard unlocked"
-                                        : "Dashboard locked"
-                                    )
-                                  }
+                                  disabled={busyDashboardIds.has(dashboard.id)}
+                                  onClick={() => handleLockToggleDashboard(dashboard.id, dashboard.status !== "locked")}
                                   title={dashboard.status === "locked" ? "Unlock" : "Lock"}
                                 >
                                   {dashboard.status === "locked" ? (
@@ -1356,10 +1448,19 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => openDialog("export-dashboard", dashboard)}
-                                  title="Export Data"
+                                  onClick={() => handlePreviewTable(dashboard.id, (selectedItem?.tables?.[0]?.key) || "main")}
+                                  title="Preview Data"
                                 >
                                   <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  disabled={busyDashboardIds.has(dashboard.id)}
+                                  onClick={() => handleDeleteDashboard(dashboard.id)}
+                                  title="Delete"
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-600" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -2287,6 +2388,90 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                   .finally(() => {
                     setConfirmDeleteUser(null);
                     setConfirmText("");
+                  });
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!confirmDeleteDashboard} onOpenChange={(open) => { if (!open) { setConfirmDeleteDashboard(null); setConfirmDashboardText(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Delete</DialogTitle>
+            <DialogDescription>
+              Type <span className="font-semibold">confirm</span> to delete this dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Type confirm"
+              value={confirmDashboardText}
+              onChange={(e) => setConfirmDashboardText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && confirmDashboardText === "confirm" && confirmDeleteDashboard) {
+                  const dashboardId = confirmDeleteDashboard;
+                  const session = getCurrentSession();
+                  if (!session?.token) {
+                    toast.error("Please sign in again");
+                    return;
+                  }
+                  setBusyDashboardIds((prev) => new Set(prev).add(dashboardId));
+                  api.delete(`/api/dashboards/${dashboardId}`, session.token)
+                    .then(() => {
+                      setDashboards((prev) => prev.filter((d) => d.id !== dashboardId));
+                      toast.success("Dashboard deleted");
+                    })
+                    .catch((err: any) => {
+                      console.error(err);
+                      toast.error(err?.message || "Failed to delete dashboard");
+                    })
+                    .finally(() => {
+                      setBusyDashboardIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(dashboardId);
+                        return next;
+                      });
+                      setConfirmDeleteDashboard(null);
+                      setConfirmDashboardText("");
+                    });
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setConfirmDeleteDashboard(null); setConfirmDashboardText(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={confirmDashboardText !== "confirm" || !confirmDeleteDashboard}
+              onClick={() => {
+                if (!confirmDeleteDashboard) return;
+                const dashboardId = confirmDeleteDashboard;
+                const session = getCurrentSession();
+                if (!session?.token) {
+                  toast.error("Please sign in again");
+                  return;
+                }
+                setBusyDashboardIds((prev) => new Set(prev).add(dashboardId));
+                api.delete(`/api/dashboards/${dashboardId}`, session.token)
+                  .then(() => {
+                    setDashboards((prev) => prev.filter((d) => d.id !== dashboardId));
+                    toast.success("Dashboard deleted");
+                  })
+                  .catch((err: any) => {
+                    console.error(err);
+                    toast.error(err?.message || "Failed to delete dashboard");
+                  })
+                  .finally(() => {
+                    setBusyDashboardIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(dashboardId);
+                      return next;
+                    });
+                    setConfirmDeleteDashboard(null);
+                    setConfirmDashboardText("");
                   });
               }}
             >

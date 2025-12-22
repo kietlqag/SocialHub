@@ -79,6 +79,24 @@ export async function updateDashboardForOwner(id, params, updates) {
   return res.value ? mapDashboard(res.value) : null;
 }
 
+export async function duplicateDashboard(id, params) {
+  const filter = ownerFilter(params);
+  const objectId = requireObjectId(id);
+  if (!objectId) return null;
+  const source = await collection().findOne({ _id: objectId, ...(filter || {}) });
+  if (!source) return null;
+  const now = new Date();
+  const clone = {
+    ...source,
+    _id: undefined,
+    name: `${source.name || "Untitled"} (Copy)`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const res = await collection().insertOne(clone);
+  return mapDashboard({ ...clone, _id: res.insertedId });
+}
+
 export async function updateDashboardById(id, updates) {
   const objectId = requireObjectId(id);
   if (!objectId) return null;

@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { findUserByEmail } from "../repositories/userRepository.js";
 import { HttpError } from "../utils/httpError.js";
 import { listActivities, insertActivity } from "../repositories/activityRepository.js";
+import { duplicateDashboard } from "../repositories/dashboardRepository.js";
 
 export async function getUsers(req, res) {
   const users = await listUsers();
@@ -171,6 +172,208 @@ export async function getDashboardDetail(req, res) {
       tables,
     },
   });
+}
+
+export async function duplicateDashboardAdmin(req, res) {
+  const clone = await duplicateDashboard(req.params.id, { userId: req.user?.id });
+  if (!clone) return res.status(404).json({ error: "Dashboard not found" });
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "dashboard.duplicate",
+      targetType: "dashboard",
+      targetId: req.params.id,
+      metadata: { cloneId: clone.id, name: clone.name },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (dashboard.duplicate):", err.message);
+  }
+  res.status(201).json({ dashboard: clone });
+}
+
+export async function updateDashboardStatus(req, res) {
+  const { status } = req.body || {};
+  if (!status) throw new HttpError(400, "Status required");
+  const db = getSocialhubDb();
+  const objectId = new ObjectId(req.params.id);
+  const doc = await db.collection("dashboards").findOneAndUpdate(
+    { _id: objectId },
+    { $set: { status, updatedAt: new Date() } },
+    { returnDocument: "after" }
+  );
+  if (!doc.value) return res.status(404).json({ error: "Dashboard not found" });
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: status === "locked" ? "dashboard.lock" : "dashboard.unlock",
+      targetType: "dashboard",
+      targetId: req.params.id,
+      metadata: { status },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (dashboard status):", err.message);
+  }
+  res.json({ dashboard: { id: req.params.id, status } });
+}
+
+function ensureDashboard(id) {
+  try {
+    return new ObjectId(id);
+  } catch {
+    throw new HttpError(400, "Invalid dashboard id");
+  }
+}
+
+const extractTables = (doc) => (Array.isArray(doc.tables) ? doc.tables : []);
+
+function assertUniqueTableKey(tables, key, currentKey) {
+  const duplicate = tables.find((t) => t.key === key && t.key !== currentKey);
+  if (duplicate) throw new HttpError(409, "Table key already exists");
+}
+
+function assertUniqueFieldKeys(fields) {
+  const keys = fields.map((f) => f.key || f.id || f.name);
+  const dup = keys.find((k, idx) => k && keys.indexOf(k) !== idx);
+  if (dup) throw new HttpError(409, `Duplicate field key: ${dup}`);
+}
+
+export async function listDashboardTables(req, res) {
+  const db = getSocialhubDb();
+  const objectId = ensureDashboard(req.params.id);
+  const doc = await db.collection("dashboards").findOne({ _id: objectId });
+  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+  const tables = extractTables(doc);
+  res.json({ tables });
+}
+
+export async function addDashboardTable(req, res) {
+  const db = getSocialhubDb();
+  const objectId = ensureDashboard(req.params.id);
+  const doc = await db.collection("dashboards").findOne({ _id: objectId });
+  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+
+  const tables = extractTables(doc);
+  const { key, name, fields = [], sampleRows = [] } = req.body || {};
+  if (!key) throw new HttpError(400, "Table key is required");
+  assertUniqueTableKey(tables, key);
+  const normalizedFields = (fields || []).map((f, idx) => ({
+    key: f.key || f.id || `field_${idx}`,
+    name: f.name || f.fieldName || f.key || `Field ${idx + 1}`,
+    type: f.type || f.fieldType || "Text",
+  }));
+  assertUniqueFieldKeys(normalizedFields);
+  const table = {
+    key,
+    name: name || key,
+    fields: normalizedFields,
+    sampleRows: Array.isArray(sampleRows) ? sampleRows : [],
+  };
+  const updatedTables = [...tables, table];
+  await db.collection("dashboards").updateOne(
+    { _id: objectId },
+    { $set: { tables: updatedTables, updatedAt: new Date() } }
+  );
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "table.create",
+      targetType: "table",
+      targetId: key,
+      metadata: { dashboardId: req.params.id },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (table.create):", err.message);
+  }
+  res.status(201).json({ table });
+}
+
+export async function updateDashboardTable(req, res) {
+  const db = getSocialhubDb();
+  const objectId = ensureDashboard(req.params.id);
+  const currentKey = req.params.tableKey;
+  const doc = await db.collection("dashboards").findOne({ _id: objectId });
+  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+  const tables = extractTables(doc);
+  const idx = tables.findIndex((t) => t.key === currentKey);
+  if (idx === -1) return res.status(404).json({ error: "Table not found" });
+
+  const { key, name, fields, sampleRows } = req.body || {};
+  const nextKey = key || currentKey;
+  assertUniqueTableKey(tables, nextKey, currentKey);
+  const normalizedFields = Array.isArray(fields)
+    ? fields.map((f, i) => ({
+        key: f.key || f.id || `field_${i}`,
+        name: f.name || f.fieldName || f.key || `Field ${i + 1}`,
+        type: f.type || f.fieldType || "Text",
+      }))
+    : tables[idx].fields || [];
+  assertUniqueFieldKeys(normalizedFields);
+
+  const nextTable = {
+    ...tables[idx],
+    key: nextKey,
+    name: name || tables[idx].name,
+    fields: normalizedFields,
+    sampleRows: Array.isArray(sampleRows) ? sampleRows : tables[idx].sampleRows || [],
+  };
+  const updatedTables = [...tables];
+  updatedTables[idx] = nextTable;
+  await db.collection("dashboards").updateOne(
+    { _id: objectId },
+    { $set: { tables: updatedTables, updatedAt: new Date() } }
+  );
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "table.update",
+      targetType: "table",
+      targetId: nextKey,
+      metadata: { dashboardId: req.params.id },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (table.update):", err.message);
+  }
+  res.json({ table: nextTable });
+}
+
+export async function deleteDashboardTable(req, res) {
+  const db = getSocialhubDb();
+  const objectId = ensureDashboard(req.params.id);
+  const targetKey = req.params.tableKey;
+  const doc = await db.collection("dashboards").findOne({ _id: objectId });
+  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+  const tables = extractTables(doc);
+  const next = tables.filter((t) => t.key !== targetKey);
+  if (next.length === tables.length) return res.status(404).json({ error: "Table not found" });
+  await db.collection("dashboards").updateOne(
+    { _id: objectId },
+    { $set: { tables: next, updatedAt: new Date() } }
+  );
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "table.delete",
+      targetType: "table",
+      targetId: targetKey,
+      metadata: { dashboardId: req.params.id },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (table.delete):", err.message);
+  }
+  res.json({ success: true });
+}
+
+export async function previewDashboardTable(req, res) {
+  const db = getSocialhubDb();
+  const objectId = ensureDashboard(req.params.id);
+  const targetKey = req.params.tableKey;
+  const doc = await db.collection("dashboards").findOne({ _id: objectId });
+  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+  const tables = extractTables(doc);
+  const table = tables.find((t) => t.key === targetKey);
+  if (!table) return res.status(404).json({ error: "Table not found" });
+  const rows = Array.isArray(table.sampleRows) ? table.sampleRows.slice(0, 20) : [];
+  res.json({ rows, fields: table.fields || [] });
 }
 
 export async function createUser(req, res) {
