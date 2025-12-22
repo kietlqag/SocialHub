@@ -45,7 +45,7 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
       .catch((err: any) => {
         const status = err?.response?.status || err?.status;
         if (status === 403) {
-          setError(null);
+          setError('forbidden');
           return;
         }
         const message = err?.message || "Failed to load permissions";
@@ -75,29 +75,62 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
     const rolePerm = roleKey ? roleMap.get(roleKey) : undefined;
     const isOwner = roleKey === "owner";
 
+    // Helper to apply role-specific fallback overrides
+    const applyRoleFallback = (p: Record<PermissionKey, boolean>) => {
+      if (roleKey === "manager") {
+        p.view = true;
+        p.create = true;
+        p.edit = true;
+        // delete remains as returned from DB
+      } else if (roleKey === "viewer") {
+        p.view = true;
+        // other perms remain as returned from DB (default false)
+      }
+    };
+
     // Private: only owner or global admin can see
     if (accessMode === "private") {
       if (!(isOwner || opts.isGlobalAdmin)) {
-        return { view: false, create: false, edit: false, delete: false, manageAccess: false };
+        const finalPerms = { view: false, create: false, edit: false, delete: false, manageAccess: false };
+        console.log("DEBUG perms", { roleKey, accessMode, mergedPerms: finalPerms });
+        return finalPerms;
       }
-      if (rolePerm) return { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
-      return empty;
+      const finalPerms = rolePerm ? ({ ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>) : empty;
+      applyRoleFallback(finalPerms);
+      console.log("DEBUG perms", { roleKey, accessMode, mergedPerms: finalPerms });
+      return finalPerms;
     }
 
     // Restricted: must have assignment
     if (accessMode === "restricted") {
+      let finalPerms: Record<PermissionKey, boolean>;
       if (!rolePerm) {
-        return { view: false, create: false, edit: false, delete: false, manageAccess: false };
+        finalPerms = { view: false, create: false, edit: false, delete: false, manageAccess: false };
+      } else {
+        finalPerms = { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
       }
-      return { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
+      // Apply role fallback even when rolePerm is missing or misconfigured
+      applyRoleFallback(finalPerms);
+      console.log("DEBUG perms", { roleKey, accessMode, mergedPerms: finalPerms });
+      return finalPerms;
     }
 
     // Public: if has assignment -> role perms, else view-only
     if (accessMode === "public") {
-      if (rolePerm) return { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
-      return { view: true, create: false, edit: false, delete: false, manageAccess: false };
+      let finalPerms: Record<PermissionKey, boolean>;
+      if (rolePerm) {
+        finalPerms = { ...DEFAULT_PERMS, ...rolePerm.permissions } as Record<PermissionKey, boolean>;
+      } else {
+        finalPerms = { view: true, create: false, edit: false, delete: false, manageAccess: false };
+      }
+      // Apply role fallback so managers/viewers get the expected minimum permissions
+      applyRoleFallback(finalPerms);
+      console.log("DEBUG perms", { roleKey, accessMode, mergedPerms: finalPerms });
+      return finalPerms;
     }
 
+    // Fallback
+    console.log("DEBUG perms", { roleKey, accessMode, mergedPerms: empty });
     return empty;
   }, [accessMode, currentRole, dashboardId, opts.isGlobalAdmin, roleMap]);
 

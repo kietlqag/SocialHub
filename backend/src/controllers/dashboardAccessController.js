@@ -54,21 +54,61 @@ export const getDashboardAccess = async (req, res) => {
   if (!dashboard) {
     return res.status(404).json({ message: "Dashboard not found" });
   }
+
   const currentUserId = resolveUserId(req);
-  if (!canEditDashboard(dashboard, currentUserId)) {
-    return res.status(403).json({ message: "Forbidden" });
-  }
+  const defaultAccess = buildDefaultAccessControl();
 
   let accessControl = dashboard.accessControl;
   if (!accessControl) {
-    accessControl = buildDefaultAccessControl();
+    accessControl = { ...defaultAccess };
     await dashboards().updateOne(
       { _id: dashboard._id },
       { $set: { accessControl, updatedAt: new Date() } },
     );
   }
 
-  return res.json(await buildAccessPayload({ ...dashboard, accessControl }));
+  const accessMode = accessControl.accessMode || "restricted";
+  const rawAssignments = Array.isArray(accessControl.userAssignments) ? accessControl.userAssignments : [];
+  const sanitizedAssignments = rawAssignments.filter((assignment) => assignment && assignment.userId);
+  const rolePermissions =
+    Array.isArray(accessControl.rolePermissions) && accessControl.rolePermissions.length
+      ? accessControl.rolePermissions
+      : defaultAccess.rolePermissions;
+
+  const userAssignments = await hydrateAssignments(sanitizedAssignments);
+
+  const isOwner = Boolean(dashboard.userId && currentUserId && String(dashboard.userId) === String(currentUserId));
+  const isGlobalAdmin = Boolean(
+    req.user?.isGlobalAdmin ||
+      (Array.isArray(req.user?.roles) && req.user.roles.includes("globalAdmin")) ||
+      req.user?.role === "globalAdmin",
+  );
+  const isAssigned = Boolean(
+    currentUserId &&
+      sanitizedAssignments.some((assignment) => assignment?.userId && String(assignment.userId) === String(currentUserId)),
+  );
+
+  const allowAccess =
+    accessMode === "public" ||
+    (accessMode === "restricted" && (isAssigned || isOwner || isGlobalAdmin)) ||
+    (accessMode === "private" && (isOwner || isGlobalAdmin));
+
+  if (!allowAccess) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  console.log("[getAccessControl]", {
+    dashboardId,
+    userId: currentUserId,
+    accessMode,
+    assignments: userAssignments.map((assignment) => ({ userId: assignment.userId, role: assignment.role })),
+  });
+
+  return res.json({
+    accessMode,
+    rolePermissions,
+    userAssignments,
+  });
 };
 
 export const updateDashboardAccess = async (req, res) => {
