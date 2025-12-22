@@ -32,6 +32,7 @@ import { findRecordById } from "../repositories/dashboardRecordRepository.js";
 import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
 import { createNotification as createNotificationRepo } from "../repositories/notificationRepository.js";
 import { summarizeSamplePreview } from "./sampleDataParser.js";
+import { seedSampleDataForDashboard } from "./sampleDataSeeder.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -1942,6 +1943,13 @@ export async function generateAndPersistDashboard({ name, type, description, ses
   });
   await insertTables(dashboard.id, blueprint.tables);
   await insertRelationships(dashboard.id, blueprint.relationships);
+  if (samplePreview && Array.isArray(samplePreview.tables) && samplePreview.tables.length) {
+    try {
+      await seedSampleDataForDashboard(dashboard.id, blueprint.tables, samplePreview);
+    } catch (err) {
+      console.error("[seedSampleDataForDashboard] failed", err);
+    }
+  }
   return {
     dashboardId: dashboard.id,
     name: dashboard.name,

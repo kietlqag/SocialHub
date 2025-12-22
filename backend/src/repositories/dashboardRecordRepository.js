@@ -31,6 +31,13 @@ export async function listRecordsByDashboard({ dashboardId, tableKey }) {
   }));
 }
 
+export async function countRecordsByDashboard({ dashboardId, tableKey }) {
+  if (!dashboardId) return 0;
+  const filter = { dashboardId: new ObjectId(dashboardId) };
+  if (tableKey) filter.tableKey = tableKey;
+  return collection().countDocuments(filter);
+}
+
 export async function findRecordById({ dashboardId, tableKey, recordId }) {
   if (!dashboardId || !recordId) return null;
   if (!ObjectId.isValid(recordId)) return null;
