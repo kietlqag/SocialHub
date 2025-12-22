@@ -30,6 +30,8 @@ import { upsertHideOverride, listOverridesByDashboard } from "../repositories/da
 import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
 import { findRecordById } from "../repositories/dashboardRecordRepository.js";
 import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
+import { createNotification as createNotificationRepo } from "../repositories/notificationRepository.js";
+import { summarizeSamplePreview } from "./sampleDataParser.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -213,6 +215,176 @@ const TABLE_LIBRARY = [
     ],
   },
 ];
+
+const normalizeNameKey = (value) =>
+  (value || "")
+    .toString()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+const remapSampleRowsForTable = (previewTable, table) => {
+  if (!previewTable || !Array.isArray(previewTable.sampleRows) || !previewTable.sampleRows.length) {
+    return [];
+  }
+  if (!table || !Array.isArray(table.fields) || !table.fields.length) {
+    return previewTable.sampleRows;
+  }
+
+  const columnByNormalized = new Map();
+  if (Array.isArray(previewTable.columns)) {
+    previewTable.columns.forEach((col) => {
+      const normalized = normalizeNameKey(col?.name || col?.key || "");
+      if (normalized) {
+        columnByNormalized.set(normalized, col.name || col.key);
+      }
+    });
+  }
+
+  return previewTable.sampleRows.map((row) => {
+    if (!row || typeof row !== "object") return {};
+    const base = { ...row };
+    table.fields.forEach((field) => {
+      const fieldKey = field?.key?.toString();
+      if (!fieldKey) return;
+      const normalizedKey = normalizeNameKey(fieldKey);
+      const fieldName = field?.name || field?.fieldName || field?.label || "";
+      const normalizedName = normalizeNameKey(fieldName);
+      const candidates = [fieldKey, fieldName, field?.fieldName, field?.label]
+        .filter(Boolean)
+        .map((value) => value.toString());
+
+      let value;
+      for (const candidate of candidates) {
+        if (Object.prototype.hasOwnProperty.call(row, candidate)) {
+          value = row[candidate];
+          break;
+        }
+      }
+
+      if (value === undefined && columnByNormalized.size) {
+        const columnName = columnByNormalized.get(normalizedKey) || columnByNormalized.get(normalizedName);
+        if (columnName && Object.prototype.hasOwnProperty.call(row, columnName)) {
+          value = row[columnName];
+        }
+      }
+
+      if (value === undefined) {
+        const matchKey = Object.keys(row).find((key) => normalizeNameKey(key) === normalizedKey);
+        if (matchKey) {
+          value = row[matchKey];
+        }
+      }
+
+      if (value !== undefined) {
+        base[fieldKey] = value;
+      }
+    });
+    return base;
+  });
+};
+
+const TYPE_PROMPT_HINTS = {
+  healthcare: {
+    plan:
+      "Focus on healthcare workflows: patients, appointments, providers, lab results, treatments, billing, and clinical metrics. Avoid e-commerce concepts such as orders, carts, products, SKUs, revenue, or inventory.",
+    schema:
+      "Generate medical data structures: patients, encounters, appointments, providers, departments, procedures, lab_results, medications. Use healthcare terminology (visit_count, wait_time, admission_rate, outcomes). Do not introduce e-commerce fields or widgets (orders, revenue, SKU, cart, product).",
+  },
+  education: {
+    plan:
+      "Focus on education workflows: students, courses, classes, instructors, enrollments, assessments, attendance. Avoid sales or e-commerce language.",
+    schema:
+      "Produce academic tables (students, courses, enrollments, grades, attendance). Favor metrics like completion_rate, engagement_time, GPA. Do not create commerce-specific fields.",
+  },
+  finance: {
+    plan:
+      "Center on financial reporting: transactions, accounts, budgets, cash flow, forecasts, profitability. Limit marketing or inventory language.",
+    schema:
+      "Return finance-oriented tables (transactions, accounts, forecasts, expenses, revenue). Emphasize financial KPIs (gross_margin, burn_rate, runway).",
+  },
+  saas: {
+    plan:
+      "Focus on SaaS analytics: users, subscriptions, activation, retention, product usage, feature adoption, churn. Avoid physical inventory or retail terms.",
+    schema:
+      "Generate SaaS data (users, subscriptions, sessions, feature_usage). Metrics should include activation_rate, retention, seat_expansion, churn, MRR.",
+  },
+  ecommerce: {
+    plan:
+      "Focus on e-commerce funnels: orders, customers, products, inventory, fulfillment, marketing performance.",
+    schema:
+      "Return commerce tables (orders, customers, products, inventory, shipments) with revenue-oriented metrics.",
+  },
+};
+
+const buildSamplePreviewContext = (samplePreview) => {
+  if (!samplePreview || !Array.isArray(samplePreview.tables) || !samplePreview.tables.length) {
+    return null;
+  }
+  return summarizeSamplePreview(samplePreview, { rowLimit: 3, columnLimit: 10 });
+};
+
+const attachSampleRowsToTables = (tables = [], samplePreview) => {
+  if (!Array.isArray(tables) || !tables.length) return tables;
+  if (!samplePreview || !Array.isArray(samplePreview.tables) || !samplePreview.tables.length) {
+    return tables;
+  }
+
+  const previewTables = samplePreview.tables.map((table, index) => ({
+    index,
+    normalizedName: normalizeNameKey(table.name),
+    columns: Array.isArray(table.columns)
+      ? table.columns.map((col) => normalizeNameKey(col.name)).filter(Boolean)
+      : [],
+    sampleRows: Array.isArray(table.sampleRows) ? table.sampleRows : [],
+  }));
+
+  const assigned = new Set();
+
+  const findBestMatchIndex = (table) => {
+    const normalizedTableName = normalizeNameKey(table.key || table.name);
+    if (!normalizedTableName && !Array.isArray(table.fields)) return -1;
+
+    // Exact name match on first pass
+    const exactIndex = previewTables.findIndex(
+      (preview) => !assigned.has(preview.index) && preview.normalizedName && preview.normalizedName === normalizedTableName,
+    );
+    if (exactIndex !== -1) return exactIndex;
+
+    const tableFieldKeys = Array.isArray(table.fields)
+      ? table.fields.map((field) => normalizeNameKey(field.key || field.name || field.fieldName)).filter(Boolean)
+      : [];
+    if (!tableFieldKeys.length) return -1;
+
+    let bestIndex = -1;
+    let bestScore = 0;
+    previewTables.forEach((preview) => {
+      if (assigned.has(preview.index)) return;
+      if (!preview.columns.length) return;
+      const overlap = tableFieldKeys.reduce(
+        (count, key) => (preview.columns.includes(key) ? count + 1 : count),
+        0,
+      );
+      if (overlap > bestScore) {
+        bestScore = overlap;
+        bestIndex = preview.index;
+      }
+    });
+
+    return bestIndex;
+  };
+
+  return tables.map((table) => {
+    const matchIndex = findBestMatchIndex(table);
+    if (matchIndex === -1) return table;
+    assigned.add(matchIndex);
+    const preview = samplePreview.tables.find((t, idx) => idx === matchIndex);
+    if (!preview || !Array.isArray(preview.sampleRows)) return table;
+    return {
+      ...table,
+      sampleRows: remapSampleRowsForTable(preview, table),
+    };
+  });
+};
 
 const makeFieldId = (tableKey, index) => `${tableKey}-${index}-${randomUUID().slice(0, 6)}`;
 
@@ -433,6 +605,10 @@ const buildWidgetBlueprints = (fields) =>
     };
   });
 
+const SAMPLE_ROW_LIMIT = 50;
+const SAMPLE_COLUMN_LIMIT = 50;
+const SAMPLE_VALUE_LIMIT = 160;
+
 const sanitizeWidgets = (widgets = [], fields = []) => {
   if (!Array.isArray(widgets)) return [];
   const allowedIds = new Set(fields.map((f) => f.id));
@@ -446,6 +622,37 @@ const sanitizeWidgets = (widgets = [], fields = []) => {
       description: widget.description?.toString().slice(0, 200) || "",
       codeSnippet: widget.codeSnippet?.toString() || "",
     }));
+};
+
+const sanitizeSampleValue = (value) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    try {
+      const json = JSON.stringify(value);
+      return json.length > SAMPLE_VALUE_LIMIT ? `${json.slice(0, SAMPLE_VALUE_LIMIT - 3)}...` : json;
+    } catch (err) {
+      const str = String(value);
+      return str.length > SAMPLE_VALUE_LIMIT ? `${str.slice(0, SAMPLE_VALUE_LIMIT - 3)}...` : str;
+    }
+  }
+  const text = String(value);
+  return text.length > SAMPLE_VALUE_LIMIT ? `${text.slice(0, SAMPLE_VALUE_LIMIT - 3)}...` : text;
+};
+
+const sanitizeSampleRows = (rows = []) => {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  return rows.slice(0, SAMPLE_ROW_LIMIT).map((row) => {
+    if (!row || typeof row !== "object") return {};
+    const entries = Object.entries(row).slice(0, SAMPLE_COLUMN_LIMIT);
+    const sanitized = {};
+    entries.forEach(([key, value]) => {
+      if (!key) return;
+      sanitized[key] = sanitizeSampleValue(value);
+    });
+    return sanitized;
+  });
 };
 
 const sanitizeTables = (tables = []) => {
@@ -490,6 +697,7 @@ const sanitizeTables = (tables = []) => {
           ? table.recommendedWidgets.map((widget) => widget?.toString().slice(0, 200)).filter(Boolean)
           : [],
         fields: normalizedFields,
+            sampleRows: sanitizeSampleRows(table.sampleRows),
       };
     })
     .filter((table) => table.fields.length);
@@ -1566,8 +1774,11 @@ function validateBlueprint(rawBlueprint) {
   };
 }
 
-async function generatePlan({ name, description, type }) {
+async function generatePlan({ name, description, type, samplePreview }) {
   const libraryKeys = TABLE_LIBRARY.map((t) => `${t.key}:${t.name}`).join("; ");
+  const sampleContext = buildSamplePreviewContext(samplePreview);
+  const typeKey = (type || "").toLowerCase();
+  const typeHint = TYPE_PROMPT_HINTS[typeKey]?.plan;
   const messages = [
     {
       role: "system",
@@ -1575,7 +1786,11 @@ async function generatePlan({ name, description, type }) {
     },
     {
       role: "user",
-      content: `Dashboard name: ${name}\nDashboard type: ${type || ""}\nDescription: ${description}\nReturn JSON only.`,
+      content: `Dashboard name: ${name}\nDashboard type: ${type || ""}\nDescription: ${description}\n${
+        typeHint ? `Domain focus: ${typeHint}\n` : ""
+      }${
+        sampleContext ? `Sample data preview:\n${sampleContext}\n` : ""
+      }Return JSON only.`,
     },
   ];
   return callWithRepair({
@@ -1588,7 +1803,7 @@ async function generatePlan({ name, description, type }) {
   });
 }
 
-async function generateSchemaAndInsights({ name, description, type, plan }) {
+async function generateSchemaAndInsights({ name, description, type, plan, samplePreview }) {
   const planJson = JSON.stringify(plan);
   const libraryKeys = TABLE_LIBRARY.map((t) => `${t.key}:${t.name}`).join("; ");
   const selectedTemplates = Array.isArray(plan?.proposed_table_keys)
@@ -1599,6 +1814,9 @@ async function generateSchemaAndInsights({ name, description, type, plan }) {
     name: tpl.name,
     sampleFields: tpl.fields?.slice(0, 6).map((f) => ({ name: f.fieldName, type: f.fieldType })),
   }));
+  const sampleContext = buildSamplePreviewContext(samplePreview);
+  const typeKey = (type || "").toLowerCase();
+  const typeHint = TYPE_PROMPT_HINTS[typeKey]?.schema;
   const messages = [
     {
       role: "system",
@@ -1608,7 +1826,7 @@ async function generateSchemaAndInsights({ name, description, type, plan }) {
       role: "user",
       content: `Dashboard name: ${name}\nDashboard type: ${type || ""}\nDescription: ${description}\nPlan JSON: ${planJson}\nTable templates (optional to reuse/rename): ${JSON.stringify(
         templateHints,
-      )}\nReturn JSON only.`,
+      )}\n${typeHint ? `Domain focus: ${typeHint}\n` : ""}${sampleContext ? `Sample data preview:\n${sampleContext}\n` : ""}Return JSON only.`,
     },
   ];
 
@@ -1647,13 +1865,13 @@ const buildDefaultWidgets = (tables = [], insights = []) => {
   return widgets;
 };
 
-export async function generateDashboardFields({ name, description, type }) {
+export async function generateDashboardFields({ name, description, type, samplePreview }) {
   if (!name?.trim() || !description?.trim()) {
     throw new HttpError(400, "Name and description are required");
   }
-  const plan = await generatePlan({ name, description, type });
-  const blueprint = await generateSchemaAndInsights({ name, description, type, plan });
-  const tables = blueprint.tables || [];
+  const plan = await generatePlan({ name, description, type, samplePreview });
+  const blueprint = await generateSchemaAndInsights({ name, description, type, plan, samplePreview });
+  const tables = attachSampleRowsToTables(blueprint.tables || [], samplePreview);
   const relationships = blueprint.relationships || [];
   const insights = blueprint.insights || [];
   const aiWidgets = Array.isArray(blueprint.widgets)
@@ -1688,11 +1906,11 @@ export async function generateDashboardFields({ name, description, type }) {
   };
 }
 
-export async function generateAndPersistDashboard({ name, type, description, sessionId, userId }) {
+export async function generateAndPersistDashboard({ name, type, description, sessionId, userId, samplePreview }) {
   if (!sessionId && !userId) {
     throw new HttpError(400, "sessionId or userId required");
   }
-  const blueprint = await generateDashboardFields({ name, description, type });
+  const blueprint = await generateDashboardFields({ name, description, type, samplePreview });
   const widgets = needsWidgetRegeneration(blueprint.widgets, blueprint.tables)
     ? generateOverviewWidgetsFromSchema(description, blueprint.tables)
     : blueprint.widgets;
@@ -1705,6 +1923,7 @@ export async function generateAndPersistDashboard({ name, type, description, ses
     widgets: widgets || [],
     insights: blueprint.insights || [],
     ui: blueprint.ui || {},
+    samplePreview,
   });
   await insertTables(dashboard.id, blueprint.tables);
   await insertRelationships(dashboard.id, blueprint.relationships);
@@ -1721,7 +1940,7 @@ export async function generateAndPersistDashboard({ name, type, description, ses
   };
 }
 
-export async function saveDashboard({ sessionId, userId, name, description, fields, widgets, componentCode, tables }) {
+export async function saveDashboard({ sessionId, userId, name, description, fields, widgets, componentCode, tables, samplePreview }) {
   if (!sessionId && !userId) {
     throw new HttpError(400, "sessionId or userId required");
   }
@@ -1743,7 +1962,24 @@ export async function saveDashboard({ sessionId, userId, name, description, fiel
     widgets: sanitizeWidgets(widgets, normalizedFields),
     tables: normalizedTables,
     componentCode: componentCode?.toString() || "",
+    samplePreview,
   });
+  // Observer: persist notification when a dashboard is created (best-effort, non-blocking)
+  try {
+    await createNotificationRepo({
+      title: "New dashboard created",
+      message: `Dashboard "${payload.name}" has been created.`,
+      type: "dashboard_created",
+      metadata: {
+        dashboardId: payload.id,
+        createdBy: userId || null,
+      },
+      user_id: userId || null,
+      read: false,
+    });
+  } catch (err) {
+    console.error("Failed to record dashboard creation notification", err);
+  }
   return payload;
 }
 

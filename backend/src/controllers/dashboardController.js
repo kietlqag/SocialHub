@@ -33,15 +33,30 @@ import {
   canViewDashboardData,
 } from "../access/dashboardPermissions.js";
 import { findDashboardById as findDashboardByIdRepo } from "../repositories/dashboardRepository.js";
+import { parseSampleDataFile, normalizeSamplePreview } from "../services/sampleDataParser.js";
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
   userId: req.user?.id || req.body.userId || req.query.userId || null,
 });
 
+const resolveSamplePreview = (req) => {
+  const rawSchema = req.body?.inferredSchema ?? req.body?.samplePreview;
+  let samplePreview = normalizeSamplePreview(rawSchema);
+  if (req.file) {
+    try {
+      samplePreview = parseSampleDataFile(req.file) || samplePreview;
+    } catch (err) {
+      throw new HttpError(400, err?.message || "Failed to parse sample file");
+    }
+  }
+  return samplePreview;
+};
+
 const sanitizeDashboardForPublicView = (dashboard) => {
   if (!dashboard) return dashboard;
   const clone = { ...dashboard };
+  clone.samplePreview = null;
 
   if (Array.isArray(clone.tables)) {
     clone.tables = clone.tables.map((t) => ({
@@ -63,22 +78,37 @@ const sanitizeDashboardForPublicView = (dashboard) => {
 };
 
 export async function generateStructure(req, res) {
-  const { name, description, type, sessionId, userId } = req.body;
+  const { name, description, type, sessionId, userId } = req.body || {};
+  const samplePreview = resolveSamplePreview(req);
   const owner = {
     sessionId: sessionId || req.query.sessionId || null,
     userId: userId || req.query.userId || null,
   };
-  const structure = await generateAndPersistDashboard({ name, type, description, ...owner });
+  const structure = await generateAndPersistDashboard({ name, type, description, ...owner, samplePreview });
   res.json(structure);
+}
+
+export async function generateStructureWithUpload(req, res) {
+  return generateStructure(req, res);
 }
 
 export async function createDashboard(req, res) {
   const owner = parseOwner(req);
   const { name, description, fields, widgets, componentCode, tables } = req.body;
+  const samplePreview = resolveSamplePreview(req);
   if (!owner.sessionId && !owner.userId) {
     throw new HttpError(400, "sessionId or userId required");
   }
-  const dashboard = await saveDashboard({ ...owner, name, description, fields, widgets, componentCode, tables });
+  const dashboard = await saveDashboard({
+    ...owner,
+    name,
+    description,
+    fields,
+    widgets,
+    componentCode,
+    tables,
+    samplePreview,
+  });
   res.status(201).json({ dashboard });
 }
 

@@ -3,6 +3,42 @@ import { getSocialhubDb } from "../mongo.js";
 
 const collection = () => getSocialhubDb().collection("dashboard_tables");
 
+const SAMPLE_ROW_LIMIT = 50;
+const SAMPLE_COLUMN_LIMIT = 50;
+const SAMPLE_VALUE_LIMIT = 160;
+
+const sanitizeSampleValue = (value) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    try {
+      const json = JSON.stringify(value);
+      return json.length > SAMPLE_VALUE_LIMIT ? `${json.slice(0, SAMPLE_VALUE_LIMIT - 3)}...` : json;
+    } catch (err) {
+      const str = String(value);
+      return str.length > SAMPLE_VALUE_LIMIT ? `${str.slice(0, SAMPLE_VALUE_LIMIT - 3)}...` : str;
+    }
+  }
+  const text = String(value);
+  return text.length > SAMPLE_VALUE_LIMIT ? `${text.slice(0, SAMPLE_VALUE_LIMIT - 3)}...` : text;
+};
+
+const sanitizeSampleRows = (rows = []) => {
+  if (!Array.isArray(rows) || !rows.length) return [];
+  return rows.slice(0, SAMPLE_ROW_LIMIT).map((row) => {
+    if (!row || typeof row !== "object") return {};
+    const sanitized = {};
+    Object.entries(row)
+      .slice(0, SAMPLE_COLUMN_LIMIT)
+      .forEach(([key, value]) => {
+        if (!key) return;
+        sanitized[key] = sanitizeSampleValue(value);
+      });
+    return sanitized;
+  });
+};
+
 export async function insertTables(dashboardId, tables) {
   if (!dashboardId || !Array.isArray(tables) || !tables.length) return [];
   const docs = tables.map((table) => ({
@@ -11,6 +47,7 @@ export async function insertTables(dashboardId, tables) {
     name: table.name,
     description: table.description || "",
     fields: table.fields || [],
+    sampleRows: sanitizeSampleRows(table.sampleRows),
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -44,6 +81,7 @@ export async function listTablesByDashboard(dashboardId) {
     name: row.name,
     description: row.description || "",
     fields: Array.isArray(row.fields) ? row.fields.map((f) => normalizeField(f)) : [],
+    sampleRows: sanitizeSampleRows(row.sampleRows),
   }));
 }
 

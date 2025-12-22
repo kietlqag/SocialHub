@@ -20,6 +20,7 @@ import {
   upsertDashboardServiceBinding,
   upsertMember,
 } from "../repositories/platformRepository.js";
+import { createNotification as createNotificationRepo } from "../repositories/notificationRepository.js";
 import { HttpError } from "../utils/httpError.js";
 
 const slugify = (value) =>
@@ -116,7 +117,25 @@ export async function createDashboard(userId, organizationId, payload) {
   if (!payload?.title) {
     throw new HttpError(400, "Dashboard can mot tieu de.");
   }
-  return insertDashboard(organizationId, payload, userId);
+  const dashboard = await insertDashboard(organizationId, payload, userId);
+  // Observer: persist notification on dashboard creation (best-effort)
+  try {
+    await createNotificationRepo({
+      title: "New dashboard created",
+      message: `Dashboard "${dashboard.title}" has been created.`,
+      type: "dashboard_created",
+      metadata: {
+        dashboardId: dashboard.id,
+        organizationId,
+        createdBy: userId,
+      },
+      user_id: userId,
+      read: false,
+    });
+  } catch (err) {
+    console.error("Failed to record dashboard creation notification", err);
+  }
+  return dashboard;
 }
 
 export async function listDashboards(userId, organizationId) {

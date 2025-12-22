@@ -208,20 +208,28 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
           ) : (
             notifications.map((notification) => {
               const Icon = notification.icon || MessageSquare;
+              const typeClass =
+                notification.type === "success"
+                  ? "success"
+                  : notification.type === "warning"
+                    ? "warning"
+                    : notification.type === "alert"
+                      ? "alert"
+                      : "info";
               return (
-                <div key={notification.id} className="notificationItem">
+                <div key={notification.id} className={`notificationItem ${typeClass} ${notification.read ? "" : "unread"}`}>
                   <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-white/80 shadow-sm">
-                      <Icon className="w-4 h-4 text-indigo-600" />
+                    <div className="notifIconWrap">
+                      <Icon className="w-4 h-4 text-indigo-700" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{notification.title}</p>
+                        <p className="text-sm font-semibold text-slate-900 notifTitle">{notification.title}</p>
                         {!notification.read && <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${getNotificationColor(notification.type).dot}`} />}
                       </div>
-                      <p className="text-sm text-slate-700 mb-2">{notification.message}</p>
+                      <p className="text-sm text-slate-700 mb-2 notifMessage">{notification.message}</p>
                       <div className="flex items-center justify-between">
-                        <span className="notificationTime">{notification.time}</span>
+                        <span className="notificationTime notifTime">{notification.time}</span>
                         <div className="flex items-center gap-1">
                           {!notification.read && (
                             <button className="iconBtn" onClick={() => markAsRead(notification.id)}>

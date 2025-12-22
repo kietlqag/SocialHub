@@ -105,7 +105,11 @@ export default function ManageDashList() {
   const handleCreateDashboard = async (data: DraftDashboard) => {
     if (!sessionId) return;
     if (data.id) {
-      const sanitizedTables = (data.tables || []).map((t) => ({ ...t, sampleRows: [] }));
+      const seededFromFile = dataFileAttached(data);
+      const sanitizedTables = (data.tables || []).map((t) => ({
+        ...t,
+        sampleRows: seededFromFile ? t.sampleRows : [],
+      }));
       const derivedFields =
         data.fields && data.fields.length
           ? data.fields
@@ -145,11 +149,12 @@ export default function ManageDashList() {
         sessionId,
         userId: currentUser?.id || null,
       });
+      const seededFromFile = dataFileAttached(data);
       const sanitizedTables =
         res.dashboard.tables?.map((t) => ({
           ...t,
           // Nếu không có file upload thì không gắn sampleRows (tránh dữ liệu ảo)
-          sampleRows: dataFileAttached(data) ? t.sampleRows : [],
+          sampleRows: seededFromFile ? t.sampleRows : [],
         })) || [];
 
       const sanitizedDashboard = {

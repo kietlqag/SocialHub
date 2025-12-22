@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   generateStructure,
@@ -21,6 +22,7 @@ import {
   deleteInsight,
   patchInsight,
   getDashboardByIdController,
+  generateStructureWithUpload,
 } from "../controllers/dashboardController.js";
 import {
   getDashboardAccess,
@@ -34,8 +36,10 @@ import { getPublicDashboards } from "../controllers/publicDashboardController.js
 import { getTableSchema, updateTableSchema } from "../controllers/tableSchemaController.js";
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.post("/dashboards/generate", asyncHandler(generateStructure));
+router.post("/dashboards/ai-generate", upload.single("sampleFile"), asyncHandler(generateStructureWithUpload));
 router.post("/dashboards", asyncHandler(createDashboard));
 router.get("/dashboards", asyncHandler(listDashboard));
 router.get("/dashboards/public", asyncHandler(getPublicDashboards));

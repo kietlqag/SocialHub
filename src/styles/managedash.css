@@ -213,14 +213,14 @@
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 560px));
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 1.1rem;
-  justify-content: center;
+  justify-items: stretch;
 }
 
 .dashboard-grid > * {
   width: 100%;
-  max-width: 560px;
+  max-width: 100%;
 }
 
 .recent-scroll {
