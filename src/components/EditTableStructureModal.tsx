@@ -36,7 +36,8 @@ const FIELD_TYPES: Array<DashboardField["type"]> = ["string", "number", "boolean
 const RESERVED_KEYS = new Set(["_id", "created_at", "updated_at", ...SYSTEM_FIELDS]);
 const SYSTEM_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
 
-const makeTempId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+const makeTempId = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
 
 const normalizeKey = (value: string) =>
   value
@@ -45,34 +46,52 @@ const normalizeKey = (value: string) =>
     .replace(/_{2,}/g, "_")
     .trim();
 
+/**
+ * Legacy heuristic (giữ lại để validate nếu bạn cần)
+ */
 const looksLikeLegacyReference = (field: Partial<DashboardField>) => {
   if (!field) return false;
   const keyValue = (field.key || (field as any).fieldKey || "").toString().trim().toLowerCase();
   if (!keyValue) return false;
   if (SYSTEM_KEYS.has(keyValue)) return false;
   if (keyValue === "id") return false;
-  if (keyValue.endsWith("_id")) return true;
-  return false;
+  return keyValue.endsWith("_id");
 };
 
+/**
+ * ✅ Detect reference theo backend của bạn:
+ * - FK system: type = "id", semanticType = "reference", ref = "appointments"
+ * - User created reference: type = "reference"
+ */
 const isReferenceLike = (field: Partial<DashboardField>) => {
   if (!field) return false;
+
+  // backend semantic reference (system FK)
+  const semanticType = (field as any).semanticType as string | undefined;
+  if (semanticType && semanticType.toLowerCase() === "reference") return true;
+
+  // user-created reference
   const rawType = (field.type || (field as any).dataType) as string | undefined;
   const normalizedType = rawType ? rawType.toLowerCase() : undefined;
   if (normalizedType === "reference") return true;
-  if (field.referenceTable || field.displayField) return true;
+
+  // optional hint
   const relationType = (field as any).relationType as string | undefined;
   if (relationType && relationType.toLowerCase() === "reference") return true;
-  if ((field as any).allowEditReference === true) return true;
-  if (looksLikeLegacyReference(field)) return true;
+
+  // ❌ Không đoán theo *_id nữa để tránh false-positive lan checkbox
+  // if (looksLikeLegacyReference(field)) return true;
+
   return false;
 };
 
 const normalizeFieldVisibility = (field: DashboardField): EditableField => {
-  const key = String(field.key || field.fieldName || field.name || "");
-  const isSystem = field.system === true || field.systemField === true || SYSTEM_KEYS.has(key);
+  const key = String(field.key || (field as any).fieldName || (field as any).name || "");
+  const isSystem = field.system === true || (field as any).systemField === true || SYSTEM_KEYS.has(key);
+
   const rawVisibleInTable = (field as any).visibleInTable;
   const rawHidden = (field as any).hidden;
+
   let visible: boolean;
   if (rawVisibleInTable !== undefined || rawHidden !== undefined) {
     if (rawHidden === true) visible = false;
@@ -81,9 +100,13 @@ const normalizeFieldVisibility = (field: DashboardField): EditableField => {
   } else {
     visible = isSystem ? false : true;
   }
+
   const referenceLike = isReferenceLike(field);
   const allowEditReferenceRaw = (field as any).allowEditReference;
-  const allowEditReference = referenceLike || allowEditReferenceRaw !== undefined ? Boolean(allowEditReferenceRaw) : undefined;
+
+  // ✅ chỉ set allowEditReference nếu field thực sự reference-like
+  const allowEditReference = referenceLike ? Boolean(allowEditReferenceRaw) : undefined;
+
   return {
     ...field,
     visible,
@@ -98,9 +121,28 @@ const normalizeFieldVisibility = (field: DashboardField): EditableField => {
 
 const detectReferenceField = (field: Partial<EditableField>) => {
   if (!field) return false;
-  if (isReferenceLike(field)) return true;
-  if ((field as any).allowEditReference !== undefined) return true;
-  return false;
+  return isReferenceLike(field);
+};
+
+/**
+ * System FK reference: semanticType=reference + ref exists + system=true
+ * => CHỈ cho tick allowEditReference, KHÔNG cho cấu hình table/display
+ */
+const isSystemReferenceField = (field: Partial<EditableField>) => {
+  if (!field) return false;
+  const semanticType = ((field as any).semanticType as string | undefined)?.toLowerCase();
+  const hasRef = Boolean((field as any).ref);
+  const isSys = field.system === true || (field as any).systemField === true || field.isSystem === true;
+  return isSys && semanticType === "reference" && hasRef;
+};
+
+/**
+ * Only user-created reference can configure table/display
+ */
+const isUserConfigurableReference = (field: Partial<EditableField>) => {
+  if (!field) return false;
+  const isSys = field.system === true || (field as any).systemField === true || field.isSystem === true;
+  return field.type === "reference" && !isSys;
 };
 
 export function EditTableStructureModal({
@@ -129,7 +171,7 @@ export function EditTableStructureModal({
         const incoming = Array.isArray(res.fields) ? res.fields : [];
         const system = incoming
           .filter((f) => isSystemField(f))
-          .map((f) => normalizeFieldVisibility({ ...f, required: true }));
+          .map((f) => normalizeFieldVisibility({ ...(f as any), required: true } as DashboardField));
         const editable = incoming
           .filter((f) => !isSystemField(f))
           .map((f) => normalizeFieldVisibility(f as DashboardField));
@@ -158,7 +200,7 @@ export function EditTableStructureModal({
 
   const addField = () => {
     const baseKey = `field_${fields.length + 1}`;
-    const existingKeys = new Set(fields.map((f) => f.key.toLowerCase()));
+    const existingKeys = new Set(fields.map((f) => String(f.key || "").toLowerCase()));
     let candidate = baseKey;
     let counter = 1;
     while (existingKeys.has(candidate.toLowerCase())) {
@@ -174,7 +216,7 @@ export function EditTableStructureModal({
       visibleInTable: true,
       hidden: false,
       previousKey: "",
-    };
+    } as EditableField;
     setFields((prev) => [...prev, next]);
   };
 
@@ -200,8 +242,8 @@ export function EditTableStructureModal({
               ...field,
               ...patch,
               required: true,
-              visibleInTable: patch.visible !== undefined ? patch.visible : field.visibleInTable,
-              hidden: patch.visible !== undefined ? !patch.visible : field.hidden,
+              visibleInTable: patch.visible !== undefined ? patch.visible : (field as any).visibleInTable,
+              hidden: patch.visible !== undefined ? !patch.visible : (field as any).hidden,
             }
           : field,
       ),
@@ -209,11 +251,10 @@ export function EditTableStructureModal({
   };
 
   const handleToggleAllowEditReference = (field: EditableField, checked: boolean) => {
-    if (field.isSystem) {
-      updateSystemField(field.tempId, { allowEditReference: checked });
-      return;
-    }
-    updateField(field.tempId, { allowEditReference: checked });
+    // ✅ chỉ toggle quyền, KHÔNG đổi type/relationship config
+    const patch: Partial<EditableField> = { allowEditReference: checked };
+    if (field.isSystem) updateSystemField(field.tempId, patch);
+    else updateField(field.tempId, patch);
   };
 
   const removeField = (tempId: string) => {
@@ -239,22 +280,36 @@ export function EditTableStructureModal({
 
   const validate = () => {
     const seen = new Set<string>();
+
     for (const field of fields) {
-      const key = normalizeKey(field.key || "");
+      const key = normalizeKey(String(field.key || ""));
       const lowered = key.toLowerCase();
+
       if (!key) return "Field key is required";
       if (RESERVED_KEYS.has(lowered)) return `${key} is reserved for system use`;
       if (seen.has(lowered)) return "Duplicate field keys are not allowed";
       seen.add(lowered);
+
       if (!field.type) return `Field ${key} is missing a type`;
+
       if (field.type === "enum") {
         const options = (field.options || []).filter(Boolean);
         if (!options.length) return `Enum field "${key}" needs at least one option`;
       }
-      if (field.type === "reference") {
-        if (!field.referenceTable || !field.displayField) return `Reference field "${key}" needs table and display field`;
+
+      // chỉ user-created strict reference mới bắt chọn table/display
+      const isStrictReference =
+        field.type === "reference" &&
+        !looksLikeLegacyReference(field) &&
+        !SYSTEM_KEYS.has(lowered);
+
+      if (isStrictReference) {
+        if (!field.referenceTable || !field.displayField) {
+          return `Reference field "${key}" needs table and display field`;
+        }
       }
     }
+
     return null;
   };
 
@@ -265,12 +320,15 @@ export function EditTableStructureModal({
       toast.error(validationError);
       return;
     }
+
     setSaving(true);
     setError(null);
+
     try {
       const payloadFields = [...systemFields, ...fields].map((f) => {
-        const { tempId, isSystem, previousKey, ...rest } = f;
-        const visible = rest.visible ?? rest.visibleInTable ?? !rest.hidden ?? true;
+        const { tempId, isSystem, previousKey, ...rest } = f as any;
+        const visible = rest.visible ?? rest.visibleInTable ?? (!rest.hidden ?? true);
+
         return {
           ...rest,
           label: rest.label || rest.key,
@@ -280,23 +338,26 @@ export function EditTableStructureModal({
           hidden: !visible,
         };
       });
+
       const res = await dashboardApi.updateTableSchema(
         dashboardId,
         tableKey,
         { fields: payloadFields },
         { sessionId, userId },
       );
+
       const incoming = Array.isArray(res.fields) ? res.fields : [];
       setSystemFields(
         incoming
           .filter((f) => isSystemField(f))
-          .map((f) => normalizeFieldVisibility({ ...f, required: true })),
+          .map((f) => normalizeFieldVisibility({ ...(f as any), required: true } as DashboardField)),
       );
       setFields(
         incoming
           .filter((f) => !isSystemField(f))
           .map((f) => normalizeFieldVisibility(f as DashboardField)),
       );
+
       onSaved?.(incoming);
       toast.success("Table structure updated");
       onClose();
@@ -334,36 +395,42 @@ export function EditTableStructureModal({
             <div className="text-sm text-muted-foreground">Loading schema...</div>
           ) : (
             <div className="schemaList">
+              {/* SYSTEM FIELDS */}
               {systemFields.map((field) => {
-                const refFields = getReferenceFields(field.referenceTable);
                 const isReferenceField = detectReferenceField(field);
-                const showReferenceConfig = field.type === "reference";
+                const showReferenceConfig = isUserConfigurableReference(field); // ✅ system FK won't show config
+                const refFields = getReferenceFields((field as any).referenceTable);
+
                 return (
                   <div key={field.tempId} className="schemaRow systemRow">
                     <div className="schemaDragHandle" title="System field">
                       <GripVertical className="w-4 h-4 opacity-50" />
                     </div>
+
                     <div className="schemaGrid">
                       <div className="mdField">
                         <label className="mdLabel">Field key</label>
-                        <Input value={field.key} disabled />
+                        <Input value={String(field.key || "")} disabled />
                       </div>
+
                       <div className="mdField">
                         <label className="mdLabel">Label</label>
                         <Input
-                          value={field.label || ""}
+                          value={String(field.label || "")}
                           onChange={(e) => updateSystemField(field.tempId, { label: e.target.value })}
                           placeholder="Label"
                         />
                       </div>
+
                       <div className="mdField">
                         <label className="mdLabel">Type</label>
-                        <Select value={field.type} disabled>
+                        <Select value={String(field.type || "")} disabled>
                           <SelectTrigger className="mdSelect">
                             <SelectValue />
                           </SelectTrigger>
                         </Select>
                       </div>
+
                       <div className="mdField schemaToggles">
                         <label className="mdLabel">Options</label>
                         <div className="schemaToggleGroup">
@@ -371,25 +438,28 @@ export function EditTableStructureModal({
                             <input type="checkbox" checked readOnly />
                             <span>Required</span>
                           </label>
+
                           <label className="mdCheckbox">
                             <input
                               type="checkbox"
-                              checked={field.visible !== false}
+                              checked={(field as any).visible !== false}
                               onChange={() =>
                                 updateSystemField(field.tempId, {
-                                  visible: !field.visible,
-                                  visibleInTable: !field.visible,
-                                  hidden: field.visible,
+                                  visible: !(field as any).visible,
+                                  visibleInTable: !(field as any).visible,
+                                  hidden: (field as any).visible,
                                 })
                               }
                             />
                             <span>Visible</span>
                           </label>
+
+                          {/* ✅ Allow editing reference for system FK (semanticType reference) */}
                           {isReferenceField && (
                             <label className="mdCheckbox">
                               <input
                                 type="checkbox"
-                                checked={!!field.allowEditReference}
+                                checked={!!(field as any).allowEditReference}
                                 onChange={(e) => handleToggleAllowEditReference(field, e.target.checked)}
                               />
                               <span>Allow editing reference</span>
@@ -399,7 +469,8 @@ export function EditTableStructureModal({
                       </div>
                     </div>
 
-                    {isReferenceField && showReferenceConfig && (
+                    {/* ✅ System fields never show reference settings */}
+                    {showReferenceConfig && (
                       <div className="schemaSubSection">
                         <div className="schemaSubHeader">
                           <p className="mdMainSubtitle">Reference settings</p>
@@ -408,7 +479,7 @@ export function EditTableStructureModal({
                           <div className="mdField">
                             <label className="mdLabel">Reference table</label>
                             <Select
-                              value={field.referenceTable || ""}
+                              value={(field as any).referenceTable || ""}
                               onValueChange={(v) => updateSystemField(field.tempId, { referenceTable: v, displayField: "" })}
                             >
                               <SelectTrigger className="mdSelect">
@@ -423,12 +494,13 @@ export function EditTableStructureModal({
                               </SelectContent>
                             </Select>
                           </div>
+
                           <div className="mdField">
                             <label className="mdLabel">Display field</label>
                             <Select
-                              value={field.displayField || ""}
+                              value={(field as any).displayField || ""}
                               onValueChange={(v) => updateSystemField(field.tempId, { displayField: v })}
-                              disabled={!field.referenceTable}
+                              disabled={!(field as any).referenceTable}
                             >
                               <SelectTrigger className="mdSelect">
                                 <SelectValue placeholder="Choose field" />
@@ -448,10 +520,13 @@ export function EditTableStructureModal({
                   </div>
                 );
               })}
+
+              {/* EDITABLE FIELDS */}
               {fields.map((field) => {
-                const refFields = getReferenceFields(field.referenceTable);
                 const isReferenceField = detectReferenceField(field);
-                const showReferenceConfig = field.type === "reference";
+                const showReferenceConfig = isUserConfigurableReference(field); // ✅ only user-created type=reference
+                const refFields = getReferenceFields(field.referenceTable);
+
                 return (
                   <div
                     key={field.tempId}
@@ -465,30 +540,34 @@ export function EditTableStructureModal({
                     <div className="schemaDragHandle" title="Drag to reorder">
                       <GripVertical className="w-4 h-4" />
                     </div>
+
                     <div className="schemaGrid">
                       <div className="mdField">
                         <label className="mdLabel">Field key</label>
                         <Input
-                          value={field.key}
+                          value={String(field.key || "")}
                           onChange={(e) => updateField(field.tempId, { key: normalizeKey(e.target.value) })}
                           placeholder="status"
                         />
                       </div>
+
                       <div className="mdField">
                         <label className="mdLabel">Label</label>
                         <Input
-                          value={field.label || ""}
+                          value={String(field.label || "")}
                           onChange={(e) => updateField(field.tempId, { label: e.target.value })}
                           placeholder="Status"
                         />
                       </div>
+
                       <div className="mdField">
                         <label className="mdLabel">Type</label>
                         <Select
-                          value={field.type}
+                          value={String(field.type || "")}
                           onValueChange={(v) => {
                             const nextType = v as DashboardField["type"];
                             const patch: Partial<EditableField> = { type: nextType };
+
                             if (nextType !== "reference") {
                               patch.referenceTable = undefined;
                               patch.displayField = undefined;
@@ -496,9 +575,9 @@ export function EditTableStructureModal({
                             } else if (field.allowEditReference === undefined) {
                               patch.allowEditReference = false;
                             }
-                            if (nextType !== "enum") {
-                              patch.options = undefined;
-                            }
+
+                            if (nextType !== "enum") patch.options = undefined;
+
                             updateField(field.tempId, patch);
                           }}
                         >
@@ -514,6 +593,7 @@ export function EditTableStructureModal({
                           </SelectContent>
                         </Select>
                       </div>
+
                       <div className="mdField schemaToggles">
                         <label className="mdLabel">Options</label>
                         <div className="schemaToggleGroup">
@@ -525,6 +605,7 @@ export function EditTableStructureModal({
                             />
                             <span>Required</span>
                           </label>
+
                           <label className="mdCheckbox">
                             <input
                               type="checkbox"
@@ -539,6 +620,8 @@ export function EditTableStructureModal({
                             />
                             <span>Visible</span>
                           </label>
+
+                          {/* ✅ Allow editing reference if semantic/user reference-like */}
                           {isReferenceField && (
                             <label className="mdCheckbox">
                               <input
@@ -557,7 +640,11 @@ export function EditTableStructureModal({
                       <div className="schemaSubSection">
                         <div className="schemaSubHeader">
                           <p className="mdMainSubtitle">Enum options</p>
-                          <Button size="sm" variant="outline" onClick={() => updateField(field.tempId, { options: [...(field.options || []), ""] })}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => updateField(field.tempId, { options: [...(field.options || []), ""] })}
+                          >
                             <Plus className="w-3 h-3 mr-1" />
                             Add option
                           </Button>
@@ -595,53 +682,51 @@ export function EditTableStructureModal({
                       </div>
                     )}
 
-                    {isReferenceField && (
+                    {/* ✅ Only user-created reference shows config */}
+                    {showReferenceConfig && (
                       <div className="schemaSubSection">
                         <div className="schemaSubHeader">
                           <p className="mdMainSubtitle">Reference settings</p>
                         </div>
                         <div className="schemaGrid">
-                          {showReferenceConfig && (
-                            <div className="mdField">
-                              <label className="mdLabel">Reference table</label>
-                              <Select
-                                value={field.referenceTable || ""}
-                                onValueChange={(v) => updateField(field.tempId, { referenceTable: v, displayField: "" })}
-                              >
-                                <SelectTrigger className="mdSelect">
-                                  <SelectValue placeholder="Select table" />
-                                </SelectTrigger>
-                                <SelectContent className="mdSelectContent" position="popper">
-                                  {referenceTargets.map((table) => (
-                                    <SelectItem key={table.key || table.id} value={table.key || table.id || ""}>
-                                      {table.name || table.key}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                          {showReferenceConfig && (
-                            <div className="mdField">
-                              <label className="mdLabel">Display field</label>
-                              <Select
-                                value={field.displayField || ""}
-                                onValueChange={(v) => updateField(field.tempId, { displayField: v })}
-                                disabled={!field.referenceTable}
-                              >
-                                <SelectTrigger className="mdSelect">
-                                  <SelectValue placeholder="Choose field" />
-                                </SelectTrigger>
-                                <SelectContent className="mdSelectContent" position="popper">
-                                  {getReferenceFields(field.referenceTable).map((refField) => (
-                                    <SelectItem key={refField.key} value={refField.key}>
-                                      {refField.label || refField.key}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
+                          <div className="mdField">
+                            <label className="mdLabel">Reference table</label>
+                            <Select
+                              value={field.referenceTable || ""}
+                              onValueChange={(v) => updateField(field.tempId, { referenceTable: v, displayField: "" })}
+                            >
+                              <SelectTrigger className="mdSelect">
+                                <SelectValue placeholder="Select table" />
+                              </SelectTrigger>
+                              <SelectContent className="mdSelectContent" position="popper">
+                                {referenceTargets.map((table) => (
+                                  <SelectItem key={table.key || table.id} value={table.key || table.id || ""}>
+                                    {table.name || table.key}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="mdField">
+                            <label className="mdLabel">Display field</label>
+                            <Select
+                              value={field.displayField || ""}
+                              onValueChange={(v) => updateField(field.tempId, { displayField: v })}
+                              disabled={!field.referenceTable}
+                            >
+                              <SelectTrigger className="mdSelect">
+                                <SelectValue placeholder="Choose field" />
+                              </SelectTrigger>
+                              <SelectContent className="mdSelectContent" position="popper">
+                                {getReferenceFields(field.referenceTable).map((refField) => (
+                                  <SelectItem key={refField.key} value={refField.key}>
+                                    {refField.label || refField.key}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       </div>
                     )}
