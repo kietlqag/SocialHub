@@ -2719,7 +2719,8 @@ export default function ManageDashDetail() {
     return [];
   }, [tableRecords, visibleFields]);
 
-  const recordColumnCount = (recordColumns.length || 1) + 1;
+  const recordColumnCount = Math.max(recordColumns.length, 1);
+  const actionsColumnWidth = 110;
   const viewFields = useMemo(() => {
     const targetKey = selectedRecordTableKey || activeTableKey;
     const targetTable = mergedTables.find((t) => (t.key || t.id || "") === targetKey);
@@ -3607,10 +3608,12 @@ export default function ManageDashDetail() {
             <div className="recordTable">
               <div
                 className="recordHeaderRow"
-                style={{
-                  gridTemplateColumns: `repeat(${recordColumnCount + (canAnyRowAction ? 1 : 0)}, minmax(140px, 1fr))`,
-                }}
-              >
+                  style={{
+                    gridTemplateColumns: canAnyRowAction
+                      ? `repeat(${recordColumnCount}, minmax(140px, 1fr)) ${actionsColumnWidth}px`
+                      : `repeat(${recordColumnCount}, minmax(140px, 1fr))`,
+                  }}
+                >
                 {recordColumns.map((col) => (
                   <div key={col.key} className="recordCell header">
                     {col.label}
@@ -3626,7 +3629,9 @@ export default function ManageDashDetail() {
                     key={(meta as any)?.id || (record as any)?.id || (meta as any)?._id || idx}
                     className="recordRow"
                     style={{
-                      gridTemplateColumns: `repeat(${recordColumnCount + (canAnyRowAction ? 1 : 0)}, minmax(140px, 1fr))`,
+                      gridTemplateColumns: canAnyRowAction
+                        ? `repeat(${recordColumnCount}, minmax(140px, 1fr)) ${actionsColumnWidth}px`
+                        : `repeat(${recordColumnCount}, minmax(140px, 1fr))`,
                     }}
                   >
                     {recordColumns.map((col) => (
