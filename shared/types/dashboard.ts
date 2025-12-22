@@ -77,6 +77,7 @@ export interface FieldConfig {
   enumValues?: string[];
   semanticType?: SemanticType;
   semanticRole?: SemanticRole;
+  allowEditReference?: boolean;
 }
 
 export interface FieldDefinition extends FieldConfig {}

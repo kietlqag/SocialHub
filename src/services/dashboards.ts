@@ -80,6 +80,7 @@ export type NewFieldDefinition = {
   isReference?: boolean;
   referenceTableKey?: string | null;
   enumOptions?: string[];
+  allowEditReference?: boolean;
 };
 
 export type TableDefinition = {

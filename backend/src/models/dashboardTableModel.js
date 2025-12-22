@@ -12,6 +12,7 @@ const FieldSchema = new Schema(
     options: { type: [String], default: undefined },
     referenceTable: { type: String },
     displayField: { type: String },
+    allowEditReference: { type: Boolean, default: false },
     system: { type: Boolean, default: false },
     systemField: { type: Boolean, default: false },
     ref: { type: String },

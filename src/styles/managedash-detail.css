@@ -637,6 +637,7 @@
   gap: 8px;
   font-weight: 600;
   color: #0f172a;
+  white-space: nowrap;
 }
 
 .mdSelect {

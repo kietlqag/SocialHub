@@ -35,6 +35,7 @@ const normalizeField = (field) => {
     system: field.system === true || field.systemField === true,
     systemField: field.systemField === true,
     previousKey: field.previousKey || field.originalKey || field.oldKey,
+    allowEditReference: field.allowEditReference === true,
   };
 };
 

@@ -98,6 +98,7 @@ type NormalizedField = {
   isId: boolean;
   isReference?: boolean;
   referenceTableKey?: string | null;
+  allowEditReference?: boolean;
   original: any;
 };
 
@@ -521,11 +522,17 @@ const normalizeFields = (fields: any[] = []): NormalizedField[] =>
       const isReference = isReferenceType || endsWithId;
       const baseKey = endsWithId ? lowerKey.replace(/_id$/, "") : lowerKey;
       const fromRef =
+        (field as any).referenceTable ||
+        (field as any).referenceTableKey ||
         (field as any).ref ||
         (field as any).references?.table ||
         (field as any).references?.tableKey;
       const referenceTableKey = isReference
-        ? (fromRef as string) || (baseKey.endsWith("s") ? baseKey : `${baseKey}s`)
+        ? (typeof fromRef === "string" && fromRef.trim().length > 0
+            ? fromRef
+            : baseKey.endsWith("s")
+              ? baseKey
+              : `${baseKey}s`)
         : null;
       return {
         key,
@@ -536,6 +543,7 @@ const normalizeFields = (fields: any[] = []): NormalizedField[] =>
         isId: lowerKey === "id" || lowerKey === "_id",
         isReference,
         referenceTableKey,
+        allowEditReference: field.allowEditReference === true,
         original: field,
       };
     })
@@ -1733,7 +1741,8 @@ const AddRecordModal = ({
     const system = isSystemFieldName(field.key) || isSelfReferencingId(field, tableKey);
     if (mode === "create" && system) return null;
     const isReferenceField = field.isReference && field.referenceTableKey;
-    const isReadOnly = mode === "edit" && (system || isReferenceField);
+    const allowReferenceEdit = field.allowEditReference === true;
+    const isReadOnly = mode === "edit" && (system || (isReferenceField && !allowReferenceEdit));
     const handleChange = (key: string, value: any) => {
       if (isReadOnly) return;
       onChange(key, value);
@@ -1861,9 +1870,10 @@ const AddRecordModal = ({
             .map((field) => (
               // readonly for edit mode on system/self-reference/reference ids
               (() => {
+                const locksReference = field.isReference && field.referenceTableKey && field.allowEditReference !== true;
                 const isReadOnlyField =
                   mode === "edit" &&
-                  (isSystemField(field) || isSelfReferencingId(field, tableKey) || (field.isReference && field.referenceTableKey));
+                  (isSystemField(field) || isSelfReferencingId(field, tableKey) || locksReference);
                 return (
               <div
                 key={field.key}
