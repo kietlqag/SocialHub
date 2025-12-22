@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
 import { getSocialhubDb } from "../mongo.js";
 import { buildDefaultAccessControl } from "../utils/accessControlDefaults.js";
-import { canEditDashboard } from "../utils/dashboardAuth.js";
+import { canEditDashboard, isGlobalAdminUser } from "../utils/dashboardAuth.js";
 import { selectUsersByIds } from "../repositories/userRepository.js";
 
 const dashboards = () => getSocialhubDb().collection("dashboards");
@@ -78,11 +78,7 @@ export const getDashboardAccess = async (req, res) => {
   const userAssignments = await hydrateAssignments(sanitizedAssignments);
 
   const isOwner = Boolean(dashboard.userId && currentUserId && String(dashboard.userId) === String(currentUserId));
-  const isGlobalAdmin = Boolean(
-    req.user?.isGlobalAdmin ||
-      (Array.isArray(req.user?.roles) && req.user.roles.includes("globalAdmin")) ||
-      req.user?.role === "globalAdmin",
-  );
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
   const isAssigned = Boolean(
     currentUserId &&
       sanitizedAssignments.some((assignment) => assignment?.userId && String(assignment.userId) === String(currentUserId)),

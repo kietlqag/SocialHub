@@ -24,7 +24,7 @@ import { listTablesByDashboard } from "../repositories/dashboardTableRepository.
 import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { mongoose } from "../mongoose.js";
 import { getSocialhubDb } from "../mongo.js";
-import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
+import { canEditDashboard, canViewDashboard, isGlobalAdminUser } from "../utils/dashboardAuth.js";
 import {
   canCreateRecords,
   canDeleteRecords,
@@ -103,8 +103,9 @@ export async function listDashboardTables(req, res) {
   if (!dashboardId) throw new HttpError(400, "dashboardId required");
   const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) throw new HttpError(404, "Dashboard not found");
-  if (!canViewDashboard(dashboard, owner.userId)) {
-    throw new HttpError(403, "Forbidden");
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
   }
   const tables = await listTablesByDashboard(dashboardId);
   res.json({ tables });
@@ -240,7 +241,17 @@ export async function createDashboardRecord(req, res) {
 export async function getDashboardRecords(req, res) {
   const owner = parseOwner(req);
   const { dashboardId, tableKey } = req.query;
-  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  if (!dashboardId) {
+    return res.status(400).json({ message: "dashboardId is required" });
+  }
+  const dashboard = await findDashboardByIdRepo(dashboardId);
+  if (!dashboard) {
+    return res.status(404).json({ message: "Dashboard not found" });
+  }
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
   const canViewData = canViewDashboardData(dashboard, owner.userId);
   if (!canViewData) {
     return res.json({
@@ -260,7 +271,17 @@ export async function getDashboardRecords(req, res) {
 export async function getDashboardRecordController(req, res) {
   const owner = parseOwner(req);
   const { id: dashboardId, tableKey, recordId } = req.params;
-  const dashboard = dashboardId ? await findDashboardByIdRepo(dashboardId) : null;
+  if (!dashboardId) {
+    throw new HttpError(400, "dashboardId required");
+  }
+  const dashboard = await findDashboardByIdRepo(dashboardId);
+  if (!dashboard) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
   const canViewData = canViewDashboardData(dashboard, owner.userId);
   if (!canViewData) {
     return res.json({
@@ -324,8 +345,9 @@ export async function getDashboardData(req, res) {
       console.warn("Dashboard not found for data route", req.params.id);
       return res.json({ dashboardId: req.params.id, widgets: [] });
     }
-    if (!canViewDashboard(dashboard, owner.userId)) {
-      throw new HttpError(403, "Forbidden");
+    const isGlobalAdmin = isGlobalAdminUser(req.user);
+    if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+      return res.status(403).json({ message: "Forbidden" });
     }
     const canViewData = canViewDashboardData(dashboard, owner.userId);
     if (!canViewData) {
@@ -359,6 +381,14 @@ export async function getDashboardData(req, res) {
 
 export async function listWidgets(req, res) {
   const owner = parseOwner(req);
+  const dashboard = await findDashboardById(req.params.id);
+  if (!dashboard) {
+    return res.status(404).json({ message: "Dashboard not found" });
+  }
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
   const widgets = await listDashboardWidgets(req.params.id, owner);
   res.json({ widgets });
 }

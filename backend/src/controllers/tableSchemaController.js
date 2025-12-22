@@ -5,7 +5,7 @@ import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { migrateFieldRenames } from "../utils/schemaMigration.js";
 import { mongoose } from "../mongoose.js";
 import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
-import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
+import { canEditDashboard, canViewDashboard, isGlobalAdminUser } from "../utils/dashboardAuth.js";
 
 const FIELD_TYPES = new Set(["string", "number", "boolean", "date", "enum", "reference", "id"]);
 const RESERVED_KEYS = new Set(["_id", "created_at", "updated_at", ...SYSTEM_FIELDS]);
@@ -81,8 +81,9 @@ export async function getTableSchema(req, res) {
   if (!dashboard) {
     throw new HttpError(404, "Dashboard not found");
   }
-  if (!canViewDashboard(dashboard, owner.userId)) {
-    throw new HttpError(403, "Forbidden");
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
   }
   const tableFilter = {
     dashboardId: new mongoose.Types.ObjectId(dashboardId),
