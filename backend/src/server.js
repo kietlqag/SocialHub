@@ -5,6 +5,7 @@ import authRoutes from "./routes/authRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
+import notificationPreferenceRoutes from "./routes/notificationPreferenceRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -49,6 +50,7 @@ app.use(orgRoutes);
 // Notifications now served from Postgres - mount API at /api/notifications (keep legacy /notifications)
 app.use("/api/notifications", notificationRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/api/notifications/preferences", notificationPreferenceRoutes);
 // Profile endpoints
 app.use("/profile", profileRoutes);
 app.use("/api", userRoutes);

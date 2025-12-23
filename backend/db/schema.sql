@@ -146,6 +146,12 @@ CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications(user_
 CREATE INDEX IF NOT EXISTS notifications_user_read_idx ON notifications(user_id, is_read);
 CREATE INDEX IF NOT EXISTS notifications_user_starred_idx ON notifications(user_id, is_starred);
 
+-- User notification preferences
+CREATE TABLE IF NOT EXISTS notification_user_prefs (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    popup_enabled BOOLEAN NOT NULL DEFAULT true,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 -- Extended user profile/settings table for frontend ProfileSettings
 -- Stores phone, job title, location, bio, website and misc preferences
 CREATE TABLE IF NOT EXISTS user_profiles (

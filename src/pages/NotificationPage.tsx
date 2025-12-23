@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
-import { getCurrentSession } from "../services/auth";
+import { clearSession, getCurrentSession } from "../services/auth";
+import { Header } from "../components/Header";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -63,11 +64,34 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
   const [total, setTotal] = useState(0);
   const [selectedNotifications, setSelectedNotifications] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [popupEnabled, setPopupEnabled] = useState(true);
+  const [savingPref, setSavingPref] = useState(false);
+
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadedRef = useRef(false);
+  const lastToastRef = useRef(0);
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300);
     return () => clearTimeout(handle);
   }, [searchQuery]);
+
+  const fetchPrefs = useCallback(async () => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) return;
+    try {
+      const res = await api.get<{ popupEnabled: boolean }>("/api/notifications/preferences", token);
+      setPopupEnabled(res?.popupEnabled !== false);
+    } catch (err) {
+      console.warn("[NotificationPage] Failed to load notification prefs", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPrefs();
+  }, [fetchPrefs]);
 
   const fetchNotifications = useCallback(async () => {
     const session = getCurrentSession();
@@ -120,6 +144,28 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
       setSelectedNotifications(new Set());
       setTotal(res?.total ?? mapped.length);
       if (res?.counts) setCounts(res.counts);
+
+      const seen = seenIdsRef.current;
+      if (!initialLoadedRef.current) {
+        mapped.forEach((n) => seen.add(n.id));
+        initialLoadedRef.current = true;
+        return;
+      }
+      const newOnes = mapped.filter((n) => !seen.has(n.id));
+      newOnes.forEach((n) => seen.add(n.id));
+      if (popupEnabled && newOnes.length) {
+        const now = Date.now();
+        if (now - lastToastRef.current > 2000) {
+          lastToastRef.current = now;
+          if (newOnes.length > 3) {
+            toast(`${newOnes.length} new notifications`, { description: newOnes[0].title || "You have new notifications" });
+          } else {
+            newOnes.slice(0, 3).forEach((n) => {
+              toast(n.title || "New notification", { description: n.message || "" });
+            });
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
       toast.error("Failed to fetch notifications");
@@ -266,8 +312,43 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  const handleTogglePopup = async () => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
+    const next = !popupEnabled;
+    const prev = popupEnabled;
+    setPopupEnabled(next);
+    setSavingPref(true);
+    try {
+      await api.put("/api/notifications/preferences", { popupEnabled: next }, token);
+    } catch (err) {
+      console.error(err);
+      setPopupEnabled(prev);
+      toast.error("Failed to update preference");
+    } finally {
+      setSavingPref(false);
+    }
+  };
+
   return (
     <div className="notificationsPage">
+      <Header
+        currentUser={getCurrentSession()?.user || null}
+        onLogout={() => {
+          clearSession();
+          navigate("/login");
+        }}
+        onChatOpen={() => navigate("/chat")}
+        onLoginOpen={() => navigate("/login")}
+        onSignUpOpen={() => navigate("/register")}
+        onProfileOpen={() => navigate("/profile")}
+        onSettingsOpen={() => navigate("/settings")}
+        onManageDash={() => navigate("/managedash")}
+      />
       <div className="notificationsBg" />
       <div className="notificationsContainer">
         <div className="notificationsHeader">
@@ -290,7 +371,7 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 Mark all as read
               </Button>
             )}
-            <Button variant="outline" size="sm" className="ghostBtn">
+            <Button variant="outline" size="sm" className="ghostBtn" onClick={() => setSettingsOpen(true)}>
               <SettingsIcon className="w-4 h-4 mr-2" />
               Settings
             </Button>
@@ -483,6 +564,46 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
       </div>
+
+      {settingsOpen && (
+        <div className="acModalOverlay" onClick={(e) => e.target === e.currentTarget && setSettingsOpen(false)}>
+          <div className="acModal" role="dialog" aria-modal="true">
+            <div className="acModalHeader">
+              <div>
+                <p className="mdMainSubtitle">Notification settings</p>
+                <h3 className="acCardTitle">Popup notifications</h3>
+                <p className="mdMainSubtitle">Show a toast when a new notification arrives.</p>
+              </div>
+              <button className="acIconBtn" onClick={() => setSettingsOpen(false)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="acModalBody">
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-semibold text-slate-800">Show popup notifications</p>
+                  <p className="text-sm text-slate-500">Show a toast when a new notification arrives.</p>
+                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={popupEnabled}
+                    disabled={savingPref}
+                    onChange={handleTogglePopup}
+                    className="h-5 w-5 rounded border-slate-300 text-indigo-500 focus:ring-indigo-400"
+                  />
+                  <span className="text-sm text-slate-700">{popupEnabled ? "On" : "Off"}</span>
+                </label>
+              </div>
+            </div>
+            <div className="acModalFooter">
+              <button className="acGhostBtn" onClick={() => setSettingsOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
