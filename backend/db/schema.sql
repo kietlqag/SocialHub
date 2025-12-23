@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     title TEXT NOT NULL,
     message TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'error', 'system')),
+    is_starred BOOLEAN NOT NULL DEFAULT false,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     is_read BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -143,6 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS notifications_user_read_idx ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS notifications_user_starred_idx ON notifications(user_id, is_starred);
 
 -- Extended user profile/settings table for frontend ProfileSettings
 -- Stores phone, job title, location, bio, website and misc preferences

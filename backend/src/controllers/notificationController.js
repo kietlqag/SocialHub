@@ -11,11 +11,21 @@ const resolveUserId = (req) => {
 
 export async function listNotifications(req, res) {
   const userId = resolveUserId(req);
-  const limit = Number(req.query?.limit) || 100;
+  const limit = Math.min(Number(req.query?.limit) || 50, 200);
   const offset = Number(req.query?.offset) || 0;
-  const unreadOnly = req.query?.unread === "true" || req.query?.unread === true;
-  const items = await repo.listNotifications({ userId, limit, offset, unreadOnly });
-  res.json({ data: items });
+  const tab = (req.query?.tab || "all").toString().toLowerCase();
+  const sort = (req.query?.sort || "newest").toString().toLowerCase();
+  const q = req.query?.q ? String(req.query.q) : undefined;
+
+  const items = await repo.listNotifications({ userId, tab, q, sort, limit, offset });
+  const total = await repo.countNotifications({ userId, tab, q });
+  const counts = await repo.getCategoryCounts({ userId });
+
+  res.json({
+    items,
+    total,
+    counts,
+  });
 }
 
 export async function createNotification(req, res) {

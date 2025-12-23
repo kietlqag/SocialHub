@@ -94,8 +94,8 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       }
       setIsLoading(true);
       try {
-        const res = await api.get<{ data: any[] }>("/notifications", token);
-        const items = Array.isArray(res?.data) ? res.data : [];
+        const res = await api.get<{ items?: any[]; data?: any[] }>(`/api/notifications?limit=20&sort=newest&tab=all`, token);
+        const items = Array.isArray(res?.items) ? res.items : Array.isArray((res as any)?.data) ? (res as any).data : [];
         const filtered = items.filter((d) => {
           const matches = !d.user_id || String(d.user_id) === String(currentUserId);
           if (!matches) console.warn("[NotificationDropdown] Dropped notification for different user", { notificationUser: d.user_id, currentUserId });
@@ -109,7 +109,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
               title: d.title || "(no title)",
               message: d.message || "",
               time: d.created_at || d.updated_at || d.createdAt || d.time || new Date().toISOString(),
-              read: !!d.read,
+              read: !!(d.read ?? d.is_read),
               userId: d.user_id || d.userId || null,
               icon:
                 d.type === "success"
@@ -142,7 +142,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) throw new Error("Missing auth token");
-      const res = await api.patch<{ data: any }>(`/notifications/${id}`, { read: true }, token);
+      const res = await api.patch<{ data: any }>(`/api/notifications/${id}`, { read: true }, token);
       const updated = res?.data;
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: !!updated?.read } : n)));
     } catch (err) {
@@ -156,7 +156,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) throw new Error("Missing auth token");
-      await Promise.all(unread.map((id) => api.patch(`/notifications/${id}`, { read: true }, token)));
+      await Promise.all(unread.map((id) => api.patch(`/api/notifications/${id}`, { read: true }, token)));
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch (err) {
       console.error("Error marking all as read", err);
@@ -168,7 +168,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       const session = getCurrentSession();
       const token = session?.token;
       if (!token) throw new Error("Missing auth token");
-      await api.delete(`/notifications/${id}`, token);
+      await api.delete(`/api/notifications/${id}`, token);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification", err);

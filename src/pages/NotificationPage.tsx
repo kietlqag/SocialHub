@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { getCurrentSession } from "../services/auth";
 import { Card } from "../components/ui/card";
@@ -37,8 +38,6 @@ import {
 import { toast } from "sonner@2.0.3";
 import "../styles/notifications.css";
 
-type NotificationType = "info" | "success" | "warning" | "alert";
-
 interface NotificationItem {
   id: string;
   type: NotificationType;
@@ -49,6 +48,7 @@ interface NotificationItem {
   timestamp: string;
   read: boolean;
   starred?: boolean;
+  metadata?: Record<string, any>;
 }
 
 export function NotificationPage({ onBack }: { onBack?: () => void }) {
@@ -56,53 +56,84 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTab, setSelectedTab] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selectedTab, setSelectedTab] = useState<"all" | "unread" | "starred">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "unread">("newest");
+  const [counts, setCounts] = useState<{ all: number; unread: number; starred: number }>({ all: 0, unread: 0, starred: 0 });
+  const [total, setTotal] = useState(0);
   const [selectedNotifications, setSelectedNotifications] = useState<Set<string>>(new Set());
+  const navigate = useNavigate();
 
   useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
+
+  const fetchNotifications = useCallback(async () => {
     const session = getCurrentSession();
     const token = session?.token;
     const currentUserId = session?.user?.id;
     if (!token || !currentUserId) {
       console.warn("[NotificationPage] Missing auth session; skip loading notifications");
+      setNotifications([]);
+      setCounts({ all: 0, unread: 0, starred: 0 });
+      setTotal(0);
       return;
     }
     setLoading(true);
-    api
-      .get<{ data: any[] }>("/notifications", token)
-      .then((res) => {
-        const rows = res?.data || [];
-        const filtered = rows.filter((r: any) => {
-          const matches = !r.user_id || String(r.user_id) === String(currentUserId);
-          if (!matches) console.warn("[NotificationPage] Dropped notification for different user", { notificationUser: r.user_id, currentUserId });
-          return matches;
-        });
-        const mapped = filtered.map(
-          (r: any) =>
-            ({
-              id: r.id,
-              type: r.type || "info",
-              category: r.category || "updates",
-              title: r.title || r.message || "Notification",
-              message: r.message || r.body || "",
-              time: r.time || new Date(r.created_at || r.updated_at || Date.now()).toLocaleString(),
-              timestamp: r.created_at || r.updated_at || new Date().toISOString(),
-              read: !!r.read,
-              starred: !!r.starred,
-            }) as NotificationItem,
-        );
-        setNotifications(mapped);
-      })
-      .catch((e) => {
-        console.error(e);
-        toast.error("Failed to fetch notifications");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    try {
+      const params = new URLSearchParams({
+        tab: selectedTab,
+        category: "all",
+        sort: sortBy,
+        limit: "50",
+        offset: "0",
+      });
+      if (debouncedQuery) params.set("q", debouncedQuery);
+      const res = await api.get<{ items: any[]; total: number; counts: { all: number; unread: number; starred: number } }>(
+        `/api/notifications?${params.toString()}`,
+        token,
+      );
+      const rows = res?.items || [];
+      const filtered = rows.filter((r: any) => {
+        const matches = !r.user_id || String(r.user_id) === String(currentUserId);
+        if (!matches) console.warn("[NotificationPage] Dropped notification for different user", { notificationUser: r.user_id, currentUserId });
+        return matches;
+      });
+      const mapped = filtered.map((r: any) => {
+        const isRead = typeof r.read !== "undefined" ? r.read : typeof r.is_read !== "undefined" ? r.is_read : false;
+        const isStarred = typeof r.starred !== "undefined" ? r.starred : r.is_starred;
+        return {
+          id: r.id,
+          type: r.type || "info",
+          category: "",
+          title: r.title || r.message || "Notification",
+          message: r.message || r.body || "",
+          time: r.time || new Date(r.created_at || r.updated_at || Date.now()).toLocaleString(),
+          timestamp: r.created_at || r.updated_at || new Date().toISOString(),
+          read: !!isRead,
+          starred: !!isStarred,
+          metadata: r.metadata || {},
+        } as NotificationItem;
+      });
+      setNotifications(mapped);
+      setSelectedNotifications(new Set());
+      setTotal(res?.total ?? mapped.length);
+      if (res?.counts) setCounts(res.counts);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to fetch notifications");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedTab, sortBy, debouncedQuery]);
 
-  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
-  const starredCount = useMemo(() => notifications.filter((n) => !!n.starred).length, [notifications]);
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  const unreadCount = useMemo(() => counts.unread, [counts]);
+  const starredCount = useMemo(() => counts.starred, [counts]);
 
   const updateLocal = (id: string, patch: Partial<NotificationItem>) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
@@ -117,7 +148,8 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     }
     updateLocal(id, { read: true });
     try {
-      await api.patch(`/notifications/${id}`, { read: true }, token);
+      await api.patch(`/api/notifications/${id}`, { read: true }, token);
+      fetchNotifications();
       toast.success("Marked as read");
     } catch (err) {
       console.error(err);
@@ -125,20 +157,114 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
     }
   };
 
+  const markAsUnread = async (id: string) => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
+    updateLocal(id, { read: false });
+    try {
+      await api.patch(`/api/notifications/${id}`, { read: false }, token);
+      fetchNotifications();
+      toast.success("Marked as unread");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not mark unread");
+    }
+  };
+
+  const toggleStar = async (id: string, next: boolean) => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
+    updateLocal(id, { starred: next });
+    try {
+      await api.patch(`/api/notifications/${id}`, { is_starred: next, starred: next }, token);
+      fetchNotifications();
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not update star");
+    }
+  };
+
+  const markManyAsRead = async (ids: string[]) => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
+    try {
+      await Promise.all(ids.map((id) => api.patch(`/api/notifications/${id}`, { read: true }, token)));
+      fetchNotifications();
+      toast.success("Marked as read");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not mark selected as read");
+    }
+  };
+
+  const deleteMany = async (ids: string[]) => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
+    try {
+      await Promise.all(ids.map((id) => api.delete(`/api/notifications/${id}`, token)));
+      setSelectedNotifications(new Set());
+      fetchNotifications();
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not delete selected");
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (!checked) {
+      setSelectedNotifications(new Set());
+      return;
+    }
+    setSelectedNotifications(new Set(filteredNotifications.map((n) => n.id)));
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    setSelectedNotifications((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleOpenNotification = async (notification: NotificationItem) => {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    const meta = notification.metadata || {};
+    const dashboardId = meta.dashboardId || meta.dashboard_id;
+    if (dashboardId) {
+      navigate(`/managedash/${dashboardId}`);
+    }
+  };
+
   const filteredNotifications = useMemo(() => {
-    let filtered = [...notifications];
-    if (selectedTab === "unread") filtered = filtered.filter((n) => !n.read);
-    else if (selectedTab === "starred") filtered = filtered.filter((n) => !!n.starred);
-    else if (selectedTab !== "all") filtered = filtered.filter((n) => n.category === selectedTab);
+    // Server already filters by tab/category/sort/q; return as-is for rendering
+    return notifications;
+  }, [notifications]);
 
-    if (searchQuery) filtered = filtered.filter((n) => n.title.toLowerCase().includes(searchQuery.toLowerCase()) || n.message.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    if (sortBy === "newest") filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    else if (sortBy === "oldest") filtered.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    else if (sortBy === "unread") filtered.sort((a, b) => (a.read === b.read ? 0 : a.read ? 1 : -1));
-
-    return filtered;
-  }, [notifications, searchQuery, selectedTab, sortBy]);
+  const handleMarkAllRead = () => {
+    const targets = filteredNotifications.filter((n) => !n.read).map((n) => n.id);
+    if (targets.length) {
+      markManyAsRead(targets);
+    }
+  };
 
   return (
     <div className="notificationsPage">
@@ -155,11 +281,11 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 {unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}
               </p>
             </div>
-            <Badge className="headerBadge">{notifications.length}</Badge>
+            <Badge className="headerBadge">{counts.all}</Badge>
           </div>
           <div className="headerActions">
             {unreadCount > 0 && (
-              <Button onClick={() => {}} variant="outline" size="sm" className="ghostBtn">
+              <Button onClick={handleMarkAllRead} variant="outline" size="sm" className="ghostBtn">
                 <CheckCheck className="w-4 h-4 mr-2" />
                 Mark all as read
               </Button>
@@ -183,8 +309,8 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 className="searchInput"
               />
             </div>
-            <div className="sortBox">
-              <Select value={sortBy} onValueChange={setSortBy}>
+            <div className="sortBox flex gap-3 items-center">
+              <Select value={sortBy} onValueChange={(val) => setSortBy(val as "newest" | "oldest" | "unread")}>
                 <SelectTrigger className="sortTrigger">
                   <Clock className="w-4 h-4 mr-2" />
                   <SelectValue placeholder="Sort by" />
@@ -196,29 +322,24 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-            <TabsList className="pillTabs">
-              <TabsTrigger value="all">
-                All
-                <Badge className="pillBadge">{notifications.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="unread">
-                Unread
-                {unreadCount > 0 && <Badge className="pillBadge accent">{unreadCount}</Badge>}
-              </TabsTrigger>
-              <TabsTrigger value="starred">
-                Starred
-                {starredCount > 0 && <Badge className="pillBadge warning">{starredCount}</Badge>}
-              </TabsTrigger>
-              <TabsTrigger value="orders">Orders</TabsTrigger>
-              <TabsTrigger value="updates">Updates</TabsTrigger>
-              <TabsTrigger value="team">Team</TabsTrigger>
-              <TabsTrigger value="alerts">Alerts</TabsTrigger>
-              <TabsTrigger value="messages">Messages</TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
+        <Tabs value={selectedTab} onValueChange={(val) => setSelectedTab(val as "all" | "unread" | "starred")}>
+          <TabsList className="pillTabs">
+            <TabsTrigger value="all">
+              All
+              <Badge className="pillBadge">{counts.all}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="unread">
+              Unread
+              {unreadCount > 0 && <Badge className="pillBadge accent">{unreadCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="starred">
+              Starred
+              {starredCount > 0 && <Badge className="pillBadge warning">{starredCount}</Badge>}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
         <div className="notificationsCard">
           {filteredNotifications.length === 0 ? (
@@ -233,7 +354,7 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 <div className="selectAllRow">
                   <Checkbox
                     checked={selectedNotifications.size === filteredNotifications.length && filteredNotifications.length > 0}
-                    onCheckedChange={() => {}}
+                    onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
                   />
                   <span className="selectAllText">Select all ({filteredNotifications.length})</span>
                 </div>
@@ -243,9 +364,14 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                 <div
                   key={notification.id}
                   className={`notificationCard ${!notification.read ? "notificationUnread" : ""}`}
+                  onClick={() => handleOpenNotification(notification)}
                 >
                   <div className="notificationLeft">
-                    <Checkbox checked={false} onCheckedChange={() => {}} />
+                    <Checkbox
+                      checked={selectedNotifications.has(notification.id)}
+                      onCheckedChange={(checked) => handleSelectOne(notification.id, Boolean(checked))}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                     <div
                       className={`iconCircle ${
                         notification.type === "success"
@@ -274,17 +400,39 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                       </div>
                       <p className="notificationMessage">{notification.message}</p>
                       <div className="notificationMeta">
-                        <Badge className="metaBadge">{notification.category}</Badge>
+                        <Badge className="metaBadge">{notification.type}</Badge>
                         <span className="notificationTime">{notification.time}</span>
                       </div>
                     </div>
                   </div>
                   <div className="notificationActions">
-                    <Button variant="ghost" size="icon" className="actionBtn" onClick={() => {}}>
-                      <Star className="w-4 h-4" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`actionBtn ${notification.starred ? "text-amber-500" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleStar(notification.id, !notification.starred);
+                      }}
+                    >
+                      <Star
+                        className="w-4 h-4"
+                        strokeWidth={notification.starred ? 2 : 2}
+                        color={notification.starred ? "#f59e0b" : "currentColor"}
+                        fill={notification.starred ? "#f59e0b" : "none"}
+                      />
                     </Button>
                     {notification.read ? (
-                      <Button variant="ghost" size="icon" className="actionBtn" onClick={() => {}} title="Mark as unread">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="actionBtn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAsUnread(notification.id);
+                        }}
+                        title="Mark as unread"
+                      >
                         <MailOpen className="w-4 h-4" />
                       </Button>
                     ) : (
@@ -292,7 +440,10 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
                         variant="ghost"
                         size="icon"
                         className="actionBtn"
-                        onClick={() => markAsRead(notification.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAsRead(notification.id);
+                        }}
                         title="Mark as read"
                       >
                         <Mail className="w-4 h-4" />
@@ -305,11 +456,27 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
           )}
 
           <div className="footerActions">
-            <Button variant="ghost" size="sm" className="ghostBtn">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ghostBtn"
+              onClick={() => {
+                const targets = selectedNotifications.size ? Array.from(selectedNotifications) : filteredNotifications.map((n) => n.id);
+                if (targets.length) markManyAsRead(targets);
+              }}
+            >
               <Check className="w-4 h-4 mr-2" />
               Mark all as read
             </Button>
-            <Button variant="outline" size="sm" className="dangerOutline">
+            <Button
+              variant="outline"
+              size="sm"
+              className="dangerOutline"
+              onClick={() => {
+                const targets = selectedNotifications.size ? Array.from(selectedNotifications) : filteredNotifications.map((n) => n.id);
+                if (targets.length) deleteMany(targets);
+              }}
+            >
               <Trash2 className="w-4 h-4 mr-2" />
               Delete selected
             </Button>

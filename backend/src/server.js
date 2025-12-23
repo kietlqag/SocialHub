@@ -46,7 +46,8 @@ app.post("/login", asyncHandler(login));
 app.use("/auth", authRoutes);
 app.use("/ai", aiRoutes);
 app.use(orgRoutes);
-// Notifications now served from Postgres — mount API at /notifications
+// Notifications now served from Postgres - mount API at /api/notifications (keep legacy /notifications)
+app.use("/api/notifications", notificationRoutes);
 app.use("/notifications", notificationRoutes);
 // Profile endpoints
 app.use("/profile", profileRoutes);
