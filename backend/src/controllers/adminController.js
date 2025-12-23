@@ -6,6 +6,7 @@ import { findUserByEmail } from "../repositories/userRepository.js";
 import { HttpError } from "../utils/httpError.js";
 import { listActivities, insertActivity } from "../repositories/activityRepository.js";
 import { duplicateDashboard } from "../repositories/dashboardRepository.js";
+import { listRecordsByDashboard } from "../repositories/dashboardRecordRepository.js";
 
 export async function getUsers(req, res) {
   const users = await listUsers();
@@ -73,6 +74,17 @@ export async function getDashboards(req, res) {
     .limit(200)
     .toArray();
 
+  let externalTableCounts = new Map();
+  try {
+    const counts = await db
+      .collection("dashboard_tables")
+      .aggregate([{ $group: { _id: "$dashboardId", count: { $sum: 1 } } }])
+      .toArray();
+    externalTableCounts = new Map(counts.map((c) => [String(c._id), c.count]));
+  } catch (err) {
+    // collection may not exist; fall back to embedded tables
+  }
+
   const ownerIds = Array.from(
     new Set(
       docs
@@ -88,14 +100,18 @@ export async function getDashboards(req, res) {
   const dashboards = docs.map((d) => {
     const ownerId = d.userId || d.ownerId || d.ui?.userId || null;
     const owner = ownerId ? ownerMap.get(String(ownerId)) : null;
+    const id = d._id instanceof ObjectId ? d._id.toString() : String(d._id);
+    const tableCount =
+      externalTableCounts.get(id) ??
+      (Array.isArray(d.tables) ? d.tables.length : 0);
     return {
-      id: d._id instanceof ObjectId ? d._id.toString() : String(d._id),
+      id,
       name: d.name,
       description: d.description || "",
       type: d.type || "",
       ownerId: ownerId || null,
       ownerName: owner?.name || owner?.email || null,
-      tableCount: Array.isArray(d.tables) ? d.tables.length : 0,
+      tableCount,
       widgetCount: Array.isArray(d.widgets) ? d.widgets.length : 0,
       insightCount: Array.isArray(d.insights) ? d.insights.length : 0,
       createdAt: d.createdAt || null,
@@ -136,25 +152,25 @@ export async function getDashboardDetail(req, res) {
 
   if (!doc) return res.status(404).json({ error: "Dashboard not found" });
 
+  let externalTables = [];
+  try {
+    externalTables = await db
+      .collection("dashboard_tables")
+      .find({ dashboardId: objectId })
+      .project({ _id: 0, dashboardId: 0 })
+      .toArray();
+  } catch (err) {
+    // ignore missing collection
+  }
+  const rawTables = externalTables.length ? externalTables : Array.isArray(doc.tables) ? doc.tables : [];
+  const tables = normalizeTables(rawTables);
+
   const ownerId = doc.userId || doc.ownerId || doc.ui?.userId || null;
   let owner = null;
   if (ownerId) {
     const owners = await getUsersByIds([String(ownerId)]);
     owner = owners?.[0] || null;
   }
-
-  const tables = Array.isArray(doc.tables) ? doc.tables.map((t) => ({
-    key: t.key || t.id || t.name,
-    name: t.name || t.tableName || t.key || "Table",
-    fields: Array.isArray(t.fields)
-      ? t.fields.map((f) => ({
-          key: f.key || f.id || f.name,
-          name: f.name || f.fieldName || f.key,
-          type: f.type || f.fieldType || "Text",
-        }))
-      : [],
-    sampleRows: Array.isArray(t.sampleRows) ? t.sampleRows.slice(0, 3) : [],
-  })) : [];
 
   res.json({
     dashboard: {
@@ -216,6 +232,25 @@ export async function updateDashboardStatus(req, res) {
   res.json({ dashboard: { id: req.params.id, status } });
 }
 
+export async function deleteDashboardAdmin(req, res) {
+  const db = getSocialhubDb();
+  const objectId = new ObjectId(req.params.id);
+  const resDelete = await db.collection("dashboards").deleteOne({ _id: objectId });
+  if (!resDelete.deletedCount) return res.status(404).json({ error: "Dashboard not found" });
+  try {
+    await insertActivity({
+      userId: req.user?.id || null,
+      action: "dashboard.delete",
+      targetType: "dashboard",
+      targetId: req.params.id,
+      metadata: {},
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (dashboard.delete):", err.message);
+  }
+  res.json({ success: true });
+}
+
 function ensureDashboard(id) {
   try {
     return new ObjectId(id);
@@ -225,6 +260,21 @@ function ensureDashboard(id) {
 }
 
 const extractTables = (doc) => (Array.isArray(doc.tables) ? doc.tables : []);
+
+function normalizeTables(tables = []) {
+  return tables.map((t, idx) => ({
+    key: t.key || t.id || t.name || `table_${idx}`,
+    name: t.name || t.label || t.tableName || t.key || `Table ${idx + 1}`,
+    fields: Array.isArray(t.fields)
+      ? t.fields.map((f, i) => ({
+          key: f.key || f.id || f.name || `field_${i}`,
+          name: f.name || f.label || f.fieldName || f.key || `Field ${i + 1}`,
+          type: f.type || f.fieldType || "Text",
+        }))
+      : [],
+    sampleRows: Array.isArray(t.sampleRows) ? t.sampleRows.slice(0, 5) : [],
+  }));
+}
 
 function assertUniqueTableKey(tables, key, currentKey) {
   const duplicate = tables.find((t) => t.key === key && t.key !== currentKey);
@@ -240,10 +290,22 @@ function assertUniqueFieldKeys(fields) {
 export async function listDashboardTables(req, res) {
   const db = getSocialhubDb();
   const objectId = ensureDashboard(req.params.id);
-  const doc = await db.collection("dashboards").findOne({ _id: objectId });
-  if (!doc) return res.status(404).json({ error: "Dashboard not found" });
-  const tables = extractTables(doc);
-  res.json({ tables });
+  let tables = [];
+  try {
+    tables = await db
+      .collection("dashboard_tables")
+      .find({ dashboardId: objectId })
+      .project({ _id: 0, dashboardId: 0 })
+      .toArray();
+  } catch (err) {
+    // collection may not exist
+  }
+  if (!tables.length) {
+    const doc = await db.collection("dashboards").findOne({ _id: objectId });
+    if (!doc) return res.status(404).json({ error: "Dashboard not found" });
+    tables = extractTables(doc);
+  }
+  res.json({ tables: normalizeTables(tables) });
 }
 
 export async function addDashboardTable(req, res) {
@@ -374,6 +436,13 @@ export async function previewDashboardTable(req, res) {
   if (!table) return res.status(404).json({ error: "Table not found" });
   const rows = Array.isArray(table.sampleRows) ? table.sampleRows.slice(0, 20) : [];
   res.json({ rows, fields: table.fields || [] });
+}
+
+export async function listDashboardTableRecords(req, res) {
+  const { id: dashboardId, tableKey } = req.params;
+  const limit = Number(req.query.limit || 20);
+  const records = await listRecordsByDashboard({ dashboardId, tableKey });
+  res.json({ records: records.slice(0, limit) });
 }
 
 export async function createUser(req, res) {

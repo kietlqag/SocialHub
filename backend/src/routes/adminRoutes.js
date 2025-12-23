@@ -1,9 +1,9 @@
 import express from "express";
 import { authenticate } from "../middleware/authenticate.js";
 import { requireAdmin } from "../middleware/requireAdmin.js";
-import { getUsers, getDashboards, getDashboardDetail, createUser, updateUser, deleteUser, getActivity, duplicateDashboardAdmin, updateDashboardStatus } from "../controllers/adminController.js";
+import { getUsers, getDashboards, getDashboardDetail, createUser, updateUser, deleteUser, getActivity, duplicateDashboardAdmin, updateDashboardStatus, deleteDashboardAdmin } from "../controllers/adminController.js";
 import { listAdminNotifications, createAdminNotification, updateAdminNotification, deleteAdminNotification } from "../controllers/notificationAdminController.js";
-import { listDashboardTables, addDashboardTable, updateDashboardTable, deleteDashboardTable, previewDashboardTable } from "../controllers/adminController.js";
+import { listDashboardTables, addDashboardTable, updateDashboardTable, deleteDashboardTable, previewDashboardTable, listDashboardTableRecords } from "../controllers/adminController.js";
 
 const router = express.Router();
 
@@ -16,11 +16,13 @@ router.get("/dashboards", authenticate, requireAdmin, getDashboards);
 router.get("/dashboards/:id", authenticate, requireAdmin, getDashboardDetail);
 router.post("/dashboards/:id/duplicate", authenticate, requireAdmin, duplicateDashboardAdmin);
 router.patch("/dashboards/:id/status", authenticate, requireAdmin, updateDashboardStatus);
+router.delete("/dashboards/:id", authenticate, requireAdmin, deleteDashboardAdmin);
 router.get("/dashboards/:id/tables", authenticate, requireAdmin, listDashboardTables);
 router.post("/dashboards/:id/tables", authenticate, requireAdmin, addDashboardTable);
 router.patch("/dashboards/:id/tables/:tableKey", authenticate, requireAdmin, updateDashboardTable);
 router.delete("/dashboards/:id/tables/:tableKey", authenticate, requireAdmin, deleteDashboardTable);
 router.get("/dashboards/:id/tables/:tableKey/preview", authenticate, requireAdmin, previewDashboardTable);
+router.get("/dashboards/:id/tables/:tableKey/records", authenticate, requireAdmin, listDashboardTableRecords);
 router.get("/activity", authenticate, requireAdmin, getActivity);
 router.get("/notifications", authenticate, requireAdmin, listAdminNotifications);
 router.post("/notifications", authenticate, requireAdmin, createAdminNotification);

@@ -284,6 +284,8 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [busyDashboardIds, setBusyDashboardIds] = useState<Set<string>>(new Set());
   const [confirmDeleteDashboard, setConfirmDeleteDashboard] = useState<string | null>(null);
   const [confirmDashboardText, setConfirmDashboardText] = useState("");
+  const [tableRecords, setTableRecords] = useState<Record<string, any[]>>({});
+  const [loadingTableKeys, setLoadingTableKeys] = useState<Set<string>>(new Set());
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
@@ -530,11 +532,19 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
       toast.error("Session expired. Please sign in again.");
       return;
     }
+    setTableRecords({});
+    setLoadingTableKeys(new Set());
     setLoadingDashboardDetail(true);
     api
       .get<{ dashboard: any }>(`/admin/dashboards/${dashboard.id}`, session.token)
       .then((res) => {
         setSelectedItem(res.dashboard);
+        const tables = res.dashboard?.tables || [];
+        tables.forEach((t: any) => {
+          if (t.key) {
+            handleLoadTableRecords(res.dashboard.id, t.key);
+          }
+        });
         setDialogType("dashboard-details");
         setIsDialogOpen(true);
       })
@@ -881,31 +891,32 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     setConfirmDashboardText("");
   };
 
-  const handlePreviewTable = async (dashboardId: string, tableKey: string) => {
+  const handleLoadTableRecords = async (dashboardId: string, tableKey: string) => {
     const session = getCurrentSession();
     if (!session?.token) {
       toast.error("Please sign in again");
       return;
     }
-    setLoadingDashboardDetail(true);
+    setLoadingTableKeys((prev) => new Set(prev).add(tableKey));
     try {
-      const res = await api.get<{ rows: any[]; fields: any[] }>(
-        `/admin/dashboards/${dashboardId}/tables/${tableKey}/preview`,
+      const res = await api.get<{ records: any[] }>(
+        `/admin/dashboards/${dashboardId}/tables/${tableKey}/records?limit=20`,
         session.token
       );
-      setDialogType("dashboard-details");
-      setSelectedItem({
-        name: `Preview: ${tableKey}`,
-        tables: [{ key: tableKey, name: tableKey, fields: res.fields || [], sampleRows: res.rows || [] }],
-      });
-      setIsDialogOpen(true);
+      setTableRecords((prev) => ({ ...prev, [tableKey]: res.records || [] }));
+      toast.success("Loaded records");
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.message || "Failed to preview table");
+      toast.error(err?.message || "Failed to load records");
     } finally {
-      setLoadingDashboardDetail(false);
+      setLoadingTableKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(tableKey);
+        return next;
+      });
     }
   };
+
   const filteredDashboards = dashboards.filter((d) => {
     if (!dashboardSearch.trim()) return true;
     const q = dashboardSearch.toLowerCase();
@@ -915,6 +926,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
       (d.description || "").toLowerCase().includes(q)
     );
   });
+  const totalTables = dashboards.reduce((sum, d) => sum + (Number(d.tables) || 0), 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1342,10 +1354,10 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">Total Storage</p>
-                    <p className="text-2xl mt-1">7.6 GB</p>
+                    <p className="text-sm text-gray-600">Total Tables</p>
+                    <p className="text-2xl mt-1">{totalTables}</p>
                   </div>
-                  <Database className="h-8 w-8 text-purple-600" />
+                  <Blocks className="h-8 w-8 text-purple-600" />
                 </div>
               </Card>
             </div>
@@ -1445,15 +1457,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                                     <Lock className="h-4 w-4" />
                                   )}
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handlePreviewTable(dashboard.id, (selectedItem?.tables?.[0]?.key) || "main")}
-                                  title="Preview Data"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <Button
+                            <Button
                                   variant="ghost"
                                   size="icon"
                                   disabled={busyDashboardIds.has(dashboard.id)}
@@ -2228,9 +2232,19 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                               {table.fields?.length || 0} fields
                             </p>
                           </div>
-                          {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
-                            <Badge variant="outline">Sample rows</Badge>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
+                              <Badge variant="outline">Sample rows</Badge>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={loadingTableKeys.has(table.key)}
+                              onClick={() => handleLoadTableRecords(selectedItem.id, table.key)}
+                            >
+                              {loadingTableKeys.has(table.key) ? "Loading..." : "View data"}
+                            </Button>
+                          </div>
                         </div>
                         {Array.isArray(table.fields) && table.fields.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -2240,6 +2254,57 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                               </Badge>
                             ))}
                           </div>
+                        )}
+                        {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
+                          <div className="mt-3 overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {table.fields?.map((f: any) => (
+                                    <TableHead key={f.key || f.name}>{f.name || f.key}</TableHead>
+                                  ))}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {table.sampleRows.slice(0, 5).map((row: any, idx: number) => (
+                                  <TableRow key={idx}>
+                                    {table.fields?.map((f: any) => (
+                                      <TableCell key={f.key || f.name} className="text-sm text-gray-700">
+                                        {row?.[f.key] ?? "-"}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                        {tableRecords[table.key] && tableRecords[table.key].length > 0 ? (
+                          <div className="mt-3 overflow-x-auto">
+                            <p className="text-xs text-gray-500 mb-1">Latest records</p>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {table.fields?.map((f: any) => (
+                                    <TableHead key={f.key || f.name}>{f.name || f.key}</TableHead>
+                                  ))}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {tableRecords[table.key].slice(0, 10).map((row: any, idx: number) => (
+                                  <TableRow key={idx}>
+                                    {table.fields?.map((f: any) => (
+                                      <TableCell key={f.key || f.name} className="text-sm text-gray-700">
+                                        {row?.record?.[f.key] ?? "-"}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500 mt-2">No records yet</p>
                         )}
                       </div>
                     ))}
@@ -2456,6 +2521,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                 }
                 setBusyDashboardIds((prev) => new Set(prev).add(dashboardId));
                 api.delete(`/api/dashboards/${dashboardId}`, session.token)
+                api.delete(`/admin/dashboards/${dashboardId}`, session.token)
                   .then(() => {
                     setDashboards((prev) => prev.filter((d) => d.id !== dashboardId));
                     toast.success("Dashboard deleted");
