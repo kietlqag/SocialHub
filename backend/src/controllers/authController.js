@@ -3,6 +3,7 @@ import { issueJwt } from "../services/tokenService.js";
 import { sendMail } from "../mailer.js";
 import { HttpError } from "../utils/httpError.js";
 import { findUserByEmail } from "../repositories/userRepository.js";
+import { insertActivity } from "../repositories/activityRepository.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -50,8 +51,28 @@ const redirectWithToken = (res, token, error) => {
   return res.redirect(url.toString());
 };
 
-const completeOAuthLogin = async (user, res) => {
+const logLoginActivity = async (req, user, provider = "password") => {
+  if (!user?.id) return;
+  try {
+    await insertActivity({
+      userId: user.id,
+      action: "auth.login",
+      targetType: "user",
+      targetId: user.id,
+      metadata: {
+        provider,
+        ip: req.ip,
+        userAgent: req.get("user-agent") || "",
+      },
+    });
+  } catch (err) {
+    console.warn("Failed to log activity (auth.login):", err.message);
+  }
+};
+
+const completeOAuthLogin = async (req, user, provider, res) => {
   const token = await issueJwt(user);
+  await logLoginActivity(req, user, provider);
   return redirectWithToken(res, token);
 };
 
@@ -81,6 +102,7 @@ export async function login(req, res) {
   if (!email || !password) return res.status(400).json({ error: "Missing email or password" });
   try {
     const result = await loginUser(email, password);
+    await logLoginActivity(req, result.user, "password");
     res.json(result);
   } catch (err) {
     const status = err.status || 500;
@@ -215,7 +237,7 @@ export async function googleCallback(req, res) {
       providerId: profile.id?.toString(),
       avatarUrl: profile.picture,
     });
-    await completeOAuthLogin(user, res);
+    await completeOAuthLogin(req, user, "google", res);
   } catch (err) {
     console.error("Google OAuth error", err);
     return redirectWithToken(res, null, "google_auth_error");
@@ -291,7 +313,7 @@ export async function githubCallback(req, res) {
       providerId: profile.id?.toString(),
       avatarUrl: profile.avatar_url,
     });
-    await completeOAuthLogin(user, res);
+    await completeOAuthLogin(req, user, "github", res);
   } catch (err) {
     console.error("GitHub OAuth error", err);
     return redirectWithToken(res, null, "github_auth_error");
