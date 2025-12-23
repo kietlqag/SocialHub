@@ -6,6 +6,7 @@ import aiRoutes from "./routes/aiRoutes.js";
 import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import notificationPreferenceRoutes from "./routes/notificationPreferenceRoutes.js";
+import notificationCountRoutes from "./routes/notificationCountRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -51,6 +52,7 @@ app.use(orgRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/notifications", notificationRoutes);
 app.use("/api/notifications/preferences", notificationPreferenceRoutes);
+app.use("/api/notifications/unread-count", notificationCountRoutes);
 // Profile endpoints
 app.use("/profile", profileRoutes);
 app.use("/api", userRoutes);

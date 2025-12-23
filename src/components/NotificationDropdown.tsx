@@ -41,6 +41,8 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [unreadCount, setUnreadCount] = useState<number | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
@@ -135,7 +137,27 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
     }
   }, [isOpen, hasLoadedOnce, notifications.length]);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  useEffect(() => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    const currentUserId = session?.user?.id;
+    if (!token || !currentUserId) return;
+
+    const fetchUnread = async () => {
+      try {
+        const res = await api.get<{ unreadCount: number }>("/api/notifications/unread-count", token);
+        setUnreadCount(res.unreadCount);
+      } catch (err) {
+        console.warn("[NotificationDropdown] failed to fetch unread count", err);
+      }
+    };
+
+    fetchUnread();
+    intervalRef.current = setInterval(fetchUnread, 30000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const markAsRead = async (id: string) => {
     try {
@@ -145,6 +167,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       const res = await api.patch<{ data: any }>(`/api/notifications/${id}`, { read: true }, token);
       const updated = res?.data;
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: !!updated?.read } : n)));
+      setUnreadCount((prev) => (typeof prev === "number" && prev > 0 ? prev - 1 : 0));
     } catch (err) {
       console.error("Failed to mark as read", err);
     }
@@ -158,6 +181,7 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       if (!token) throw new Error("Missing auth token");
       await Promise.all(unread.map((id) => api.patch(`/api/notifications/${id}`, { read: true }, token)));
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
     } catch (err) {
       console.error("Error marking all as read", err);
     }
@@ -169,7 +193,13 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
       const token = session?.token;
       if (!token) throw new Error("Missing auth token");
       await api.delete(`/api/notifications/${id}`, token);
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      setNotifications((prev) => {
+        const target = prev.find((n) => n.id === id);
+        if (target && !target.read) {
+          setUnreadCount((prevCount) => (typeof prevCount === "number" && prevCount > 0 ? prevCount - 1 : 0));
+        }
+        return prev.filter((n) => n.id !== id);
+      });
     } catch (err) {
       console.error("Failed to delete notification", err);
     }
@@ -299,8 +329,16 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
           if (next) window.dispatchEvent(new CustomEvent("close-all-dropdowns", { detail: selfId.current }));
         }}
       >
-        <Bell className="w-5 h-5" />
-        {unreadCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+        <span className="relative inline-flex items-center justify-center bellWrapper">
+          <Bell className="w-5 h-5" />
+          {typeof unreadCount === "number" && unreadCount > 0 && (
+            <span
+              className={`bellBadge ${unreadCount < 10 ? "bellBadge--single" : "bellBadge--double"}`}
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </span>
       </Button>
       {renderPanel()}
     </div>

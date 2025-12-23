@@ -538,18 +538,6 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
 
           <div className="footerActions">
             <Button
-              variant="ghost"
-              size="sm"
-              className="ghostBtn"
-              onClick={() => {
-                const targets = selectedNotifications.size ? Array.from(selectedNotifications) : filteredNotifications.map((n) => n.id);
-                if (targets.length) markManyAsRead(targets);
-              }}
-            >
-              <Check className="w-4 h-4 mr-2" />
-              Mark all as read
-            </Button>
-            <Button
               variant="outline"
               size="sm"
               className="dangerOutline"
