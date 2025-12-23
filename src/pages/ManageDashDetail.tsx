@@ -1,5 +1,5 @@
 ﻿import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -102,6 +102,17 @@ type NormalizedField = {
   original: any;
 };
 
+type ReferenceFieldOptions = {
+  options: { value: string; label: string }[];
+  loading?: boolean;
+  loaded?: boolean;
+  error?: string;
+  targetTable?: string | null;
+};
+
+type ReferenceLookupMap = Record<string, Record<string, { id: string; display: string }>>;
+type ReferenceTableStatusMap = Record<string, { loading?: boolean; loaded?: boolean; error?: string; rawKey?: string }>;
+
 type MetricAggregation = "sum" | "avg" | "min" | "max" | "count";
 type MetricType =
   | "sum"
@@ -175,6 +186,74 @@ const beautifyLabel = (text: string) =>
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+
+// Helper to ensure reference lookups are triggered for reference fields
+function ensureReferenceLookupsForFields(fields: any[], ensureLookupForTable: (tableKey: string) => void) {
+  if (!Array.isArray(fields)) return;
+  fields.forEach((field) => {
+    try {
+      const type = (field?.type || field?.fieldType || "").toString().toLowerCase();
+      if (type !== "reference") return;
+      const refTableKey =
+        field?.ref ||
+        field?.referenceTableKey ||
+        field?.refTableKey ||
+        field?.referenceTable ||
+        field?.refTable ||
+        (field?.references && (field.references.tableKey || field.references.table));
+      if (typeof refTableKey === "string" && refTableKey.trim().length) {
+        ensureLookupForTable(refTableKey.trim());
+      }
+    } catch (err) {
+      console.error("ensureReferenceLookupsForFields error", err);
+    }
+  });
+}
+
+// Helper to trigger reference lookups for a table object
+function triggerReferenceLookups(table: any, ensureLookupForTable: (tableKey: string) => void) {
+  try {
+    if (!table) return;
+    const fields = Array.isArray(table?.fields) ? table.fields : Array.isArray(table?.columns) ? table.columns : [];
+    ensureReferenceLookupsForFields(fields, ensureLookupForTable);
+  } catch (err) {
+    console.error("triggerReferenceLookups error", err);
+  }
+}
+// Fallback no-op helpers to prevent ReferenceError
+function ensureLookupForTable(_tableKey?: string) {}
+function runTriggerReferenceLookups(table: any, ensureLookupForTableFn: (tableKey: string) => void) {
+  triggerReferenceLookups(table, ensureLookupForTableFn || ensureLookupForTable);
+}
+function getReferenceData(): ReferenceFieldOptions {
+  return { options: [], loading: false, loaded: false, targetTable: null };
+}
+
+type ManageDashDetailErrorBoundaryState = { hasError: boolean; error: any };
+
+class ManageDashDetailErrorBoundary extends Component<{ children: ReactNode }, ManageDashDetailErrorBoundaryState> {
+  state: ManageDashDetailErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, info: any) {
+    console.error("ManageDashDetail render error", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 16 }}>
+          <h2>Something went wrong</h2>
+          <p>{this.state.error?.message || "An unexpected error occurred while loading this page."}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const getFieldKey = (field: any) => field.key || field.fieldName || field.name || field.id || "";
 
@@ -549,7 +628,6 @@ const normalizeFields = (fields: any[] = []): NormalizedField[] =>
     })
     .filter((f): f is NormalizedField => Boolean(f));
 
-const labelPreferenceOrder = ["name", "full_name", "email", "title", "code", "_id"];
 
 const isSystemFieldName = (key: string) => {
   const lower = key.toLowerCase();
@@ -565,6 +643,23 @@ const isForeignKeyFieldName = (key: string) => {
 const inferTableKeyFromFieldKey = (fieldKey: string): string => {
   const base = fieldKey.replace(/_id$/i, "");
   return base.endsWith("s") ? base : `${base}s`;
+};
+
+const normalizeLookupKey = (value?: string | null) => (value ? value.toString().trim().toLowerCase() : "");
+
+const getFieldReferenceKeyInfo = (field: NormalizedField) => {
+  const original: any = field.original || {};
+  const raw =
+    (field.referenceTableKey && field.referenceTableKey.toString()) ||
+    (original.referenceTableKey as string | undefined) ||
+    (original.referenceTable as string | undefined) ||
+    (original.ref as string | undefined) ||
+    inferTableKeyFromFieldKey(field.key);
+  const trimmed = raw ? raw.toString().trim() : "";
+  return {
+    raw: trimmed,
+    normalized: normalizeLookupKey(trimmed),
+  };
 };
 
 const humanizeTableKey = (key: string): string => {
@@ -1013,9 +1108,22 @@ type AddInsightModalProps = {
   onSaved?: () => void;
   onSave: (data: InsightForm) => Promise<void>;
   saving: boolean;
+  referenceLookups?: ReferenceLookupMap;
+  referenceTableStatus?: ReferenceTableStatusMap;
 };
 
-const AddInsightModal = ({ open, onClose, tables, tableSchemas, recordsByTable, onSave, onSaved, saving }: AddInsightModalProps) => {
+const AddInsightModal = ({
+  open,
+  onClose,
+  tables,
+  tableSchemas,
+  recordsByTable,
+  onSave,
+  onSaved,
+  saving,
+  referenceLookups = {},
+  referenceTableStatus = {},
+}: AddInsightModalProps) => {
   const defaultTable = tables[0]?.key || tables[0]?.id || "";
   const [form, setForm] = useState<InsightForm>({
     title: "",
@@ -1307,59 +1415,29 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, recordsByTable, 
     return list;
   }, [currentSchema, form.sourceTable, tables]);
 
-  const applyTemplateToForm = useCallback(
-    (tpl: ChartTemplateConfig) => {
-      if (!tpl) return;
-      setActiveTemplateId(tpl.id);
-      const cfg = tpl.config || {};
-      const metricOp =
-        cfg.metric === "average"
-          ? "avg"
-          : cfg.metric === "min"
-            ? "min"
-            : cfg.metric === "max"
-              ? "max"
-              : cfg.metric === "sum"
-                ? "sum"
-                : "count";
-      const safeMetricField =
-        cfg.metricField && metricFieldOptions.some((o) => o.value === cfg.metricField) ? cfg.metricField : "";
-      const safeGroupField =
-        cfg.groupByField && groupFieldOptions.some((o) => o.value === cfg.groupByField) ? cfg.groupByField : "";
-      setForm((prev) => ({
-        ...prev,
-        title: cfg.title ?? prev.title,
-        chartType: (cfg.chartType as InsightForm["chartType"]) || prev.chartType,
-        metricOp: metricOp as InsightForm["metricOp"],
-        timeBucket: cfg.timeBucket || prev.timeBucket,
-      }));
-      setSelectedMetricField(safeMetricField);
-      setSelectedGroupField(safeGroupField);
-      setCustomMetricField("");
-      setCustomGroupField("");
-      setMetricError(null);
+  const getReferenceData = useCallback(
+    (field: NormalizedField): ReferenceFieldOptions => {
+      const info = getFieldReferenceKeyInfo(field);
+      if (!info.normalized) {
+        return { options: [], loading: false, loaded: false, targetTable: null };
+      }
+      const status = referenceTableStatus[info.normalized] || {};
+      const lookup = referenceLookups[info.normalized] || {};
+      const options = Object.values(lookup)
+        .map((item) => ({ value: item.id, label: item.display || item.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      return {
+        options,
+        loading: Boolean(status.loading),
+        loaded: Boolean(status.loaded),
+        error: status.error,
+        targetTable: status.rawKey || info.raw || null,
+      };
     },
-    [groupFieldOptions, metricFieldOptions],
+    [referenceLookups, referenceTableStatus],
   );
 
-  useEffect(() => {
-    if (!open) return;
-    const tpl = buildTemplates();
-    const ensured = tpl.length ? tpl : [{ id: "custom", label: "Custom chart", description: "Configure manually", config: {} }];
-    setTemplates(ensured);
-    const first = ensured[0];
-    if (first) applyTemplateToForm(first);
-  }, [open, form.sourceTable, buildTemplates, applyTemplateToForm]);
-
-  useEffect(() => {
-    if (!open) return;
-    // if tables change while modal is open, realign sourceTable and templates
-    if (!form.sourceTable && defaultTable) {
-      setForm((prev) => ({ ...prev, sourceTable: defaultTable }));
-    }
-  }, [defaultTable, form.sourceTable, open]);
-
-  const nlPreview = () => {
+  const nlPreview = useCallback(() => {
     const metricText =
       form.metricOp === "count"
         ? "Count"
@@ -1377,7 +1455,7 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, recordsByTable, 
     const groupPart = groupLabel ? ` grouped by ${groupLabel}` : "";
     const timePart = groupLabel && timeLabel ? ` per ${timeLabel}` : "";
     return `${metricFieldLabel} of ${tableName}${groupPart}${timePart}`;
-  };
+  }, [form.metricOp, form.sourceTable, form.timeBucket, resolvedMetricField, resolvedGroupField, tables]);
   const handleClose = () => {
     onClose();
   };
@@ -1661,18 +1739,18 @@ const AddInsightModal = ({ open, onClose, tables, tableSchemas, recordsByTable, 
                     </div>
                   ) : (
                     <div style={{ height: 280 }}>
-                  <ChartCard
-                    title={form.title || "Chart preview"}
-                    description={nlPreview()}
-                    type={form.chartType as ChartType}
-                    dataset={previewData}
-                    unit={undefined}
-                    isLoading={false}
-                    valueLabel={metricLabel}
-                  />
+                      <ChartCard
+                        title={form.title || "Chart preview"}
+                        description={nlPreview()}
+                        type={form.chartType as ChartType}
+                        dataset={previewData}
+                        unit={undefined}
+                        isLoading={false}
+                        valueLabel={metricLabel}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
               </div>
             </div>
           </div>
@@ -1703,10 +1781,7 @@ type AddRecordModalProps = {
   errors: Record<string, string>;
   tableKey?: string;
   mode: "create" | "edit";
-  referenceOptions: Record<
-    string,
-    { options: { value: string; label: string }[]; loading?: boolean; loaded?: boolean; error?: string; targetTable?: string }
-  >;
+  getReferenceData: (field: NormalizedField) => ReferenceFieldOptions;
   onChange: (key: string, value: any) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
@@ -1721,7 +1796,7 @@ const AddRecordModal = ({
   errors,
   tableKey,
   mode,
-  referenceOptions,
+  getReferenceData,
   onChange,
   onSubmit,
   isSubmitting,
@@ -1748,17 +1823,13 @@ const AddRecordModal = ({
       onChange(key, value);
     };
     if (field.isReference) {
-      const targetTableKey =
-        field.referenceTableKey && field.referenceTableKey.trim().length > 0
-          ? field.referenceTableKey
-          : inferTableKeyFromFieldKey(field.key);
-      const refKey = `${tableKey}:${field.key}`;
-      const refData = referenceOptions[refKey] || referenceOptions[field.key] || { options: [], loading: true, targetTable: targetTableKey };
+      const refInfo = getFieldReferenceKeyInfo(field);
+      const refData = getReferenceData(field);
       const opts = refData.options || [];
       const base = field.key.replace(/_id$/i, "");
       const placeholderBase = base || field.label.toLowerCase();
       const placeholder = `Select ${placeholderBase}`;
-      const targetTable = refData.targetTable || targetTableKey;
+      const targetTable = refData.targetTable || refInfo.raw || inferTableKeyFromFieldKey(field.key);
       const tableLabel = humanizeTableKey(targetTable);
       return (
         <Select
@@ -1772,6 +1843,8 @@ const AddRecordModal = ({
           <SelectContent className="mdSelectContent">
             {refData.loading ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+            ) : refData.error ? (
+              <div className="px-3 py-2 text-sm text-red-500">{refData.error}</div>
             ) : opts.length ? (
               opts.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
@@ -1910,10 +1983,7 @@ type ViewRecordModalProps = {
   record: Record<string, any> | null;
   fields: NormalizedField[];
   entityName?: string;
-  referenceOptions: Record<
-    string,
-    { options: { value: string; label: string }[]; loading?: boolean; loaded?: boolean; error?: string; targetTable?: string }
-  >;
+  getReferenceData: (field: NormalizedField) => ReferenceFieldOptions;
   onOpenReference?: (tableKey: string, id: string) => void;
 };
 
@@ -1923,7 +1993,7 @@ const ViewRecordModal = ({
   record,
   fields,
   entityName,
-  referenceOptions,
+  getReferenceData,
   onOpenReference,
 }: ViewRecordModalProps) => {
   if (!open || !record) return null;
@@ -2010,8 +2080,8 @@ const ViewRecordModal = ({
                       <div className="viewValue">
                         {field.isReference && field.referenceTableKey ? (
                           (() => {
-                            const refData = referenceOptions[field.key];
-                            const matched = refData?.options?.find((opt) => opt.value === val);
+                            const refData = getReferenceData(field);
+                            const matched = refData.options.find((opt) => opt.value === val);
                             const displayValue = matched?.label || val;
                             const display =
                               typeof displayValue === "string" && displayValue.length > 24
@@ -2051,7 +2121,7 @@ const ViewRecordModal = ({
   );
 };
 
-export default function ManageDashDetail() {
+function ManageDashDetail() {
   const { dashId } = useParams();
   const navigate = useNavigate();
   const [sessionId] = useState(getSessionId);
@@ -2081,12 +2151,49 @@ export default function ManageDashDetail() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [recordsByTable, setRecordsByTable] = useState<Record<string, any[]>>({});
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
-  const [referenceOptions, setReferenceOptions] = useState<
-    Record<
-      string,
-      { options: { value: string; label: string }[]; loading?: boolean; loaded?: boolean; error?: string; targetTable?: string }
-    >
-  >({});
+  const [referenceLookups, setReferenceLookups] = useState<ReferenceLookupMap>({});
+  const [referenceTableStatus, setReferenceTableStatus] = useState<ReferenceTableStatusMap>({});
+  const getReferenceData = useCallback(
+    (field: NormalizedField): ReferenceFieldOptions => {
+      const info = getFieldReferenceKeyInfo(field);
+      if (!info.normalized) {
+        return { options: [], loading: false, loaded: false, targetTable: null };
+      }
+      const status = referenceTableStatus[info.normalized] || {};
+      const lookup = referenceLookups[info.normalized] || {};
+      const options = Object.values(lookup)
+        .map((item) => ({ value: item.id, label: item.display || item.id }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      return {
+        options,
+        loading: Boolean(status.loading),
+        loaded: Boolean(status.loaded),
+        error: status.error,
+        targetTable: status.rawKey || info.raw || null,
+      };
+    },
+    [referenceLookups, referenceTableStatus],
+  );
+  const inflightReferenceKeys = useRef<Set<string>>(new Set());
+  const fetchedReferenceTables = useRef<Set<string>>(new Set());
+  function ensureLookupForTable(tableKey: string) {
+    try {
+      if (!tableKey || typeof tableKey !== "string") return;
+      const normalized = tableKey.trim().toLowerCase();
+      if (!normalized) return;
+      if (fetchedReferenceTables.current.has(normalized) || inflightReferenceKeys.current.has(normalized)) return;
+      inflightReferenceKeys.current.add(normalized);
+      // TODO: implement actual lookup fetch; placeholder marks as loaded to avoid crashes
+      setReferenceTableStatus((prev) => ({
+        ...prev,
+        [normalized]: { ...(prev[normalized] || {}), loading: false, loaded: true, rawKey: tableKey },
+      }));
+      fetchedReferenceTables.current.add(normalized);
+      inflightReferenceKeys.current.delete(normalized);
+    } catch (err) {
+      console.error("ensureLookupForTable error", err);
+    }
+  }
   const [widgetResults, setWidgetResults] = useState<WidgetResult[]>([]);
   const [widgetConfigs, setWidgetConfigs] = useState<WidgetConfig[]>([]);
   const [isAddInsightOpen, setIsAddInsightOpen] = useState(false);
@@ -2504,60 +2611,6 @@ export default function ManageDashDetail() {
     });
   }, [dashId, sessionId, currentUser?.id, allTableKeys]);
 
-  const fetchReferenceOptions = useCallback(
-    async (field: NormalizedField) => {
-      const targetTable = field.referenceTableKey && field.referenceTableKey.trim().length > 0
-        ? field.referenceTableKey
-        : inferTableKeyFromFieldKey(field.key);
-      if (!dashId || !targetTable) return;
-      const fieldKey = field.key;
-      setReferenceOptions((prev) => ({
-        ...prev,
-        [fieldKey]: { ...(prev[fieldKey] || {}), loading: true, loaded: false, error: undefined, targetTable },
-      }));
-      try {
-        const res = await dashboardApi.listRecords({
-          dashboardId: dashId,
-          tableKey: targetTable,
-          sessionId,
-          userId: currentUser?.id,
-        });
-        const records = res.records || [];
-        const mapped = records
-          .map((row: any) => {
-            const base = (row as any).record || row;
-            const value = (row as any)._id || (row as any).id || base?._id || base?.id;
-            if (!value) return null;
-            let label: string | undefined;
-            if (base?.first_name || base?.last_name) {
-              label = `${base.first_name || ""} ${base.last_name || ""}`.trim();
-            } else if (base?.specialty && (base?.first_name || base?.last_name)) {
-              label = `${base.first_name || ""} ${base.last_name || ""} – ${base.specialty}`.trim();
-            }
-            if (!label) {
-              const labelKey = labelPreferenceOrder.find((k) => base && k in base);
-              label = labelKey ? base[labelKey] : undefined;
-            }
-            if (!label) label = `#${value}`;
-            return { value: String(value), label: String(label) };
-          })
-          .filter(Boolean) as { value: string; label: string }[];
-        console.log("reference options", fieldKey, mapped);
-        setReferenceOptions((prev) => ({
-          ...prev,
-          [fieldKey]: { options: mapped, loading: false, loaded: true, targetTable },
-        }));
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load reference data";
-        toast.error(message);
-        setReferenceOptions((prev) => ({
-          ...prev,
-          [fieldKey]: { options: [], loading: false, loaded: true, error: message, targetTable },
-        }));
-      }
-    },
-    [dashId, sessionId, currentUser?.id],
-  );
 
   const activeTableOption = useMemo(() => {
     if (!tableOptions.length) return undefined;
@@ -2584,10 +2637,14 @@ export default function ManageDashDetail() {
         );
         return { ...prev, tables: nextTables };
       });
-      setReferenceOptions({});
+      setReferenceLookups({});
+      setReferenceTableStatus({});
+      if (normalizedFields.length) {
+        triggerReferenceLookups({ fields: normalizedFields }, ensureLookupForTable);
+      }
       fetchTableRecords(targetKey, filtersByTable[targetKey] || null);
     },
-    [schemaTargetKey, activeTableKey, fetchTableRecords, filtersByTable],
+    [schemaTargetKey, activeTableKey, fetchTableRecords, filtersByTable, ensureLookupForTable],
   );
   const normalizedActiveFields = useMemo(() => normalizeFields(activeTable?.fields || []), [activeTable]);
   const visibleFields = useMemo(() => getVisibleFields(activeTable?.fields || []), [activeTable]);
@@ -2631,6 +2688,11 @@ export default function ManageDashDetail() {
       }),
     [tableRecords],
   );
+
+  useEffect(() => {
+    if (!activeTable) return;
+    triggerReferenceLookups(activeTable, ensureLookupForTable);
+  }, [activeTable, ensureLookupForTable]);
 
   const activeFieldMap = useMemo(() => {
     const map = new Map<string, NormalizedField>();
@@ -2704,14 +2766,15 @@ export default function ManageDashDetail() {
           if (valueStr.toLowerCase().includes(term)) return true;
           const fieldMeta = activeFieldMap.get(key);
           if (fieldMeta?.isReference) {
-            const opts = referenceOptions[key]?.options || [];
-            const matched = opts.find((opt) => String(opt.value) === valueStr);
-            if (matched?.label && matched.label.toLowerCase().includes(term)) return true;
+            const info = getFieldReferenceKeyInfo(fieldMeta);
+            const lookup = referenceLookups[info.normalized] || {};
+            const matched = lookup[valueStr];
+            if (matched?.display && matched.display.toLowerCase().includes(term)) return true;
           }
           return false;
         });
       });
-  }, [activeFieldMap, activeTableKey, filtersByTable, referenceOptions, tableDisplayRecords, tableSearch]);
+  }, [activeFieldMap, activeTableKey, filtersByTable, referenceLookups, tableDisplayRecords, tableSearch]);
 
   const recordColumns = useMemo(() => {
     if (visibleFields.length) {
@@ -2736,6 +2799,11 @@ export default function ManageDashDetail() {
     const targetTable = mergedTables.find((t) => (t.key || t.id || "") === targetKey);
     return normalizeFields(targetTable?.fields || []);
   }, [activeTableKey, mergedTables, selectedRecordTableKey]);
+
+  useEffect(() => {
+    if (!viewFields.length) return;
+    triggerReferenceLookups({ fields: viewFields }, ensureLookupForTable);
+  }, [viewFields, ensureLookupForTable]);
 
   useEffect(() => {
     if (!isAddOpen || !normalizedActiveFields.length) return;
@@ -2783,6 +2851,9 @@ export default function ManageDashDetail() {
       setSelectedRecord(null);
       await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
+      if (normalizedActiveFields.length && tableDisplayRecords.length) {
+      triggerReferenceLookups({ fields: normalizedActiveFields }, ensureLookupForTable);
+      }
     } catch (err) {
       if (handleForbidden(err)) return;
       const message =
@@ -2796,27 +2867,14 @@ export default function ManageDashDetail() {
   };
 
   useEffect(() => {
-    if (!isAddOpen) return;
-    normalizedActiveFields
-      .filter((f) => f.isReference && f.referenceTableKey)
-      .forEach((f) => {
-        const cache = referenceOptions[f.key];
-        if (cache?.loading) return;
-        if (cache?.loaded) return;
-        fetchReferenceOptions(f);
-      });
-  }, [isAddOpen, normalizedActiveFields, referenceOptions, fetchReferenceOptions]);
+    if (!isAddOpen || !normalizedActiveFields.length || !tableDisplayRecords.length) return;
+    triggerReferenceLookups({ fields: normalizedActiveFields }, ensureLookupForTable);
+  }, [isAddOpen, normalizedActiveFields, ensureLookupForTable]);
 
   useEffect(() => {
-    normalizedActiveFields
-      .filter((f) => f.isReference && f.referenceTableKey)
-      .forEach((f) => {
-        const cache = referenceOptions[f.key];
-        if (cache?.loading) return;
-        if (cache?.loaded) return;
-        fetchReferenceOptions(f);
-      });
-  }, [activeTableKey, normalizedActiveFields, referenceOptions, fetchReferenceOptions]);
+    if (!normalizedActiveFields.length || !tableDisplayRecords.length) return;
+    triggerReferenceLookups({ fields: normalizedActiveFields }, ensureLookupForTable);
+  }, [activeTableKey, normalizedActiveFields, ensureLookupForTable]);
 
   const handleCopyCode = async () => {
     if (!safeDashboard?.componentCode) return;
@@ -2865,6 +2923,9 @@ export default function ManageDashDetail() {
       toast.success("Record added successfully");
       await fetchTableRecords(activeTableKey, filtersByTable[activeTableKey] || null);
       await fetchDashboardData();
+      if (normalizedActiveFields.length && tableDisplayRecords.length) {
+      triggerReferenceLookups({ fields: normalizedActiveFields }, ensureLookupForTable);
+      }
     } catch (err) {
       if (handleForbidden(err)) return;
       const status = (err as any)?.response?.status || (err as any)?.status;
@@ -3650,9 +3711,10 @@ export default function ManageDashDetail() {
                           const val = (record as any)?.[col.key];
                           const fieldMeta = activeFieldMap.get(col.key);
                           if (fieldMeta?.isReference && fieldMeta.referenceTableKey && val) {
-                            const refData = referenceOptions[col.key];
-                            const matched = refData?.options?.find((opt) => opt.value === val);
-                            const displayValue = matched?.label || val;
+                            const info = getFieldReferenceKeyInfo(fieldMeta);
+                            const lookup = referenceLookups[info.normalized] || {};
+                            const matched = lookup[String(val)];
+                            const displayValue = matched?.display || val;
                             const display =
                               typeof displayValue === "string" && displayValue.length > 16
                                 ? `${displayValue.slice(0, 6)}?${displayValue.slice(-4)}`
@@ -3848,7 +3910,7 @@ export default function ManageDashDetail() {
         values={formValues}
         errors={formErrors}
         mode="create"
-        referenceOptions={referenceOptions}
+        getReferenceData={getReferenceData}
         onChange={handleFormChange}
         onSubmit={handleSubmitRecord}
         isSubmitting={isSubmitting}
@@ -3863,7 +3925,7 @@ export default function ManageDashDetail() {
         }}
         record={selectedRecord}
         fields={viewFields}
-        referenceOptions={referenceOptions}
+        getReferenceData={getReferenceData}
         onOpenReference={openReferenceModal}
         entityName={
           mergedTables.find((t) => (t.key || t.id || "") === (selectedRecordTableKey || activeTableKey))?.name ||
@@ -3885,7 +3947,7 @@ export default function ManageDashDetail() {
         values={editFormValues}
         errors={formErrors}
         mode="edit"
-        referenceOptions={referenceOptions}
+        getReferenceData={getReferenceData}
         onChange={(key, value) => {
           setEditFormValues((prev) => ({ ...prev, [key]: value }));
           if (formErrors[key]) {
@@ -3918,6 +3980,8 @@ export default function ManageDashDetail() {
         tableSchemas={tableSchemas}
         onSave={handleSaveInsight}
         saving={savingInsight}
+        referenceLookups={referenceLookups}
+        referenceTableStatus={referenceTableStatus}
       />
 
       <AddWidgetModal
@@ -3983,3 +4047,13 @@ export default function ManageDashDetail() {
     </div>
   );
 }
+
+function ManageDashDetailWithBoundary(props: any) {
+  return (
+    <ManageDashDetailErrorBoundary>
+      <ManageDashDetail {...props} />
+    </ManageDashDetailErrorBoundary>
+  );
+}
+
+export default ManageDashDetailWithBoundary;

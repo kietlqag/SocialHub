@@ -8,6 +8,7 @@ import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
 import { canEditDashboard, canViewDashboard, isGlobalAdminUser } from "../utils/dashboardAuth.js";
 
 const FIELD_TYPES = new Set(["string", "number", "boolean", "date", "enum", "reference", "id"]);
+const SYSTEM_KEY_SET = new Set(["id", "_id", "created_at", "updated_at"]);
 const RESERVED_KEYS = new Set(["_id", "created_at", "updated_at", ...SYSTEM_FIELDS]);
 
 const parseOwner = (req) => ({
@@ -24,28 +25,48 @@ const isReferenceLikeField = (field = {}) => {
   return semanticType === "reference" || field.ref != null;
 };
 
+const ensureAllowEditReferenceDefault = (field = {}) => {
+  if (isReferenceLikeField(field) && field.allowEditReference === undefined) {
+    return { ...field, allowEditReference: false };
+  }
+  return field;
+};
+
 const normalizeField = (field) => {
   const key = normalizeKey(field.key || field.fieldKey || field.name || field.id || "");
+  const lowerKey = key.toLowerCase();
   const label = field.label || field.displayName || field.name || field.fieldName || key;
   const type = (field.type || "").toString().toLowerCase() || "string";
   const visible = field.visibleInTable !== undefined ? field.visibleInTable : field.visible;
   const hasAllowEditReference = hasAllowEditReferenceProp(field);
   const allowEditReference =
     hasAllowEditReference && field.allowEditReference !== undefined ? Boolean(field.allowEditReference) : undefined;
+  const displayField = field.displayField || field.referenceLabelField;
+  const displayTemplate = field.displayTemplate || field.referenceDisplayTemplate;
+  const displayKey = field.displayKey || field.labelKey || field.referenceLabelKey;
+  const requiredRaw = field.required ?? field.isRequired;
+  const isSystemKey = SYSTEM_KEY_SET.has(lowerKey);
   return {
     id: field.id || field.fieldId || field._id?.toString?.() || randomUUID(),
     key,
     label,
     type,
-    required: Boolean(field.required),
+    required: requiredRaw === undefined ? false : Boolean(requiredRaw),
+    isRequired: requiredRaw === undefined ? false : Boolean(requiredRaw),
     visibleInTable: visible !== false,
     options: Array.isArray(field.options) ? field.options.filter(Boolean) : undefined,
     referenceTable: field.referenceTable || field.referenceTableKey || field.ref || field.references?.tableKey,
-    displayField: field.displayField || field.referenceLabelField,
-    system: field.system === true || field.systemField === true,
-    systemField: field.systemField === true,
+    displayField,
+    displayTemplate,
+    displayKey,
+    labelKey: field.labelKey || field.referenceLabelKey || displayKey,
+    system: isSystemKey,
+    systemField: isSystemKey,
     previousKey: field.previousKey || field.originalKey || field.oldKey,
     ...(hasAllowEditReference ? { allowEditReference } : {}),
+    ...(field.ref ? { ref: field.ref } : {}),
+    ...(field.semanticType ? { semanticType: field.semanticType } : {}),
+    ...(field.semanticRole ? { semanticRole: field.semanticRole } : {}),
   };
 };
 
@@ -71,9 +92,11 @@ const validateFields = (fields) => {
     if (field.type === "enum") {
       if (!field.options || !field.options.length) throw new HttpError(400, `Enum field ${key} requires options`);
     }
-    if (field.type === "reference") {
-      if (!field.referenceTable || !field.displayField) {
-        throw new HttpError(400, `Reference field ${key} requires referenceTable and displayField`);
+    if (isReferenceLikeField(field)) {
+      const refTable = field.referenceTable || field.referenceTableKey || field.ref;
+      const displayKey = field.displayField || field.displayKey || field.labelKey;
+      if (!refTable || !displayKey) {
+        throw new HttpError(400, `Reference field ${key} requires ref table and displayField`);
       }
     }
   });
@@ -107,9 +130,10 @@ export async function getTableSchema(req, res) {
   if (!table) {
     throw new HttpError(404, "Table not found");
   }
+  const fieldsWithAllowEdit = (table.fields || []).map((f) => ensureAllowEditReferenceDefault(f));
   res.json({
     table: { key: table.key, name: table.name, description: table.description },
-    fields: table.fields || [],
+    fields: fieldsWithAllowEdit,
   });
 }
 
@@ -121,11 +145,22 @@ export async function updateTableSchema(req, res) {
   if (!mongoose.Types.ObjectId.isValid(dashboardId)) throw new HttpError(400, "Invalid dashboardId");
   const incomingFields = Array.isArray(req.body?.fields) ? req.body.fields : [];
   if (!incomingFields.length) throw new HttpError(400, "fields array is required");
-  console.log("[updateTableSchema] incoming allowEditReference flags", incomingFields.map((f) => ({
-    key: f?.key || f?.id,
-    allowEditReference: f?.allowEditReference,
-    system: f?.system === true || f?.systemField === true,
-  })));
+  console.log(
+    "[updateTableSchema] incoming allowEditReference flags",
+    incomingFields.map((f) => ({
+      key: f?.key || f?.id,
+      allowEditReference: f?.allowEditReference,
+      system: f?.system === true || f?.systemField === true,
+    })),
+  );
+  console.log(
+    "[updateTableSchema] incoming required flags",
+    incomingFields.map((f) => ({
+      key: f?.key || f?.id,
+      required: f?.required,
+      isRequired: f?.isRequired,
+    })),
+  );
 
   const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) throw new HttpError(404, "Dashboard not found");
@@ -144,14 +179,12 @@ export async function updateTableSchema(req, res) {
   if (!table) throw new HttpError(404, "Table not found");
 
   const existingFields = Array.isArray(table.fields)
-    ? table.fields.map((f) => (typeof f?.toObject === "function" ? f.toObject() : f))
+    ? table.fields.map((f) => ensureAllowEditReferenceDefault(typeof f?.toObject === "function" ? f.toObject() : f))
     : [];
-  const existingSystemFields = existingFields.filter(
-    (f) => isSystemField(f) || f.system === true || f.systemField === true || SYSTEM_FIELDS.includes(f.key),
-  );
-  const normalizedIncomingAll = incomingFields.map((f) => normalizeField(f));
+  const existingSystemFields = existingFields.filter((f) => SYSTEM_KEY_SET.has(String(f.key || "").toLowerCase()));
+  const normalizedIncomingAll = incomingFields.map((f) => ensureAllowEditReferenceDefault(normalizeField(f)));
   const normalizedIncoming = normalizedIncomingAll.filter(
-    (f) => f.key && !isSystemField(f) && f.system !== true && f.systemField !== true,
+    (f) => f.key && !SYSTEM_KEY_SET.has(String(f.key || "").toLowerCase()),
   );
 
   validateFields(normalizedIncoming);
@@ -163,18 +196,35 @@ export async function updateTableSchema(req, res) {
     if (f?.key) incomingByKey.set(f.key, f);
   });
 
-  const baseSystemFields = buildSystemFields(existingSystemFields).map((f) => ({
-    ...f,
-    id: f.id || randomUUID(),
-    system: true,
-    systemField: true,
-  }));
+  const baseSystemFields = buildSystemFields(existingSystemFields)
+    .map((f) => ensureAllowEditReferenceDefault(f))
+    .map((f) => ({
+      ...f,
+      id: f.id || randomUUID(),
+      system: true,
+      systemField: true,
+    }));
 
   const systemFields = baseSystemFields.map((f) => {
     const incoming = (f.id && incomingById.get(f.id)) || incomingByKey.get(f.key);
     const next = { ...f };
-    if (incoming && isReferenceLikeField(f) && hasAllowEditReferenceProp(incoming)) {
-      next.allowEditReference = Boolean(incoming.allowEditReference);
+    if (incoming && isReferenceLikeField(f)) {
+      if (hasAllowEditReferenceProp(incoming)) {
+        next.allowEditReference = Boolean(incoming.allowEditReference);
+      }
+      const incomingDisplayField = incoming.displayField || incoming.displayKey || incoming.labelKey;
+      if (incomingDisplayField) {
+        next.displayField = incomingDisplayField;
+      }
+      if (incoming.displayKey) {
+        next.displayKey = incoming.displayKey;
+      }
+      if (incoming.labelKey) {
+        next.labelKey = incoming.labelKey;
+      }
+      if (incoming.displayTemplate) {
+        next.displayTemplate = incoming.displayTemplate;
+      }
     }
 
     // lock down critical props for system fields
@@ -183,7 +233,7 @@ export async function updateTableSchema(req, res) {
     next.ref = f.ref;
     next.semanticType = f.semanticType;
     next.semanticRole = f.semanticRole;
-    return next;
+    return ensureAllowEditReferenceDefault(next);
   });
 
   const existingById = new Map();
@@ -202,24 +252,52 @@ export async function updateTableSchema(req, res) {
     if (existing && previousKey && previousKey !== field.key) {
       renames.push({ from: previousKey, to: field.key });
     }
+    const required = field.required !== undefined ? field.required : existing?.required;
+    const isRequired = field.isRequired !== undefined ? field.isRequired : existing?.isRequired;
     const merged = {
       ...(existing || {}),
       ...field,
       id: field.id || existing?.id || randomUUID(),
       system: false,
       systemField: false,
+      ...(required !== undefined ? { required: required === true } : {}),
+      ...(isRequired !== undefined ? { isRequired: isRequired === true } : {}),
     };
-    if (existing && isReferenceLikeField(existing) && hasAllowEditReferenceProp(field)) {
+    const isRefLikeExisting = existing && isReferenceLikeField(existing);
+    if (isRefLikeExisting && hasAllowEditReferenceProp(field)) {
       merged.allowEditReference = Boolean(field.allowEditReference);
     } else if (!existing && hasAllowEditReferenceProp(field)) {
       merged.allowEditReference = Boolean(field.allowEditReference);
     }
-    return merged;
+
+    // lock down immutable reference-like props on existing fields
+    if (isRefLikeExisting) {
+      merged.key = existing.key;
+      merged.type = existing.type;
+      merged.ref = existing.ref;
+      merged.semanticType = existing.semanticType;
+      merged.semanticRole = existing.semanticRole;
+    }
+    return ensureAllowEditReferenceDefault(merged);
   });
 
-  table.fields = [...systemFields, ...nextFields];
-  await table.save();
-  const persistedAllowEditRefs = table.fields
+  const updatedFields = [...systemFields, ...nextFields].map((f) => ensureAllowEditReferenceDefault(f));
+  console.log(
+    "[updateTableSchema] normalized required flags",
+    updatedFields.map((f) => ({
+      key: f?.key,
+      required: f?.required,
+      isRequired: f?.isRequired,
+      system: f?.system,
+      systemField: f?.systemField,
+    })),
+  );
+  const updatedTable = await DashboardTableModel.findOneAndUpdate(
+    tableFilter,
+    { $set: { fields: updatedFields, updatedAt: new Date() } },
+    { new: true },
+  );
+  const persistedAllowEditRefs = (updatedTable?.fields || updatedFields)
     .filter((f) => isReferenceLikeField(f))
     .map((f) => ({ key: f.key, allowEditReference: f.allowEditReference, system: f.system || f.systemField }));
   console.log("[updateTableSchema] persisted allowEditReference", persistedAllowEditRefs);
@@ -228,8 +306,9 @@ export async function updateTableSchema(req, res) {
     await migrateFieldRenames({ dashboardId, tableKey, renames });
   }
 
+  const tableToReturn = updatedTable || table;
   res.json({
-    table: { key: table.key, name: table.name, description: table.description },
-    fields: table.fields,
+    table: { key: tableToReturn.key, name: tableToReturn.name, description: tableToReturn.description },
+    fields: (tableToReturn.fields || updatedFields).map((f) => ensureAllowEditReferenceDefault(f)),
   });
 }

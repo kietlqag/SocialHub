@@ -75,6 +75,9 @@ const isReferenceLike = (field: Partial<DashboardField>) => {
   const normalizedType = rawType ? rawType.toLowerCase() : undefined;
   if (normalizedType === "reference") return true;
 
+  // explicit reference target
+  if ((field as any).referenceTable || (field as any).ref) return true;
+
   // optional hint
   const relationType = (field as any).relationType as string | undefined;
   if (relationType && relationType.toLowerCase() === "reference") return true;
@@ -87,7 +90,9 @@ const isReferenceLike = (field: Partial<DashboardField>) => {
 
 const normalizeFieldVisibility = (field: DashboardField): EditableField => {
   const key = String(field.key || (field as any).fieldName || (field as any).name || "");
-  const isSystem = field.system === true || (field as any).systemField === true || SYSTEM_KEYS.has(key);
+  const referenceLike = isReferenceLike(field);
+  const isSystemKey = SYSTEM_KEYS.has(key);
+  const isSystem = isSystemKey && !referenceLike;
 
   const rawVisibleInTable = (field as any).visibleInTable;
   const rawHidden = (field as any).hidden;
@@ -101,11 +106,10 @@ const normalizeFieldVisibility = (field: DashboardField): EditableField => {
     visible = isSystem ? false : true;
   }
 
-  const referenceLike = isReferenceLike(field);
   const allowEditReferenceRaw = (field as any).allowEditReference;
 
-  // ✅ chỉ set allowEditReference nếu field thực sự reference-like
-  const allowEditReference = referenceLike ? Boolean(allowEditReferenceRaw) : undefined;
+  // Only set allowEditReference if the field is reference-like
+  const allowEditReference = referenceLike ? Boolean(allowEditReferenceRaw ?? false) : undefined;
 
   return {
     ...field,
@@ -116,6 +120,11 @@ const normalizeFieldVisibility = (field: DashboardField): EditableField => {
     previousKey: (field as any).previousKey || field.key,
     isSystem,
     ...(allowEditReference !== undefined ? { allowEditReference } : {}),
+    ...(referenceLike
+      ? { system: false, systemField: false, isSystem: false }
+      : isSystemKey
+        ? { system: true, systemField: true, isSystem: true }
+        : {}),
   };
 };
 
@@ -169,12 +178,11 @@ export function EditTableStructureModal({
       .getTableSchema(dashboardId, tableKey, { sessionId, userId })
       .then((res) => {
         const incoming = Array.isArray(res.fields) ? res.fields : [];
-        const system = incoming
-          .filter((f) => isSystemField(f))
-          .map((f) => normalizeFieldVisibility({ ...(f as any), required: true } as DashboardField));
-        const editable = incoming
-          .filter((f) => !isSystemField(f))
-          .map((f) => normalizeFieldVisibility(f as DashboardField));
+        const normalized = incoming.map((f) => normalizeFieldVisibility(f as DashboardField));
+        const system = normalized
+          .filter((f) => SYSTEM_KEYS.has(String(f.key || "").toLowerCase()))
+          .map((f) => ({ ...f, required: true, system: true, systemField: true, isSystem: true }));
+        const editable = normalized.filter((f) => !SYSTEM_KEYS.has(String(f.key || "").toLowerCase()));
         setSystemFields(system);
         setFields(editable);
         setError(null);
@@ -327,7 +335,7 @@ export function EditTableStructureModal({
     try {
       const payloadFields = [...systemFields, ...fields].map((f) => {
         const { tempId, isSystem, previousKey, ...rest } = f as any;
-        const visible = rest.visible ?? rest.visibleInTable ?? (!rest.hidden ?? true);
+        const visible = rest.visible ?? rest.visibleInTable ?? (rest.hidden === undefined ? true : !rest.hidden);
         const referenceLike = isReferenceLike(rest) || Boolean((rest as any).ref);
         const allowEditReference = referenceLike ? rest.allowEditReference === true : undefined;
 
@@ -335,6 +343,7 @@ export function EditTableStructureModal({
           ...rest,
           label: rest.label || rest.key,
           required: isSystem ? true : !!rest.required,
+          isRequired: isSystem ? true : !!rest.required,
           visible,
           visibleInTable: visible,
           hidden: !visible,
@@ -358,13 +367,28 @@ export function EditTableStructureModal({
         if (!key || !referenceLike) return;
         allowEditMap.set(key, Boolean((field as any).allowEditReference));
       });
+      const requiredMap = new Map<string, boolean>();
+      payloadFields.forEach((field) => {
+        if (!field) return;
+        const key = String((field as any).key || "");
+        const isSystem = SYSTEM_KEYS.has(key.toLowerCase());
+        if (!key || isSystem) return;
+        requiredMap.set(key, Boolean((field as any).required ?? (field as any).isRequired));
+      });
       const mergedIncoming = incoming.map((field) => {
         const key = String((field as any).key || "");
         const hasAllow = (field as any).allowEditReference !== undefined;
+        const hasRequired = (field as any).required !== undefined || (field as any).isRequired !== undefined;
+        const next = { ...field } as any;
         if (!hasAllow && key && allowEditMap.has(key)) {
-          return { ...field, allowEditReference: allowEditMap.get(key) };
+          next.allowEditReference = allowEditMap.get(key);
         }
-        return field;
+        if (!hasRequired && key && requiredMap.has(key)) {
+          const requiredVal = requiredMap.get(key);
+          next.required = requiredVal;
+          next.isRequired = requiredVal;
+        }
+        return next;
       });
 
       setSystemFields(
@@ -783,3 +807,4 @@ export function EditTableStructureModal({
     </div>
   );
 }
+

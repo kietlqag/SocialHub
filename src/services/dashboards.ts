@@ -337,6 +337,28 @@ export const dashboardApi = {
     const queryString = query.toString() ? `?${query.toString()}` : "";
     return api.put<TableSchemaResponse>(`/api/dashboards/${dashboardId}/tables/${tableKey}/schema${queryString}`, body);
   },
+  getReferenceLookups: (
+    dashboardId: string,
+    tableKey: string,
+    params: { keys?: string[] | string; sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const keys = Array.isArray(params.keys)
+      ? params.keys.filter((key) => key !== undefined && key !== null && String(key).trim().length > 0)
+      : typeof params.keys === "string"
+        ? params.keys
+            .split(",")
+            .map((key) => key.trim())
+            .filter((key) => key.length > 0)
+        : [];
+    if (keys.length) query.set("keys", keys.join(","));
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.get<Record<string, Record<string, { id: string; display: string }>>>(
+      `/api/dashboards/${dashboardId}/tables/${tableKey}/lookup${queryString}`,
+    );
+  },
   getDashboardData: (dashboardId: string, params: { sessionId?: string; userId?: string | null; from?: string; to?: string } = {}) => {
     const query = new URLSearchParams();
     if (params.sessionId) query.set("sessionId", params.sessionId);

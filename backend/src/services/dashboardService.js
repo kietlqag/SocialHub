@@ -324,6 +324,11 @@ const buildSamplePreviewContext = (samplePreview) => {
   return summarizeSamplePreview(samplePreview, { rowLimit: 3, columnLimit: 10 });
 };
 
+const isReferenceLikeField = (field = {}) => {
+  const semanticType = (field.semanticType || "").toString().toLowerCase();
+  return semanticType === "reference" || field.ref != null;
+};
+
 const attachSampleRowsToTables = (tables = [], samplePreview) => {
   if (!Array.isArray(tables) || !tables.length) return tables;
   if (!samplePreview || !Array.isArray(samplePreview.tables) || !samplePreview.tables.length) {
@@ -384,6 +389,390 @@ const attachSampleRowsToTables = (tables = [], samplePreview) => {
       ...table,
       sampleRows: remapSampleRowsForTable(preview, table),
     };
+  });
+};
+
+const baseNameFromIdKey = (key = "") => {
+  const normalized = normalizeNameKey(key);
+  if (!normalized || !normalized.endsWith("id")) return "";
+  return normalized.replace(/_?id$/i, "");
+};
+
+const SYSTEM_KEY_SET = new Set(["id", "_id"].map((k) => normalizeNameKey(k)));
+
+const collectPrimaryKeyMeta = (tables = []) => {
+  const meta = [];
+  tables.forEach((table) => {
+    const tableKey = table.key || table.id || table.name || "";
+    const normalizedTable = normalizeNameKey(tableKey);
+    const fields = Array.isArray(table.fields) ? table.fields : [];
+    const idField =
+      fields.find((f) => normalizeNameKey(f.key) === "id") ||
+      fields.find((f) => normalizeNameKey(f.key).endsWith("id")) ||
+      fields[0];
+    const pkKey = idField?.key || "id";
+    const pkValues = new Set();
+    (Array.isArray(table.sampleRows) ? table.sampleRows : []).forEach((row) => {
+      if (!row || typeof row !== "object") return;
+      const value = row[pkKey];
+      if (value === undefined || value === null || value === "") return;
+      pkValues.add(String(value));
+    });
+    meta.push({
+      tableKey,
+      normalizedTable,
+      pkKey,
+      normalizedPk: normalizeNameKey(pkKey),
+      pkValues,
+    });
+  });
+  return meta;
+};
+
+const DISPLAY_FIELD_PRIORITIES = ["name", "full_name", "fullname", "title", "code", "email", "phone"];
+const NAME_FIRST_KEYS = ["first_name", "firstname"];
+const NAME_LAST_KEYS = ["last_name", "lastname", "surname"];
+const SYSTEM_FIELD_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
+const STRING_LIKE_TYPES = new Set(["string", "text", "enum", "email", "phone", "varchar"]);
+
+const getFieldKey = (field = {}) => (field.key || field.name || field.fieldName || field.id || "").toString();
+
+const resolveDisplayConfigForTable = (table = {}) => {
+  const fields = Array.isArray(table.fields) ? table.fields : [];
+  const entryByLower = new Map();
+  fields.forEach((field) => {
+    const key = getFieldKey(field);
+    if (!key) return;
+    const lower = key.toLowerCase();
+    if (!entryByLower.has(lower)) {
+      entryByLower.set(lower, { key, field });
+    }
+  });
+
+  const findEntry = (candidates = []) => candidates.map((token) => entryByLower.get(token)).find(Boolean);
+
+  const firstEntry = findEntry(NAME_FIRST_KEYS);
+  const lastEntry = findEntry(NAME_LAST_KEYS);
+  if (firstEntry && lastEntry) {
+    const template = `{{${firstEntry.key}}} {{${lastEntry.key}}}`;
+    return {
+      displayField: firstEntry.key,
+      displayKey: firstEntry.key,
+      labelKey: firstEntry.key,
+      displayTemplate: template,
+    };
+  }
+
+  const prioritized = findEntry(DISPLAY_FIELD_PRIORITIES);
+  if (prioritized) {
+    return {
+      displayField: prioritized.key,
+      displayKey: prioritized.key,
+      labelKey: prioritized.key,
+    };
+  }
+
+  const firstStringField = fields.find((field) => {
+    const key = getFieldKey(field);
+    if (!key) return false;
+    const lower = key.toLowerCase();
+    if (SYSTEM_FIELD_KEYS.has(lower)) return false;
+    const type = (field.type || field.fieldType || field.dataType || "").toString().toLowerCase();
+    if (!type) return true;
+    if (STRING_LIKE_TYPES.has(type)) return true;
+    if (type === "id") return false;
+    if (["number", "boolean", "date", "datetime"].includes(type)) return false;
+    return true;
+  });
+  if (firstStringField) {
+    const key = getFieldKey(firstStringField);
+    return {
+      displayField: key,
+      displayKey: key,
+      labelKey: key,
+    };
+  }
+
+  const fallbackIdEntry = findEntry(["id", "_id"]) || (fields.length ? { key: getFieldKey(fields[0]) } : null);
+  const fallbackKey = fallbackIdEntry?.key || "id";
+  return {
+    displayField: fallbackKey,
+    displayKey: fallbackKey,
+    labelKey: fallbackKey,
+  };
+};
+
+const buildRecordValueGetter = (record = {}) => {
+  const lowerMap = new Map();
+  Object.entries(record || {}).forEach(([key, value]) => {
+    if (key) {
+      const lower = key.toLowerCase();
+      if (!lowerMap.has(key)) lowerMap.set(key, value);
+      if (!lowerMap.has(lower)) lowerMap.set(lower, value);
+    }
+  });
+  return (fieldKey) => {
+    if (!fieldKey) return undefined;
+    if (Object.prototype.hasOwnProperty.call(record, fieldKey)) {
+      return record[fieldKey];
+    }
+    const lower = fieldKey.toLowerCase();
+    return lowerMap.get(lower);
+  };
+};
+
+const resolveDisplayValueForRecord = (record = {}, table = {}, config = {}) => {
+  const getter = buildRecordValueGetter(record);
+  const template = config.displayTemplate;
+  if (template) {
+    const rendered = template
+      .replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, token) => {
+        const value = getter(token);
+        return value === undefined || value === null ? "" : String(value);
+      })
+      .replace(/\s+/g, " ")
+      .trim();
+    if (rendered) return rendered;
+  }
+
+  const candidateKeys = [
+    config.displayField,
+    config.displayKey,
+    config.labelKey,
+    ...DISPLAY_FIELD_PRIORITIES,
+    ...NAME_FIRST_KEYS,
+    ...NAME_LAST_KEYS,
+  ].filter(Boolean);
+
+  for (const key of candidateKeys) {
+    const value = getter(key);
+    if (value !== undefined && value !== null && String(value).trim().length) {
+      return String(value).trim();
+    }
+  }
+
+  const fallbackConfig = resolveDisplayConfigForTable(table);
+  const fallbackValue = getter(fallbackConfig.displayField);
+  if (fallbackValue !== undefined && fallbackValue !== null && String(fallbackValue).trim().length) {
+    return String(fallbackValue).trim();
+  }
+
+  const idValue = getter("id") ?? getter("_id");
+  if (idValue !== undefined && idValue !== null) return String(idValue);
+  return "";
+};
+
+const inferForeignKeysFromSamples = (tables = []) => {
+  if (!Array.isArray(tables) || !tables.length) return tables;
+
+  const pkMeta = collectPrimaryKeyMeta(tables);
+  const tableMetaByNorm = new Map(pkMeta.map((m) => [m.normalizedTable, m]));
+  const tableByKey = new Map();
+  const tableByLower = new Map();
+  tables.forEach((table) => {
+    const key = (table.key || table.id || table.name || "").toString();
+    if (!key) return;
+    tableByKey.set(key, table);
+    tableByLower.set(key.toLowerCase(), table);
+  });
+  const resolveTableByKey = (key) => {
+    if (!key) return null;
+    return tableByKey.get(key) || tableByLower.get(String(key).toLowerCase()) || null;
+  };
+
+  const scoreCandidate = ({ patternHit, nameHit, overlapRatio, pkNameHit }) =>
+    (nameHit ? 2 : 0) + (pkNameHit ? 1 : 0) + (overlapRatio || 0) * 3 + (patternHit ? 0.5 : 0);
+
+  const pickTarget = (fieldKey, values) => {
+    const normalizedKey = normalizeNameKey(fieldKey);
+    const base = baseNameFromIdKey(fieldKey);
+    const distinctValues = Array.from(values || []);
+    let best = null;
+
+    pkMeta.forEach((meta) => {
+      const nameHit =
+        (base && (meta.normalizedTable === base || meta.normalizedTable === `${base}s` || base === meta.normalizedTable.replace(/s$/, ""))) ||
+        (base && meta.normalizedTable === `${base}es`);
+      const patternHit = normalizedKey.endsWith("id");
+      const pkNameHit = normalizedKey === meta.normalizedPk;
+
+      let overlapRatio = 0;
+      if (distinctValues.length) {
+        const matches = distinctValues.filter((v) => meta.pkValues.has(v)).length;
+        overlapRatio = matches / distinctValues.length;
+      }
+
+      // Do not infer just because of naming patterns; require meaningful signal.
+      const qualifies = overlapRatio >= 0.8 || nameHit || pkNameHit;
+      if (!qualifies) return;
+
+      const score = scoreCandidate({ patternHit, nameHit, overlapRatio, pkNameHit });
+      if (!best || score > best.score) {
+        best = { meta, score };
+      }
+    });
+
+    return best ? best.meta.tableKey : null;
+  };
+
+  return tables.map((table) => {
+    const sampleRows = Array.isArray(table.sampleRows) ? table.sampleRows : [];
+    const fields = Array.isArray(table.fields) ? table.fields : [];
+
+    const enhancedFields = fields.map((field) => {
+      const fieldKey = field.key || field.name || field.fieldName;
+      const normalizedKey = normalizeNameKey(fieldKey);
+      const isPrimaryId = normalizedKey === "id" || normalizedKey === "_id" || SYSTEM_KEY_SET.has(normalizedKey);
+      const isTimestamp =
+        normalizedKey === "created_at" ||
+        normalizedKey === "updated_at" ||
+        normalizedKey === "createdat" ||
+        normalizedKey === "updatedat";
+
+      if (!fieldKey) return field;
+      if (isPrimaryId) {
+        return {
+          ...field,
+          type: "id",
+          semanticType: field.semanticType || "countable_entity",
+          semanticRole: field.semanticRole || "entity_id",
+          ref: null,
+          referenceTable: undefined,
+          referenceTableKey: undefined,
+          system: true,
+          systemField: true,
+          allowEditReference: field.allowEditReference === undefined ? false : Boolean(field.allowEditReference),
+        };
+      }
+
+      if (isTimestamp) {
+        return {
+          ...field,
+          type: "date",
+          semanticType: "timestamp",
+          semanticRole: field.semanticRole,
+          ref: null,
+          referenceTable: undefined,
+          referenceTableKey: undefined,
+          system: true,
+          systemField: true,
+        };
+      }
+
+      if (isReferenceLikeField(field)) {
+        const refKey =
+          field.ref ||
+          field.referenceTable ||
+          field.referenceTableKey ||
+          (field.references && (field.references.tableKey || field.references.table));
+        const targetTable = resolveTableByKey(refKey);
+        const displayConfig = targetTable ? resolveDisplayConfigForTable(targetTable) : null;
+        const allowReference = field.allowEditReference === undefined ? false : Boolean(field.allowEditReference);
+        const updated = {
+          ...field,
+          type: "id",
+          semanticType: "reference",
+          semanticRole: "foreign_id",
+          ref: refKey || field.ref || null,
+          referenceTable: field.referenceTable || refKey || field.referenceTableKey || null,
+          allowEditReference: allowReference,
+        };
+        if (displayConfig) {
+          updated.displayField = field.displayField || displayConfig.displayField;
+          updated.displayKey = field.displayKey || displayConfig.displayKey;
+          updated.labelKey = field.labelKey || displayConfig.labelKey;
+          if (!field.displayTemplate && displayConfig.displayTemplate) {
+            updated.displayTemplate = displayConfig.displayTemplate;
+          }
+        } else {
+          const fallbackDisplay = field.displayField || field.displayKey || field.labelKey || "id";
+          updated.displayField = fallbackDisplay;
+          updated.displayKey = field.displayKey || fallbackDisplay;
+          updated.labelKey = field.labelKey || fallbackDisplay;
+        }
+        return updated;
+      }
+
+      // Normalize old mistaken references/IDs that are not explicit references.
+      const looksLikeIdName = normalizedKey.endsWith("id");
+      const baseName = baseNameFromIdKey(fieldKey);
+      const values = new Set();
+      sampleRows.forEach((row) => {
+        if (!row || typeof row !== "object") return;
+        const value = row[fieldKey];
+        if (value === undefined || value === null || value === "") return;
+        values.add(String(value));
+      });
+
+      const sampleLooksCode = Array.from(values).some((v) => /[A-Za-z]/.test(v) || v.includes("-") || v.includes("_"));
+      const mostlyNonNumeric = Array.from(values).some((v) => Number.isNaN(Number(v)));
+      const preferString = sampleLooksCode || mostlyNonNumeric;
+
+      if (!baseName) {
+        // If it merely ends with ID but we have no base name, treat as generic, not reference.
+        if (looksLikeIdName && !isReferenceLikeField(field)) {
+          return {
+            ...field,
+            type: preferString ? "string" : field.type === "number" ? "number" : field.type || "string",
+            semanticType:
+              field.semanticType && field.semanticType !== "reference" && field.semanticType !== "foreign_id"
+                ? field.semanticType
+                : "generic",
+            semanticRole: field.semanticRole && field.semanticRole !== "foreign_id" ? field.semanticRole : undefined,
+            ref: null,
+            referenceTable: null,
+            referenceTableKey: null,
+            allowEditReference: undefined,
+          };
+        }
+        return field;
+      }
+
+      const targetTable = pickTarget(fieldKey, values);
+      // Do not infer reference by name alone; require overlap or explicit metadata (targetTable) and skip if sample looks like codes.
+      if (!targetTable || sampleLooksCode) {
+        if (looksLikeIdName && !isReferenceLikeField(field)) {
+          return {
+            ...field,
+            type: preferString ? "string" : field.type === "number" ? "number" : field.type || "string",
+            semanticType:
+              field.semanticType && field.semanticType !== "reference" && field.semanticType !== "foreign_id"
+                ? field.semanticType
+                : "generic",
+            semanticRole: field.semanticRole && field.semanticRole !== "foreign_id" ? field.semanticRole : undefined,
+            ref: null,
+            referenceTable: null,
+            referenceTableKey: null,
+            allowEditReference: undefined,
+          };
+        }
+        return field;
+      }
+      const targetTableDef = resolveTableByKey(targetTable) || resolveTableByKey(normalizeNameKey(targetTable));
+      const displayConfig = resolveDisplayConfigForTable(targetTableDef || {});
+
+      const assigned = {
+        ...field,
+        type: "id",
+        semanticType: "reference",
+        semanticRole: "foreign_id",
+        ref: targetTable,
+        referenceTable: field.referenceTable || targetTable,
+        system: true,
+        systemField: true,
+        allowEditReference: field.allowEditReference === undefined ? false : Boolean(field.allowEditReference),
+        displayField: field.displayField || displayConfig.displayField,
+        displayKey: field.displayKey || displayConfig.displayKey,
+        labelKey: field.labelKey || displayConfig.labelKey,
+        ...(field.displayTemplate || displayConfig.displayTemplate
+          ? { displayTemplate: field.displayTemplate || displayConfig.displayTemplate }
+          : {}),
+      };
+      console.log("[inferFK] assign ref", { table: table.key || table.name, field: fieldKey, ref: targetTable });
+      return assigned;
+    });
+
+    return { ...table, fields: enhancedFields };
   });
 };
 
@@ -1887,7 +2276,8 @@ export async function generateDashboardFields({ name, description, type, sampleP
   }
   const plan = await generatePlan({ name, description, type, samplePreview });
   const blueprint = await generateSchemaAndInsights({ name, description, type, plan, samplePreview });
-  const tables = attachSampleRowsToTables(blueprint.tables || [], samplePreview);
+  const tablesWithSamples = attachSampleRowsToTables(blueprint.tables || [], samplePreview);
+  const tables = inferForeignKeysFromSamples(tablesWithSamples);
   const relationships = blueprint.relationships || [];
   const insights = blueprint.insights || [];
   const aiWidgets = Array.isArray(blueprint.widgets)
@@ -2113,6 +2503,92 @@ export async function addDashboardRecord({ dashboardId, tableKey, record, sessio
   const sanitizedRecord = stripSystemFields(record);
   const inserted = await insertDashboardRecord({ dashboardId, tableKey, record: sanitizedRecord });
   return inserted;
+}
+
+const LOOKUP_MAX_RECORDS = 500;
+
+export async function getReferenceLookups({ dashboardId, refTableKeys, userId }) {
+  if (!dashboardId) {
+    throw new HttpError(400, "dashboardId required");
+  }
+  const requestedKeys = Array.isArray(refTableKeys)
+    ? refTableKeys
+    : typeof refTableKeys === "string"
+      ? refTableKeys.split(",")
+      : [];
+  const targets = Array.from(
+    new Set(
+      requestedKeys
+        .map((key) => (key === undefined || key === null ? "" : String(key).trim()))
+        .filter((key) => key.length > 0),
+    ),
+  );
+  if (!targets.length) {
+    return {};
+  }
+
+  await assertCanViewDashboard(dashboardId, userId);
+  const tables = await listTablesByDashboard(dashboardId);
+  const tableByKey = new Map();
+  const tableByLower = new Map();
+  tables.forEach((table) => {
+    const key = (table.key || table.id || table.name || "").toString();
+    if (!key) return;
+    tableByKey.set(key, table);
+    tableByLower.set(key.toLowerCase(), table);
+  });
+  const resolveTable = (key) => {
+    if (!key) return null;
+    const raw = tableByKey.get(key) || tableByLower.get(String(key).toLowerCase());
+    return raw || null;
+  };
+
+  const lookupPairs = await Promise.all(
+    targets.map(async (targetKey) => {
+      const table = resolveTable(targetKey);
+      if (!table) {
+        return [targetKey, {}];
+      }
+      const tableKey = table.key || targetKey;
+      const displayConfig = resolveDisplayConfigForTable(table);
+      const records = await listRecordsByDashboard({ dashboardId, tableKey });
+      const primaryRows = records.slice(0, LOOKUP_MAX_RECORDS).map((row) => row.record || row);
+      const fallbackRows = Array.isArray(table.sampleRows) ? table.sampleRows.slice(0, LOOKUP_MAX_RECORDS) : [];
+      const sourceRows = primaryRows.length ? primaryRows : fallbackRows;
+      const mapping = {};
+      sourceRows.forEach((entry) => {
+        if (!entry || typeof entry !== "object") return;
+        const base = entry.record && typeof entry.record === "object" ? entry.record : entry;
+        const getter = buildRecordValueGetter(base);
+        const variants = new Set(["_id", "id"]);
+        if (typeof tableKey === "string" && tableKey.length) {
+          const lower = tableKey.toLowerCase();
+          variants.add(`${lower}_id`);
+          const singular = lower.replace(/s$/i, "");
+          if (singular && singular !== lower) {
+            variants.add(`${singular}_id`);
+            variants.add(`${singular}id`);
+          }
+        }
+        const idCandidate = Array.from(variants)
+          .map((key) => getter(key))
+          .concat([entry?._id, entry?.id])
+          .find((value) => value !== undefined && value !== null && String(value).trim().length > 0);
+        if (!idCandidate) return;
+        const id = String(idCandidate);
+        if (!id || mapping[id]) return;
+        const displayRaw = resolveDisplayValueForRecord(base, table, displayConfig);
+        const display = displayRaw && displayRaw.trim().length ? displayRaw : id.slice(0, 8);
+        mapping[id] = { id, display };
+      });
+      return [targetKey, mapping];
+    }),
+  );
+
+  return lookupPairs.reduce((acc, [key, value]) => {
+    acc[key] = value;
+    return acc;
+  }, {});
 }
 
 export async function listDashboardRecords({ dashboardId, tableKey, sessionId, userId }) {

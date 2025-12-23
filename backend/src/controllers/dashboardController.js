@@ -18,6 +18,7 @@ import {
   removeInsight,
   updateInsight,
   getDashboardByIdForViewer,
+  getReferenceLookups,
 } from "../services/dashboardService.js";
 import { findDashboardForOwner, findDashboardById } from "../repositories/dashboardRepository.js";
 import { listTablesByDashboard } from "../repositories/dashboardTableRepository.js";
@@ -308,6 +309,33 @@ export async function getDashboardRecords(req, res) {
     userId: owner.userId,
   });
   res.json({ records });
+}
+
+export async function getReferenceLookupsController(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId } = req.params;
+  if (!dashboardId) {
+    throw new HttpError(400, "dashboardId required");
+  }
+  const dashboard = await findDashboardByIdRepo(dashboardId);
+  if (!dashboard) {
+    throw new HttpError(404, "Dashboard not found");
+  }
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  const canViewData = canViewDashboardData(dashboard, owner.userId);
+  if (!canViewData) {
+    return res.json({});
+  }
+  const keysParam = req.query.keys;
+  const lookups = await getReferenceLookups({
+    dashboardId,
+    refTableKeys: keysParam,
+    userId: owner.userId,
+  });
+  res.json(lookups);
 }
 
 export async function getDashboardRecordController(req, res) {

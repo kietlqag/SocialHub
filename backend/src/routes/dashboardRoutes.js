@@ -23,6 +23,7 @@ import {
   patchInsight,
   getDashboardByIdController,
   generateStructureWithUpload,
+  getReferenceLookupsController,
 } from "../controllers/dashboardController.js";
 import {
   getDashboardAccess,
@@ -55,6 +56,7 @@ router.put("/dashboards/:id/tables/:tableKey/records/:recordId", asyncHandler(up
 router.delete("/dashboards/:id/tables/:tableKey/records/:recordId", asyncHandler(deleteDashboardRecordController));
 router.get("/dashboards/:dashboardId/tables/:tableKey/schema", asyncHandler(getTableSchema));
 router.put("/dashboards/:dashboardId/tables/:tableKey/schema", asyncHandler(updateTableSchema));
+router.get("/dashboards/:dashboardId/tables/:tableKey/lookup", asyncHandler(getReferenceLookupsController));
 router.get("/dashboards/:id/data", asyncHandler(getDashboardData));
 router.get("/dashboards/:id/widgets", asyncHandler(listWidgets));
 router.post("/dashboards/:id/widgets", asyncHandler(createWidget));
