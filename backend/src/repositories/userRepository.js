@@ -6,6 +6,7 @@ const baseSelect =
           password_hash,
           full_name AS "fullName",
           company,
+          role,
           created_at AS "createdAt",
           is_verified AS "isVerified",
           provider,

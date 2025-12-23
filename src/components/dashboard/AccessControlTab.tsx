@@ -15,6 +15,7 @@ type DashboardAccessControlProps = {
   dashboardId: string;
   sessionId?: string;
   userId?: string | null;
+  variant?: "full" | "compact";
 };
 
 const DEFAULT_ROLE_PERMS: DashboardRolePermission[] = [
@@ -36,7 +37,7 @@ const accessModeOptions: AccessModeOption[] = [
   { label: "Private", value: "private", description: "Only the owner (and admins) can access.", icon: Lock },
 ];
 
-export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAccessControlProps) {
+export function AccessControlTab({ dashboardId, sessionId, userId, variant = "full" }: DashboardAccessControlProps) {
   const [accessMode, setAccessMode] = useState<DashboardAccessMode>("restricted");
   const [rolePermissions, setRolePermissions] = useState<DashboardRolePermission[]>(DEFAULT_ROLE_PERMS);
   const [roleBaseline, setRoleBaseline] = useState<DashboardRolePermission[]>(DEFAULT_ROLE_PERMS);
@@ -192,6 +193,7 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
   );
 
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const showAdvanced = variant !== "compact";
 
   const handlePermissionsToggleMode = () => {
     if (!permissionsEditable) {
@@ -255,89 +257,95 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
     <div className="acTab">
       <div className="acTabHeader">
         <div>
-          <p className="mdMainSubtitle">Control who can access this dashboard</p>
-          <h2 className="acTitle">Access control</h2>
+          <p className="mdMainSubtitle">
+            {showAdvanced ? "Control who can access this dashboard" : "Manage dashboard users and roles"}
+          </p>
+          <h2 className="acTitle">{showAdvanced ? "Access control" : "Users & roles"}</h2>
         </div>
-        <div className="acStatus">
-          <ShieldCheck className="w-4 h-4 text-indigo-500" />
-          <span className="text-sm text-slate-600">Mode: {accessMode}</span>
-        </div>
+        {showAdvanced && (
+          <div className="acStatus">
+            <ShieldCheck className="w-4 h-4 text-indigo-500" />
+            <span className="text-sm text-slate-600">Mode: {accessMode}</span>
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="acSkeleton">Loading access settings...</div>
       ) : (
         <div className="acGrid">
-          <div className="acCard">
-            <div className="acCardHeader">
-              <div>
-                <h3 className="acCardTitle">Access mode</h3>
-                <p className="acCardSubtitle">Control how this dashboard can be accessed.</p>
-              </div>
-              <span className="acBadge">{accessMode}</span>
-              {ownerId && userId && String(ownerId) === String(userId) ? <span className="acBadge">Owner (Creator)</span> : null}
-            </div>
-            <div className="acRadioGroup">
-              {accessModeOptions.map((opt) => (
-                <button
-                  key={opt.value}
-                  className={`acRadio ${accessMode === opt.value ? "active" : ""}`}
-                  onClick={() => handleAccessModeChange(opt.value)}
-                  disabled={saving}
-                >
-                  <opt.icon className="w-4 h-4" />
-                  <div className="acRadioText">
-                    <span>{opt.label}</span>
-                    <small>{opt.description}</small>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
+          {showAdvanced && (
             <div className="acCard">
-      <div className="acCardHeader">
-        <div>
-          <h3 className="acCardTitle">Roles & permissions</h3>
-          <p className="acCardSubtitle">Define what each role can do in this dashboard.</p>
-              </div>
-              <button
-                className={`acIconBtn ${permissionsEditable ? "primary" : ""}`}
-                title={permissionsEditable ? "Save changes" : "Edit permissions"}
-                aria-label={permissionsEditable ? "Save changes" : "Edit permissions"}
-                onClick={handlePermissionsToggleMode}
-              >
-                {permissionsEditable ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
-              </button>
-            </div>
-            <div className="acTableWrap">
-              <div className="acTable">
-                <div className="acTableHead">
-                  <div className="acTh role">Role</div>
-                  <div className="acTh">View</div>
-                  <div className="acTh">Create</div>
-                  <div className="acTh">Edit</div>
-                  <div className="acTh">Delete</div>
-                  <div className="acTh">Manage access</div>
+              <div className="acCardHeader">
+                <div>
+                  <h3 className="acCardTitle">Access mode</h3>
+                  <p className="acCardSubtitle">Control how this dashboard can be accessed.</p>
                 </div>
-                {rolePermissions.map((role) => (
-                  <div className="acTr" key={role.role}>
-                    <div className="acTd role">
-                      <div className="acRolePill">
-                        <Users className="w-4 h-4" />
-                        <span>{role.role}</span>
-                      </div>
+              </div>
+              <div className="acRadioGroup">
+                {accessModeOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    className={`acRadio ${accessMode === opt.value ? "active" : ""}`}
+                    onClick={() => handleAccessModeChange(opt.value)}
+                    disabled={saving}
+                  >
+                    <opt.icon className="w-4 h-4" />
+                    <div className="acRadioText">
+                      <span>{opt.label}</span>
+                      <small>{opt.description}</small>
                     </div>
-                    <div className="acTd">{renderToggle(role.role, "view")}</div>
-                    <div className="acTd">{renderToggle(role.role, "create")}</div>
-                    <div className="acTd">{renderToggle(role.role, "edit")}</div>
-                    <div className="acTd">{renderToggle(role.role, "delete")}</div>
-                    <div className="acTd">{renderToggle(role.role, "manageAccess")}</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
+          )}
+
+          {showAdvanced && (
+            <div className="acCard">
+              <div className="acCardHeader">
+                <div>
+                  <h3 className="acCardTitle">Roles & permissions</h3>
+                  <p className="acCardSubtitle">Define what each role can do in this dashboard.</p>
+                </div>
+                <button
+                  className={`acIconBtn ${permissionsEditable ? "primary" : ""}`}
+                  title={permissionsEditable ? "Save changes" : "Edit permissions"}
+                  aria-label={permissionsEditable ? "Save changes" : "Edit permissions"}
+                  onClick={handlePermissionsToggleMode}
+                >
+                  {permissionsEditable ? <Check className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+                </button>
+              </div>
+              <div className="acTableWrap">
+                <div className="acTable">
+                  <div className="acTableHead">
+                    <div className="acTh role">Role</div>
+                    <div className="acTh">View</div>
+                    <div className="acTh">Create</div>
+                    <div className="acTh">Edit</div>
+                    <div className="acTh">Delete</div>
+                    <div className="acTh">Manage access</div>
+                  </div>
+                  {rolePermissions.map((role) => (
+                    <div className="acTr" key={role.role}>
+                      <div className="acTd role">
+                        <div className="acRolePill">
+                          <Users className="w-4 h-4" />
+                          <span>{role.role}</span>
+                        </div>
+                      </div>
+                      <div className="acTd">{renderToggle(role.role, "view")}</div>
+                      <div className="acTd">{renderToggle(role.role, "create")}</div>
+                      <div className="acTd">{renderToggle(role.role, "edit")}</div>
+                      <div className="acTd">{renderToggle(role.role, "delete")}</div>
+                      <div className="acTd">{renderToggle(role.role, "manageAccess")}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="acCard">
             <div className="acCardHeader">
@@ -502,7 +510,7 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
         </div>
       )}
 
-      {showSaveConfirm && (
+      {showAdvanced && showSaveConfirm && (
         <div className="acModalOverlay" onClick={(e) => e.target === e.currentTarget && setShowSaveConfirm(false)}>
           <div className="acModal" role="dialog" aria-modal="true">
             <div className="acModalHeader">
@@ -527,7 +535,7 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
         </div>
       )}
 
-      {showAccessModeConfirm && (
+      {showAdvanced && showAccessModeConfirm && (
         <div className="acModalOverlay" onClick={(e) => e.target === e.currentTarget && setShowAccessModeConfirm(false)}>
           <div className="acModal" role="dialog" aria-modal="true">
             <div className="acModalHeader">

@@ -5,6 +5,7 @@ export type AuthUser = {
   email: string;
   fullName?: string;
   company?: string;
+  role?: "user" | "admin";
   createdAt?: string;
   isVerified?: boolean;
   provider?: string | null;

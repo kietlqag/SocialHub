@@ -6,6 +6,7 @@ import { Input } from "../components/ui/input";
 import { Header } from "../components/Header";
 import CardDash from "../components/dashboard/CardDash";
 import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
+import ShareDashboardDialog from "../components/dashboard/ShareDashboardDialog";
 import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
   LayoutDashboard,
@@ -54,6 +55,8 @@ export default function ManageDashList() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; ownerId?: string | null } | null>(null);
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
@@ -179,6 +182,15 @@ export default function ManageDashList() {
     navigate(`/managedash/${id}`);
   };
 
+  const handleShare = (dashboard: DecoratedDashboard) => {
+    setShareTarget({
+      id: dashboard.id,
+      name: dashboard.displayTitle,
+      ownerId: dashboard.userId || dashboard.createdBy || null,
+    });
+    setShareOpen(true);
+  };
+
   const toggleFavorite = (id: string) => {
     setFavoriteIds((prev) => {
       const next = new Set(prev);
@@ -292,11 +304,12 @@ export default function ManageDashList() {
                         tableCount={dashboard.tableCount}
                         status={dashboard.statusLabel}
                         isFavorite={favoriteIds.has(dashboard.id)}
-                        iconPreset={dashboard.iconPreset}
-                        lastUpdatedLabel={dashboard.lastViewedLabel}
-                        onOpen={openDashboard}
-                        onToggleFavorite={toggleFavorite}
-                      />
+                          iconPreset={dashboard.iconPreset}
+                          lastUpdatedLabel={dashboard.lastViewedLabel}
+                          onOpen={openDashboard}
+                          onToggleFavorite={toggleFavorite}
+                          onShare={() => handleShare(dashboard)}
+                        />
                     ))}
                   </div>
                 ) : (
@@ -324,11 +337,12 @@ export default function ManageDashList() {
                         tableCount={dashboard.tableCount}
                         status={dashboard.statusLabel}
                         isFavorite={favoriteIds.has(dashboard.id)}
-                        iconPreset={dashboard.iconPreset}
-                        lastUpdatedLabel={dashboard.lastViewedLabel}
-                        onOpen={openDashboard}
-                        onToggleFavorite={toggleFavorite}
-                      />
+                            iconPreset={dashboard.iconPreset}
+                            lastUpdatedLabel={dashboard.lastViewedLabel}
+                            onOpen={openDashboard}
+                            onToggleFavorite={toggleFavorite}
+                            onShare={() => handleShare(dashboard)}
+                          />
                     ))}
                   </div>
                 ) : (
@@ -376,6 +390,7 @@ export default function ManageDashList() {
                           lastUpdatedLabel={dashboard.lastViewedLabel}
                           onOpen={openDashboard}
                           onToggleFavorite={toggleFavorite}
+                          onShare={() => handleShare(dashboard)}
                         />
                       ))}
                     </div>
@@ -402,6 +417,22 @@ export default function ManageDashList() {
         sessionId={sessionId}
         userId={currentUser?.id || null}
       />
+
+      {shareTarget && (
+        <ShareDashboardDialog
+          open={shareOpen}
+          onOpenChange={(open) => {
+            setShareOpen(open);
+            if (!open) setShareTarget(null);
+          }}
+          dashboardId={shareTarget.id}
+          dashboardName={shareTarget.name}
+          sharePath={`/managedash/${shareTarget.id}`}
+          ownerId={shareTarget.ownerId}
+          currentUserId={currentUser?.id || null}
+          sessionId={sessionId}
+        />
+      )}
     </div>
   );
 }

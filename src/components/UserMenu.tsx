@@ -2,19 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { User, Settings, LogOut } from "lucide-react";
+import { User, Settings, LogOut, Shield } from "lucide-react";
 
 export default function UserMenu({
   userName,
   avatarUrl,
+  role,
   onProfile,
   onSettings,
+  onAdmin,
   onSignOut,
 }: {
   userName?: string;
   avatarUrl?: string | null;
+  role?: "user" | "admin";
   onProfile?: () => void;
   onSettings?: () => void;
+  onAdmin?: () => void;
   onSignOut?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -88,6 +92,22 @@ export default function UserMenu({
           <Settings className="w-4 h-4" />
           <span>Settings</span>
         </button>
+
+        {role === "admin" && onAdmin && (
+          <>
+            <div className="dropdownDivider" />
+            <button
+              className="dropdownItem"
+              onClick={() => {
+                setOpen(false);
+                onAdmin?.();
+              }}
+            >
+              <Shield className="w-4 h-4" />
+              <span>Admin Panel</span>
+            </button>
+          </>
+        )}
 
         <div className="dropdownDivider" />
 

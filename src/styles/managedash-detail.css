@@ -162,18 +162,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid rgba(124, 106, 242, 0.28);
-  background: rgba(124, 106, 242, 0.12);
+  width: auto;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
   color: #4f46e5;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .mdNavGear:hover {
-  background: rgba(124, 106, 242, 0.2);
+  background: transparent;
+  color: #4338ca;
 }
 
 .mdNavGear:focus-visible {

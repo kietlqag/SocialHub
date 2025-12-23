@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -168,3 +171,16 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 );
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation_user ON ai_messages(conversation_id, user_id, created_at);
+
+-- Activity logs for admin auditing (safe to add; does not affect existing flows)
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_target ON activity_logs(target_type, target_id);

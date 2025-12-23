@@ -14,6 +14,7 @@ export function Header({
   onLoginOpen,
   onSignUpOpen,
   onManageDash,
+  onAdmin,
   currentUser,
   onLogout,
 }: {
@@ -22,6 +23,7 @@ export function Header({
   onLoginOpen?: () => void;
   onSignUpOpen?: () => void;
   onManageDash?: () => void;
+  onAdmin?: () => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
 }) {
@@ -82,6 +84,8 @@ export function Header({
                   <UserMenu
                     userName={currentUser.fullName || currentUser.email}
                     avatarUrl={currentUser.avatarUrl || undefined}
+                    role={currentUser.role}
+                    onAdmin={onAdmin}
                     onProfile={onProfileOpen}
                     onSettings={onSettingsOpen}
                     onSignOut={onLogout}

@@ -7,8 +7,20 @@ import { Button } from "../components/ui/button";
 import CardDash from "../components/dashboard/CardDash";
 import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
 import type { Dashboard } from "../services/dashboards";
+import ShareDashboardDialog from "../components/dashboard/ShareDashboardDialog";
 import "../styles/explore.css";
 import "../styles/managedash.css";
+
+const DASHBOARD_SESSION_KEY = "socialhub:dashboards_session";
+
+const getSessionId = () => {
+  if (typeof window === "undefined") return "";
+  const existing = localStorage.getItem(DASHBOARD_SESSION_KEY);
+  if (existing) return existing;
+  const generated = (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi, "");
+  localStorage.setItem(DASHBOARD_SESSION_KEY, generated);
+  return generated;
+};
 
 export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?: AuthUser | null; onLogout?: () => void }) => {
   const [dashboards, setDashboards] = useState<PublicDashboardSummary[]>([]);
@@ -17,6 +29,9 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [domainFilter, setDomainFilter] = useState<"all" | "commerce" | "healthcare" | "analytics" | "education">("all");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{ id: string; name: string; ownerId?: string | null } | null>(null);
+  const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
   const fetchDashboards = async () => {
@@ -100,6 +115,15 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
   );
 
   const openDashboard = (id: string) => navigate(`/managedash/${id}`);
+
+  const handleShare = (dashboard: DecoratedDashboard) => {
+    setShareTarget({
+      id: dashboard.id,
+      name: dashboard.displayTitle,
+      ownerId: dashboard.userId || dashboard.createdBy || null,
+    });
+    setShareOpen(true);
+  };
 
   return (
     <>
@@ -235,6 +259,7 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
                             createdBy={d.ownerName}
                             hideStats
                             onOpen={() => openDashboard(d.id)}
+                            onShare={() => handleShare(d)}
                           />
                         ))}
                       </div>
@@ -244,6 +269,22 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
               </div>
             </section>
           </div>
+        )}
+
+        {shareTarget && (
+          <ShareDashboardDialog
+            open={shareOpen}
+            onOpenChange={(open) => {
+              setShareOpen(open);
+              if (!open) setShareTarget(null);
+            }}
+            dashboardId={shareTarget.id}
+            dashboardName={shareTarget.name}
+            sharePath={`/managedash/${shareTarget.id}`}
+            ownerId={shareTarget.ownerId}
+            currentUserId={currentUser?.id || null}
+            sessionId={sessionId}
+          />
         )}
       </div>
     </>

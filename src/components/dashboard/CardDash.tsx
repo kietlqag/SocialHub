@@ -1,5 +1,5 @@
 import type { KeyboardEvent, MouseEvent } from "react";
-import { ArrowRight, Star } from "lucide-react";
+import { ArrowRight, Share2, Star } from "lucide-react";
 import { Button } from "../ui/button";
 import { domainVisuals } from "./dashboardCardUtils";
 import type { DashboardCardIconPreset } from "./DashboardCard";
@@ -21,6 +21,7 @@ export type CardDashProps = {
   hideStats?: boolean;
   onOpen?: (id: string) => void;
   onToggleFavorite?: (id: string) => void;
+  onShare?: (id: string) => void;
 };
 
 const resolveIconPreset = (preset?: DashboardCardIconPreset | keyof typeof domainVisuals): DashboardCardIconPreset => {
@@ -47,6 +48,7 @@ export const CardDash = ({
   icon,
   onOpen,
   onToggleFavorite,
+  onShare,
   createdBy,
   hideStats = false,
 }: CardDashProps) => {
@@ -55,10 +57,17 @@ export const CardDash = ({
     { label: "Key metrics", value: overviewCount },
     { label: "Tables", value: tableCount },
   ];
+  const isLocked = String(status || "").toLowerCase() === "locked";
 
   const handleOpen = (event?: MouseEvent | KeyboardEvent) => {
     event?.stopPropagation?.();
+    if (isLocked) return;
     onOpen?.(id);
+  };
+
+  const handleShare = (event?: MouseEvent | KeyboardEvent) => {
+    event?.stopPropagation?.();
+    onShare?.(id);
   };
 
   return (
@@ -66,10 +75,14 @@ export const CardDash = ({
       className={`dashboard-card ${isFavorite ? "is-favorite" : ""}`}
       role="button"
       tabIndex={0}
-      onClick={() => onOpen?.(id)}
+      onClick={() => {
+        if (isLocked) return;
+        onOpen?.(id);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
+          if (isLocked) return;
           onOpen?.(id);
         }
       }}
@@ -119,10 +132,18 @@ export const CardDash = ({
 
       <div className="dashboard-card__footer">
         {lastUpdatedLabel && <p className="dashboard-card__timestamp">Updated {lastUpdatedLabel}</p>}
-        <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
-          Open dashboard
-          <ArrowRight className="w-4 h-4" />
-        </Button>
+        <div className="dashboard-card__actions">
+          {onShare && (
+            <Button variant="outline" size="sm" className="dashboard-card__cta dashboard-card__cta--share" onClick={handleShare}>
+              Share
+              <Share2 className="w-4 h-4" />
+            </Button>
+          )}
+          <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
+            Open dashboard
+            <ArrowRight className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

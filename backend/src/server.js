@@ -17,6 +17,7 @@ import { initMongoose } from "./mongoose.js";
 import { HttpError } from "./utils/httpError.js";
 import { login } from "./controllers/authController.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 dotenv.config();
 
@@ -63,6 +64,7 @@ app.post("/api/dashboards/:id/widgets", asyncHandler(createWidget));
 app.delete("/api/dashboards/:id/widgets/:widgetId", asyncHandler(deleteWidget));
 app.post("/api/dashboards/:id/widget-overrides/hide", asyncHandler(hideWidget));
 app.use("/api", dashboardRoutes);
+app.use("/admin", adminRoutes);
 
 // Basic error handler
 // eslint-disable-next-line no-unused-vars

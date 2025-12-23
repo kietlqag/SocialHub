@@ -1,0 +1,81 @@
+.admin-page {
+  background: linear-gradient(180deg, #f3f5ff 0%, #eef4ff 45%, #f8fbff 100%);
+  min-height: 100vh;
+}
+
+.admin-page__main {
+  scroll-behavior: smooth;
+}
+
+.admin-page__header h1 {
+  letter-spacing: -0.01em;
+}
+
+.admin-summary__card {
+  position: relative;
+  isolation: isolate;
+  background: radial-gradient(120% 120% at 10% 10%, rgba(99, 102, 241, 0.06), #ffffff);
+  border: 1px solid rgba(209, 213, 219, 0.8);
+}
+
+.admin-summary__card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  opacity: 0;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: -1;
+}
+
+.admin-summary__card:hover::after {
+  opacity: 1;
+}
+
+.admin-tabs {
+  backdrop-filter: blur(10px);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(248, 249, 255, 0.9));
+}
+
+.admin-table-header {
+  background: linear-gradient(90deg, rgba(248, 250, 252, 0.94), rgba(228, 233, 255, 0.94));
+}
+
+.admin-card {
+  backdrop-filter: blur(8px);
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.admin-card table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.04);
+  transition: background 120ms ease;
+}
+
+.admin-dialog {
+  max-height: 85vh;
+  overflow: hidden;
+}
+
+.admin-dialog__body {
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.admin-icon-plain {
+  border: none;
+  background: transparent;
+  padding: 0;
+  height: auto;
+  width: auto;
+  min-width: 0;
+  box-shadow: none;
+}
+
+.admin-icon-plain:hover {
+  background: transparent;
+  box-shadow: none;
+}

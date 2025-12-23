@@ -9,6 +9,7 @@ import { Footer } from "./components/Footer";
 import { Login } from "./pages/Login";
 import { SignUp } from "./pages/SignUp";
 import { AIConversation } from "./pages/AIConversation";
+import { AdminPage } from "./pages/AdminPage";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { NotificationPage } from "./pages/NotificationPage";
 import Profile from "./pages/Profile";
@@ -30,6 +31,7 @@ const Landing = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLo
         onProfileOpen={() => navigate("/profile")}
         onSettingsOpen={() => navigate("/settings")}
         onManageDash={() => navigate("/managedash")}
+        onAdmin={() => navigate("/admin")}
         currentUser={currentUser}
         onLogout={onLogout}
       />
@@ -133,6 +135,14 @@ const RequireAuth = ({ user, children }: { user: AuthUser | null; children: JSX.
   return children;
 };
 
+const RequireAdmin = ({ user, children }: { user: AuthUser | null; children: JSX.Element }) => {
+  const location = useLocation();
+  if (!user || user.role !== "admin") {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return children;
+};
+
 function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -186,6 +196,14 @@ function App() {
         <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/explore" element={<ExploreDashboardsPage currentUser={currentUser} onLogout={handleLogout} />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin user={currentUser}>
+              <AdminPage />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="/managedash"
           element={
