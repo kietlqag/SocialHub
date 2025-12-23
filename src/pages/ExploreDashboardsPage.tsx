@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { dashboardApi, type PublicDashboardSummary } from "../services/dashboards";
 import { Header } from "../components/Header";
-import type { AuthUser } from "../services/auth";
+import { getCurrentSession, type AuthUser } from "../services/auth";
 import { Button } from "../components/ui/button";
 import CardDash from "../components/dashboard/CardDash";
 import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
 import type { Dashboard } from "../services/dashboards";
 import ShareDashboardDialog from "../components/dashboard/ShareDashboardDialog";
+import UseTemplateDialog from "../components/dashboard/UseTemplateDialog";
+import { toast } from "sonner";
 import "../styles/explore.css";
 import "../styles/managedash.css";
 
@@ -31,6 +33,9 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
   const [domainFilter, setDomainFilter] = useState<"all" | "commerce" | "healthcare" | "analytics" | "education">("all");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ id: string; name: string; ownerId?: string | null } | null>(null);
+  const [useTemplateOpen, setUseTemplateOpen] = useState(false);
+  const [useTemplateTarget, setUseTemplateTarget] = useState<DecoratedDashboard | null>(null);
+  const [useTemplateLoading, setUseTemplateLoading] = useState(false);
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
@@ -123,6 +128,37 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
       ownerId: dashboard.userId || dashboard.createdBy || null,
     });
     setShareOpen(true);
+  };
+
+  const handleUseTemplate = (dashboard: DecoratedDashboard) => {
+    setUseTemplateTarget(dashboard);
+    setUseTemplateOpen(true);
+  };
+
+  const handleConfirmUseTemplate = async (openAfter: boolean) => {
+    if (!useTemplateTarget) return;
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in to use a template.");
+      navigate("/login");
+      return;
+    }
+    setUseTemplateLoading(true);
+    try {
+      const res = await dashboardApi.useTemplate(useTemplateTarget.id, session.token);
+      const created = res.dashboard;
+      if (openAfter) {
+        navigate(`/managedash/${created.id}`);
+      } else {
+        toast.success("Dashboard created from template.");
+      }
+      setUseTemplateOpen(false);
+      setUseTemplateTarget(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to use template.");
+    } finally {
+      setUseTemplateLoading(false);
+    }
   };
 
   return (
@@ -260,6 +296,7 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
                             hideStats
                             onOpen={() => openDashboard(d.id)}
                             onShare={() => handleShare(d)}
+                            onUseTemplate={() => handleUseTemplate(d)}
                           />
                         ))}
                       </div>
@@ -284,6 +321,18 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
             ownerId={shareTarget.ownerId}
             currentUserId={currentUser?.id || null}
             sessionId={sessionId}
+          />
+        )}
+
+        {useTemplateTarget && (
+          <UseTemplateDialog
+            open={useTemplateOpen}
+            loading={useTemplateLoading}
+            onOpenChange={(open) => {
+              setUseTemplateOpen(open);
+              if (!open) setUseTemplateTarget(null);
+            }}
+            onConfirm={handleConfirmUseTemplate}
           />
         )}
       </div>

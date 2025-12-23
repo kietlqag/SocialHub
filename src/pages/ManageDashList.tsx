@@ -7,6 +7,7 @@ import { Header } from "../components/Header";
 import CardDash from "../components/dashboard/CardDash";
 import { decorateDashboardForList, type DecoratedDashboard } from "../components/dashboard/dashboardCardUtils";
 import ShareDashboardDialog from "../components/dashboard/ShareDashboardDialog";
+import UseTemplateDialog from "../components/dashboard/UseTemplateDialog";
 import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
 import {
   LayoutDashboard,
@@ -17,6 +18,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
+import { toast } from "sonner";
 import "../styles/managedash.css";
 
 const DASHBOARD_SESSION_KEY = "socialhub:dashboards_session";
@@ -57,6 +59,9 @@ export default function ManageDashList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<{ id: string; name: string; ownerId?: string | null } | null>(null);
+  const [useTemplateOpen, setUseTemplateOpen] = useState(false);
+  const [useTemplateTarget, setUseTemplateTarget] = useState<DecoratedDashboard | null>(null);
+  const [useTemplateLoading, setUseTemplateLoading] = useState(false);
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
@@ -191,6 +196,39 @@ export default function ManageDashList() {
     setShareOpen(true);
   };
 
+  const handleUseTemplate = (dashboard: DecoratedDashboard) => {
+    setUseTemplateTarget(dashboard);
+    setUseTemplateOpen(true);
+  };
+
+  const handleConfirmUseTemplate = async (openAfter: boolean) => {
+    if (!useTemplateTarget) return;
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in to use a template.");
+      setUseTemplateOpen(false);
+      setUseTemplateTarget(null);
+      return;
+    }
+    setUseTemplateLoading(true);
+    try {
+      const res = await dashboardApi.useTemplate(useTemplateTarget.id, session.token);
+      const created = res.dashboard;
+      if (openAfter) {
+        navigate(`/managedash/${created.id}`);
+      } else {
+        setDashboards((prev) => [created, ...prev]);
+        toast.success("Dashboard created from template.");
+      }
+      setUseTemplateOpen(false);
+      setUseTemplateTarget(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to use template.");
+    } finally {
+      setUseTemplateLoading(false);
+    }
+  };
+
   const toggleFavorite = (id: string) => {
     setFavoriteIds((prev) => {
       const next = new Set(prev);
@@ -309,6 +347,7 @@ export default function ManageDashList() {
                           onOpen={openDashboard}
                           onToggleFavorite={toggleFavorite}
                           onShare={() => handleShare(dashboard)}
+                          onUseTemplate={() => handleUseTemplate(dashboard)}
                         />
                     ))}
                   </div>
@@ -342,6 +381,7 @@ export default function ManageDashList() {
                             onOpen={openDashboard}
                             onToggleFavorite={toggleFavorite}
                             onShare={() => handleShare(dashboard)}
+                            onUseTemplate={() => handleUseTemplate(dashboard)}
                           />
                     ))}
                   </div>
@@ -391,6 +431,7 @@ export default function ManageDashList() {
                           onOpen={openDashboard}
                           onToggleFavorite={toggleFavorite}
                           onShare={() => handleShare(dashboard)}
+                          onUseTemplate={() => handleUseTemplate(dashboard)}
                         />
                       ))}
                     </div>
@@ -431,6 +472,18 @@ export default function ManageDashList() {
           ownerId={shareTarget.ownerId}
           currentUserId={currentUser?.id || null}
           sessionId={sessionId}
+        />
+      )}
+
+      {useTemplateTarget && (
+        <UseTemplateDialog
+          open={useTemplateOpen}
+          loading={useTemplateLoading}
+          onOpenChange={(open) => {
+            setUseTemplateOpen(open);
+            if (!open) setUseTemplateTarget(null);
+          }}
+          onConfirm={handleConfirmUseTemplate}
         />
       )}
     </div>

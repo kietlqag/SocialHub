@@ -27,6 +27,7 @@ import {
   getRecordReferencesController,
   renameDashboardTable,
   deleteDashboardTable,
+  useTemplateDashboard,
 } from "../controllers/dashboardController.js";
 import {
   getDashboardAccess,
@@ -38,6 +39,7 @@ import {
 } from "../controllers/dashboardAccessController.js";
 import { getPublicDashboards } from "../controllers/publicDashboardController.js";
 import { getTableSchema, updateTableSchema } from "../controllers/tableSchemaController.js";
+import { authenticate } from "../middleware/authenticate.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -48,6 +50,7 @@ router.post("/dashboards", asyncHandler(createDashboard));
 router.get("/dashboards", asyncHandler(listDashboard));
 router.get("/dashboards/public", asyncHandler(getPublicDashboards));
 router.get("/dashboards/:id", asyncHandler(getDashboardByIdController));
+router.post("/dashboards/:id/use-template", authenticate, asyncHandler(useTemplateDashboard));
 router.get("/dashboards/:dashboardId/tables", asyncHandler(listDashboardTables));
 router.post("/dashboards/:dashboardId/tables/create", asyncHandler(createDashboardTable));
 router.patch("/dashboards/:dashboardId/tables/:tableKey/rename", asyncHandler(renameDashboardTable));

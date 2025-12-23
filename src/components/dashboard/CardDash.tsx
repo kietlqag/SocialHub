@@ -22,6 +22,7 @@ export type CardDashProps = {
   onOpen?: (id: string) => void;
   onToggleFavorite?: (id: string) => void;
   onShare?: (id: string) => void;
+  onUseTemplate?: (id: string) => void;
 };
 
 const resolveIconPreset = (preset?: DashboardCardIconPreset | keyof typeof domainVisuals): DashboardCardIconPreset => {
@@ -49,6 +50,7 @@ export const CardDash = ({
   onOpen,
   onToggleFavorite,
   onShare,
+  onUseTemplate,
   createdBy,
   hideStats = false,
 }: CardDashProps) => {
@@ -68,6 +70,11 @@ export const CardDash = ({
   const handleShare = (event?: MouseEvent | KeyboardEvent) => {
     event?.stopPropagation?.();
     onShare?.(id);
+  };
+
+  const handleUseTemplate = (event?: MouseEvent | KeyboardEvent) => {
+    event?.stopPropagation?.();
+    onUseTemplate?.(id);
   };
 
   return (
@@ -95,11 +102,6 @@ export const CardDash = ({
         <div className="dashboard-card__title-group">
           {(domainLabel || typeLabel) && <p className="dashboard-card__type">{domainLabel || typeLabel}</p>}
           <h4 className="dashboard-card__title">{title}</h4>
-          {createdBy && (
-            <p className="text-sm text-slate-500">
-              Created by <span className="text-indigo-600 font-medium">{createdBy}</span>
-            </p>
-          )}
         </div>
         <div className="dashboard-card__header-actions">
           {status && <span className={`dashboard-status ${status.toLowerCase() === "active" ? "dashboard-status--active" : "dashboard-status--draft"}`}>{status}</span>}
@@ -117,16 +119,39 @@ export const CardDash = ({
             </button>
           )}
         </div>
+        {createdBy && (
+          <div className="dashboard-card__created-row">
+            <p className="text-sm text-slate-500">
+              Created by <span className="text-indigo-600 font-medium">{createdBy}</span>
+            </p>
+            {hideStats && (
+              <Button variant="ghost" className="dashboard-card__cta dashboard-card__created-cta" onClick={handleOpen}>
+                Open dashboard
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {!hideStats && (
-        <div className="dashboard-card__meta">
-          {metaChips.map((chip) => (
-            <span key={chip.label} className="dashboard-chip">
-              <span>{chip.label}</span>
-              <strong>{chip.value}</strong>
-            </span>
-          ))}
+        <div className="dashboard-card__meta-row">
+          <div className="dashboard-card__meta">
+            {metaChips.map((chip) => (
+              <span key={chip.label} className="dashboard-chip">
+                <span>{chip.label}</span>
+                <strong>{chip.value}</strong>
+              </span>
+            ))}
+          </div>
+          <Button
+            variant="ghost"
+            className="dashboard-card__cta dashboard-card__meta-action"
+            onClick={handleOpen}
+          >
+            Open dashboard
+            <ArrowRight className="w-4 h-4" />
+          </Button>
         </div>
       )}
 
@@ -139,10 +164,16 @@ export const CardDash = ({
               <Share2 className="w-4 h-4" />
             </Button>
           )}
-          <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
-            Open dashboard
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          {onUseTemplate && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="dashboard-card__cta dashboard-card__cta--template"
+              onClick={handleUseTemplate}
+            >
+              Use template
+            </Button>
+          )}
         </div>
       </div>
     </div>

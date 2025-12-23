@@ -23,8 +23,9 @@ import {
   renameDashboardTable as renameDashboardTableService,
   deleteDashboardTable as deleteDashboardTableService,
 } from "../services/dashboardService.js";
-import { findDashboardForOwner, findDashboardById } from "../repositories/dashboardRepository.js";
-import { listTablesByDashboard } from "../repositories/dashboardTableRepository.js";
+import { findDashboardForOwner, findDashboardById, insertDashboard } from "../repositories/dashboardRepository.js";
+import { insertTables, listTablesByDashboard } from "../repositories/dashboardTableRepository.js";
+import { insertRelationships, listRelationshipsByDashboard } from "../repositories/dashboardRelationshipRepository.js";
 import { DashboardTableModel } from "../models/dashboardTableModel.js";
 import { mongoose } from "../mongoose.js";
 import { getSocialhubDb } from "../mongo.js";
@@ -155,6 +156,69 @@ export async function listDashboardTables(req, res) {
   }
   const tables = await listTablesByDashboard(dashboardId);
   res.json({ tables });
+}
+
+export async function useTemplateDashboard(req, res) {
+  const owner = parseOwner(req);
+  const { id } = req.params;
+  if (!id) throw new HttpError(400, "dashboardId required");
+  if (!owner.userId) throw new HttpError(401, "Unauthorized");
+
+  const dashboard = await findDashboardById(id);
+  if (!dashboard) throw new HttpError(404, "Dashboard not found");
+
+  const isGlobalAdmin = isGlobalAdminUser(req.user);
+  if (!canViewDashboard(dashboard, owner.userId, { isGlobalAdmin })) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const baseName = (dashboard.name || "Untitled").toString().trim() || "Untitled";
+  const newDashboard = await insertDashboard({
+    name: `${baseName} (Copy)`,
+    description: dashboard.description || "",
+    type: dashboard.type || "",
+    userId: owner.userId,
+    createdBy: owner.userId,
+    ui: dashboard.ui || {},
+    widgets: [],
+    insights: [],
+    samplePreview: null,
+  });
+
+  const sourceTables = await listTablesByDashboard(id);
+  const clonedTables = sourceTables.map((table) => ({
+    key: table.key,
+    name: table.name,
+    description: table.description || "",
+    fields: Array.isArray(table.fields)
+      ? table.fields.map((field) => {
+          const { id: fieldId, _id: fieldObjectId, ...rest } = field || {};
+          return rest;
+        })
+      : [],
+    sampleRows: [],
+  }));
+  const createdTables = await insertTables(newDashboard.id, clonedTables);
+
+  const relationships = await listRelationshipsByDashboard(id);
+  const createdRelationships = await insertRelationships(
+    newDashboard.id,
+    relationships.map((rel) => ({
+      fromTableKey: rel.fromTableKey,
+      fromFieldKey: rel.fromFieldKey,
+      toTableKey: rel.toTableKey,
+      toFieldKey: rel.toFieldKey,
+      type: rel.type,
+    })),
+  );
+
+  res.status(201).json({
+    dashboard: {
+      ...newDashboard,
+      tables: createdTables,
+      relationships: createdRelationships,
+    },
+  });
 }
 
 export async function createDashboardTable(req, res) {

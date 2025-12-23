@@ -539,4 +539,6 @@ export const dashboardApi = {
     const queryString = query.toString() ? `?${query.toString()}` : "";
     return api.patch<{ success: boolean }>(`/api/dashboards/${dashboardId}/insights/${insightId}${queryString}`, body);
   },
+  useTemplate: (dashboardId: string, token: string) =>
+    api.post<{ dashboard: Dashboard }>(`/api/dashboards/${dashboardId}/use-template`, {}, token),
 };
