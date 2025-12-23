@@ -193,7 +193,10 @@ function ensureReferenceLookupsForFields(fields: any[], ensureLookupForTable: (t
   fields.forEach((field) => {
     try {
       const type = (field?.type || field?.fieldType || "").toString().toLowerCase();
-      if (type !== "reference") return;
+      const semanticType = (field?.semanticType || "").toString().toLowerCase();
+      const hasRefProp = Boolean(field?.ref || field?.referenceTable || field?.referenceTableKey);
+      const isReference = type === "reference" || semanticType === "reference" || hasRefProp;
+      if (!isReference) return;
       const refTableKey =
         field?.ref ||
         field?.referenceTableKey ||
@@ -2179,17 +2182,67 @@ function ManageDashDetail() {
   function ensureLookupForTable(tableKey: string) {
     try {
       if (!tableKey || typeof tableKey !== "string") return;
+      if (!dashId) return;
       const normalized = tableKey.trim().toLowerCase();
       if (!normalized) return;
       if (fetchedReferenceTables.current.has(normalized) || inflightReferenceKeys.current.has(normalized)) return;
       inflightReferenceKeys.current.add(normalized);
-      // TODO: implement actual lookup fetch; placeholder marks as loaded to avoid crashes
       setReferenceTableStatus((prev) => ({
         ...prev,
-        [normalized]: { ...(prev[normalized] || {}), loading: false, loaded: true, rawKey: tableKey },
+        [normalized]: { ...(prev[normalized] || {}), loading: true, loaded: false, error: undefined, rawKey: tableKey },
       }));
-      fetchedReferenceTables.current.add(normalized);
-      inflightReferenceKeys.current.delete(normalized);
+      dashboardApi
+        .listRecords({ dashboardId: dashId as string, tableKey, sessionId, userId: currentUser?.id })
+        .then((res) => {
+          const records = Array.isArray(res.records) ? res.records : [];
+          const lookup: Record<string, { id: string; display: string }> = {};
+          records.forEach((item: any) => {
+            const rec = item && typeof item === "object" && item.record ? item.record : item;
+            if (!rec || typeof rec !== "object") return;
+            const value = rec.id ?? item?.id ?? item?._id ?? rec._id;
+            if (!value) return;
+            const displayCandidateKeys = [
+              res.displayField,
+              res.displayKey,
+              res.labelKey,
+              "full_name",
+              "name",
+              "title",
+              "label",
+            ].filter(Boolean);
+            let display = "";
+            for (const key of displayCandidateKeys) {
+              const val = key ? rec[key] : undefined;
+              if (val !== undefined && val !== null) {
+                display = String(val);
+                break;
+              }
+            }
+            if (!display) display = String(value);
+            lookup[String(value)] = { id: String(value), display };
+          });
+          setReferenceLookups((prev) => ({ ...prev, [normalized]: lookup }));
+          fetchedReferenceTables.current.add(normalized);
+          setReferenceTableStatus((prev) => ({
+            ...prev,
+            [normalized]: { ...(prev[normalized] || {}), loading: false, loaded: true, error: undefined, rawKey: tableKey },
+          }));
+        })
+        .catch((err) => {
+          setReferenceTableStatus((prev) => ({
+            ...prev,
+            [normalized]: {
+              ...(prev[normalized] || {}),
+              loading: false,
+              loaded: true,
+              error: err?.message || "Failed to load reference records",
+              rawKey: tableKey,
+            },
+          }));
+        })
+        .finally(() => {
+          inflightReferenceKeys.current.delete(normalized);
+        });
     } catch (err) {
       console.error("ensureLookupForTable error", err);
     }
@@ -3430,10 +3483,6 @@ function ManageDashDetail() {
                     Add widget
                   </Button>
                 )}
-                <Button variant="ghost" className="mdGhostBtn">
-                  <Clock className="w-4 h-4 mr-2" />
-                  Last 30 days
-                </Button>
               </div>
             </div>
             <div className="overviewSectionGrid overviewMetricsGrid">
@@ -3514,15 +3563,6 @@ function ManageDashDetail() {
                     Add chart
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  className="mdGhostBtn"
-                  disabled={!mergedTables.length}
-                  title={!mergedTables.length ? "Add data first" : ""}
-                >
-                  <Clock className="w-4 h-4 mr-2" />
-                  Last 30 days
-                </Button>
               </div>
             </div>
             <div className="overviewSectionGrid overviewInsightsGrid">
