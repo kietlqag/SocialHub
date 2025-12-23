@@ -1,17 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Search,
   Filter,
   Download,
   Star,
-  TrendingUp,
   Clock,
-  Users,
-  Package,
-  ShoppingCart,
-  Store,
-  BarChart3,
   Heart,
   Share2,
   Eye,
@@ -22,6 +17,15 @@ import {
   Crown,
   Zap,
   CheckCircle2,
+  Upload,
+  HeartPulse,
+  GraduationCap,
+  BarChart3,
+  ShoppingCart,
+  Store,
+  Package,
+  Users,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -45,37 +49,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { api } from "../services/api";
+import { Header } from "../components/Header";
+import { clearSession, getCurrentSession, type AuthUser } from "../services/auth";
+
+export interface Template {
+  id: string;
+  name: string;
+  description: string;
+  author?: string;
+  authorAvatar?: string;
+  category: string;
+  icon: any;
+  color: string;
+  downloads?: number;
+  rating?: number;
+  reviews?: number;
+  price?: "free" | "premium";
+  isFeatured?: boolean;
+  isNew?: boolean;
+  tags?: string[];
+  preview: {
+    widgets?: number;
+    fields?: number;
+    integrations?: string[];
+  };
+  lastUpdated?: string;
+}
 
 interface TemplatePageProps {
   onBack?: () => void;
   onCloneTemplate?: (templateId: string) => void;
+  templates?: Template[];
+  currentUser?: AuthUser | null;
 }
 
-interface Template {
-  id: string;
-  name: string;
-  description: string;
-  author: string;
-  authorAvatar: string;
-  category: string;
-  icon: any;
-  color: string;
-  downloads: number;
-  rating: number;
-  reviews: number;
-  price: "free" | "premium";
-  isFeatured?: boolean;
-  isNew?: boolean;
-  tags: string[];
-  preview: {
-    widgets: number;
-    fields: number;
-    integrations: string[];
-  };
-  lastUpdated: string;
-}
-
-export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
+export function TemplatePage({ onBack, onCloneTemplate, templates = [], currentUser }: TemplatePageProps) {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
@@ -83,233 +93,119 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [likedTemplates, setLikedTemplates] = useState<Set<string>>(new Set());
   const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
+  const [templateData, setTemplateData] = useState<Template[]>(templates);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [headerUser, setHeaderUser] = useState<AuthUser | null>(currentUser || null);
 
-  const categories = [
-    { id: "all", label: "All Templates", count: 24 },
-    { id: "business", label: "Business", count: 8 },
-    { id: "ecommerce", label: "E-Commerce", count: 6 },
-    { id: "analytics", label: "Analytics", count: 5 },
-    { id: "crm", label: "CRM", count: 3 },
-    { id: "project", label: "Project Management", count: 2 },
-  ];
+  useEffect(() => {
+    if (currentUser) {
+      setHeaderUser(currentUser);
+      return;
+    }
+    const session = getCurrentSession();
+    if (session?.user) setHeaderUser(session.user);
+  }, [currentUser]);
 
-  const templates: Template[] = [
-    {
-      id: "1",
-      name: "E-Commerce Dashboard Pro",
-      description: "Complete e-commerce solution with inventory, orders, and customer analytics",
-      author: "Sarah Chen",
-      authorAvatar: "SC",
-      category: "ecommerce",
-      icon: ShoppingCart,
-      color: "bg-purple-500",
-      downloads: 12543,
-      rating: 4.9,
-      reviews: 234,
-      price: "premium",
-      isFeatured: true,
-      isNew: false,
-      tags: ["Sales", "Inventory", "Analytics"],
-      preview: {
-        widgets: 15,
-        fields: 45,
-        integrations: ["Shopify", "WooCommerce", "Stripe"],
-      },
-      lastUpdated: "2 days ago",
-    },
-    {
-      id: "2",
-      name: "Sales Analytics Hub",
-      description: "Track sales performance with real-time metrics and forecasting",
-      author: "Michael Roberts",
-      authorAvatar: "MR",
-      category: "analytics",
-      icon: TrendingUp,
-      color: "bg-green-500",
-      downloads: 8721,
-      rating: 4.8,
-      reviews: 156,
-      price: "free",
-      isFeatured: true,
-      isNew: false,
-      tags: ["Sales", "Reports", "KPIs"],
-      preview: {
-        widgets: 12,
-        fields: 32,
-        integrations: ["Salesforce", "HubSpot"],
-      },
-      lastUpdated: "1 week ago",
-    },
-    {
-      id: "3",
-      name: "Customer CRM System",
-      description: "Manage customer relationships with contact tracking and pipeline management",
-      author: "Emily Johnson",
-      authorAvatar: "EJ",
-      category: "crm",
-      icon: Users,
-      color: "bg-blue-500",
-      downloads: 15234,
-      rating: 4.7,
-      reviews: 412,
-      price: "free",
-      isFeatured: false,
-      isNew: true,
-      tags: ["CRM", "Contacts", "Pipeline"],
-      preview: {
-        widgets: 10,
-        fields: 28,
-        integrations: ["Gmail", "Outlook", "Slack"],
-      },
-      lastUpdated: "3 days ago",
-    },
-    {
-      id: "4",
-      name: "Inventory Management",
-      description: "Keep track of stock levels, suppliers, and warehouse operations",
-      author: "David Kim",
-      authorAvatar: "DK",
-      category: "business",
-      icon: Package,
-      color: "bg-orange-500",
-      downloads: 6543,
-      rating: 4.6,
-      reviews: 89,
-      price: "free",
-      isFeatured: false,
-      isNew: true,
-      tags: ["Inventory", "Stock", "Suppliers"],
-      preview: {
-        widgets: 8,
-        fields: 24,
-        integrations: ["QuickBooks", "Xero"],
-      },
-      lastUpdated: "5 days ago",
-    },
-    {
-      id: "5",
-      name: "Marketing Campaign Tracker",
-      description: "Monitor marketing campaigns, ROI, and engagement metrics",
-      author: "Lisa Anderson",
-      authorAvatar: "LA",
-      category: "analytics",
-      icon: BarChart3,
-      color: "bg-pink-500",
-      downloads: 9876,
-      rating: 4.9,
-      reviews: 201,
-      price: "premium",
-      isFeatured: true,
-      isNew: false,
-      tags: ["Marketing", "ROI", "Campaigns"],
-      preview: {
-        widgets: 14,
-        fields: 38,
-        integrations: ["Google Ads", "Facebook", "LinkedIn"],
-      },
-      lastUpdated: "4 days ago",
-    },
-    {
-      id: "6",
-      name: "Project Task Manager",
-      description: "Organize projects, tasks, and team collaboration in one place",
-      author: "James Wilson",
-      authorAvatar: "JW",
-      category: "project",
-      icon: LayoutDashboard,
-      color: "bg-indigo-500",
-      downloads: 11234,
-      rating: 4.8,
-      reviews: 178,
-      price: "free",
-      isFeatured: false,
-      isNew: false,
-      tags: ["Projects", "Tasks", "Team"],
-      preview: {
-        widgets: 11,
-        fields: 30,
-        integrations: ["Jira", "Trello", "Asana"],
-      },
-      lastUpdated: "1 week ago",
-    },
-    {
-      id: "7",
-      name: "Retail Store Manager",
-      description: "Comprehensive retail solution with POS, inventory, and customer data",
-      author: "Maria Garcia",
-      authorAvatar: "MG",
-      category: "ecommerce",
-      icon: Store,
-      color: "bg-cyan-500",
-      downloads: 7654,
-      rating: 4.7,
-      reviews: 134,
-      price: "premium",
-      isFeatured: false,
-      isNew: true,
-      tags: ["Retail", "POS", "Sales"],
-      preview: {
-        widgets: 13,
-        fields: 42,
-        integrations: ["Square", "Shopify POS"],
-      },
-      lastUpdated: "2 days ago",
-    },
-    {
-      id: "8",
-      name: "Business Overview",
-      description: "High-level business metrics and KPIs for executives",
-      author: "Robert Taylor",
-      authorAvatar: "RT",
-      category: "business",
-      icon: TrendingUp,
-      color: "bg-emerald-500",
-      downloads: 13456,
-      rating: 4.9,
-      reviews: 289,
-      price: "free",
-      isFeatured: true,
-      isNew: false,
-      tags: ["KPIs", "Executive", "Overview"],
-      preview: {
-        widgets: 9,
-        fields: 22,
-        integrations: ["Google Analytics", "Mixpanel"],
-      },
-      lastUpdated: "6 days ago",
-    },
-  ];
+  useEffect(() => {
+    if (templates.length) {
+      setTemplateData(templates);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    api
+      .get<{ dashboards: any[] }>("/api/templates/public/dashboards")
+      .then((res) => {
+        if (!active) return;
+        const mapped: Template[] = (res.dashboards || []).map((d, idx) => {
+          const domain = (d.type || "general").toLowerCase();
+          const iconByDomain: Record<string, any> = {
+            commerce: ShoppingCart,
+            analytics: BarChart3,
+            education: GraduationCap,
+            healthcare: HeartPulse,
+            general: LayoutDashboard,
+          };
+          const colorByDomain: Record<string, string> = {
+            commerce: "bg-emerald-500",
+            analytics: "bg-indigo-500",
+            education: "bg-amber-500",
+            healthcare: "bg-rose-500",
+            general: "bg-slate-500",
+          };
+          return {
+            id: d.id || `template-${idx}`,
+            name: d.name || "Template",
+            description: d.description || "Shared dashboard template",
+            category: domain,
+            icon: iconByDomain[domain] || LayoutDashboard,
+            color: colorByDomain[domain] || "bg-slate-500",
+            downloads: d.records || 0,
+            rating: 4.8,
+            reviews: 0,
+            price: "free",
+            isFeatured: idx < 2,
+            isNew: idx < 3,
+            tags: [d.type || domain],
+            preview: { widgets: d.widgets || 0, fields: d.fields || d.tables || 0, integrations: [] },
+            lastUpdated: d.updatedAt || d.createdAt || "",
+          };
+        });
+        setTemplateData(mapped);
+      })
+      .catch((err: any) => {
+        console.error(err);
+        setError(err?.message || "Failed to load templates");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [templates]);
 
-  const applyFilters = (list: Template[]) => {
-    return list.filter((template) => {
+  const categories = useMemo(() => {
+    const entries = templateData.reduce((acc, t) => {
+      const id = t.category || "general";
+      const count = (acc.get(id)?.count || 0) + 1;
+      acc.set(id, { id, label: id, count });
+      return acc;
+    }, new Map<string, { id: string; label: string; count: number }>());
+    return [
+      { id: "all", label: `All Templates${templateData.length ? ` (${templateData.length})` : ""}`, count: templateData.length },
+      ...Array.from(entries.values()),
+    ];
+  }, [templateData]);
+
+  const filteredTemplates = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return templateData.filter((template) => {
       const matchesSearch =
-        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        template.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+        template.name.toLowerCase().includes(q) ||
+        template.description.toLowerCase().includes(q) ||
+        (template.tags || []).some((tag) => tag.toLowerCase().includes(q));
       const matchesCategory = selectedCategory === "all" || template.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  };
+  }, [templates, searchQuery, selectedCategory]);
 
-  const filteredTemplates = applyFilters(templates);
-  const featuredTemplates = applyFilters(templates.filter((t) => t.isFeatured));
-  const newTemplates = applyFilters(templates.filter((t) => t.isNew));
+  const featuredTemplates = filteredTemplates.filter((t) => t.isFeatured);
+  const newTemplates = filteredTemplates.filter((t) => t.isNew);
+  const templatesToUse = filteredTemplates;
 
   const handleLike = (templateId: string) => {
-    setLikedTemplates(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(templateId)) {
-        newSet.delete(templateId);
-      } else {
-        newSet.add(templateId);
-      }
-      return newSet;
+    setLikedTemplates((prev) => {
+      const next = new Set(prev);
+      if (next.has(templateId)) next.delete(templateId);
+      else next.add(templateId);
+      return next;
     });
   };
 
   const handleCloneTemplate = (template: Template) => {
     onCloneTemplate?.(template.id);
-    // Show success message or redirect
   };
 
   const handleShareTemplate = async (template: Template) => {
@@ -324,7 +220,7 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
   };
 
   const TemplateCard = ({ template }: { template: Template }) => {
-    const Icon = template.icon;
+    const Icon = template.icon || LayoutDashboard;
     const isLiked = likedTemplates.has(template.id);
 
     return (
@@ -337,110 +233,71 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
                 Premium
               </Badge>
             )}
-            {template.isNew && (
-              <Badge className="bg-green-400 text-green-900 border-0">
-                <Sparkles className="w-3 h-3 mr-1" />
-                New
-              </Badge>
-            )}
+            {template.isNew && <Badge className="bg-white/80 text-slate-700 border-0">New</Badge>}
           </div>
-          <div className="flex items-center gap-3 text-white">
-            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl shadow-inner">
-              <Icon className="w-7 h-7" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg leading-tight">{template.name}</h3>
-            </div>
+          <div className="bg-white/15 rounded-2xl p-3 w-12 h-12 flex items-center justify-center shadow-inner">
+            <Icon className="w-6 h-6 text-white" />
+          </div>
+          <div className="ml-4 text-white">
+            <p className="text-sm uppercase tracking-wide opacity-80">{template.category}</p>
+            <h3 className="text-xl font-semibold">{template.name}</h3>
+            <p className="text-sm opacity-80 line-clamp-1">{template.description}</p>
           </div>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="flex items-center gap-2 text-sm text-slate-700">
-            <Star className="w-4 h-4 fill-yellow-300 text-yellow-400" />
-            <span className="font-semibold">{template.rating}</span>
-            <span className="text-slate-500">({template.reviews})</span>
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>{template.preview.widgets ?? 0} widgets</span>
+            <span>•</span>
+            <span>{template.preview.fields ?? 0} fields</span>
           </div>
 
-          <p className="text-sm text-gray-700 leading-relaxed line-clamp-2">{template.description}</p>
-
-          <div className="flex flex-wrap gap-2">
-            {template.tags.map((tag) => (
-              <Badge key={tag} variant="outline" className="text-xs bg-slate-50">
-                {tag}
-              </Badge>
-            ))}
-          </div>
-
-          <div className="flex justify-between items-center px-4 py-3 bg-slate-50 rounded-lg border border-slate-100 text-sm">
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Widgets</p>
-              <p className="font-semibold text-sm">{template.preview.widgets}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Fields</p>
-              <p className="font-semibold text-sm">{template.preview.fields}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Downloads</p>
-              <p className="font-semibold text-sm">{template.downloads.toLocaleString()}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Avatar className="w-6 h-6">
-                <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                  {template.authorAvatar}
-                </AvatarFallback>
+              <Avatar className="h-8 w-8">
+                <AvatarFallback>{(template.authorAvatar || template.author || "T").slice(0, 2)}</AvatarFallback>
               </Avatar>
               <div>
-                <p className="text-xs text-gray-600">{template.author}</p>
-                <p className="text-xs text-gray-400">{template.lastUpdated}</p>
+                <p className="text-sm font-medium">{template.author || "Team"}</p>
+                <p className="text-xs text-slate-500">{template.lastUpdated || "Recently updated"}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleLike(template.id);
-                }}
-                className="hover:bg-transparent"
-              >
-                <Heart className={`w-5 h-5 transition-all ${isLiked ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
+            <div className="flex gap-2">
+              <Button variant="ghost" size="icon" onClick={() => handleLike(template.id)}>
+                <Heart className={`w-4 h-4 ${isLiked ? "text-red-500 fill-red-100" : "text-slate-500"}`} />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleShareTemplate(template);
-                }}
-              >
-                <Share2 className="w-4 h-4" />
-                <span className="text-xs">{copiedTemplateId === template.id ? "Copied" : "Share"}</span>
+              <Button variant="ghost" size="icon" onClick={() => handleShareTemplate(template)}>
+                <Share2 className="w-4 h-4 text-slate-500" />
               </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-2">
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => {
-                setSelectedTemplate(template);
-                setIsPreviewDialogOpen(true);
-              }}
-            >
-              <Eye className="w-4 h-4" />
-              Preview
-            </Button>
-            <Button className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => handleCloneTemplate(template)}>
-              <Download className="w-4 h-4" />
-              Clone
-            </Button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4 text-sm text-slate-600">
+              <div className="flex items-center gap-1">
+                <Star className="w-4 h-4 text-amber-500" />
+                <span>{template.rating ?? "—"}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Download className="w-4 h-4 text-emerald-500" />
+                <span>{template.downloads ?? 0}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="w-4 h-4 text-slate-400" />
+                <span>{template.lastUpdated || "—"}</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => { setSelectedTemplate(template); setIsPreviewDialogOpen(true); }}>
+                <Eye className="w-4 h-4 mr-2" />
+                Preview
+              </Button>
+              <Button size="sm" onClick={() => handleCloneTemplate(template)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Use template
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
@@ -448,150 +305,178 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white">
-      <div className="bg-white border-b sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-6 space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              {onBack && (
-                <Button variant="ghost" onClick={onBack} className="gap-2">
-                  <ArrowLeft className="w-4 h-4" />
-                  Back
-                </Button>
-              )}
-              <div>
-                <h1 className="text-3xl font-semibold text-slate-900">Template Marketplace</h1>
-                <p className="text-slate-600 mt-1">Browse and clone dashboard templates from the community</p>
-              </div>
+    <div className="min-h-screen bg-gray-50">
+      <Header
+        currentUser={headerUser}
+        onManageDash={() => navigate("/managedash")}
+        onChatOpen={() => navigate("/chat")}
+        onLoginOpen={() => navigate("/login")}
+        onSignUpOpen={() => navigate("/register")}
+        onProfileOpen={() => navigate("/profile")}
+        onSettingsOpen={() => navigate("/settings")}
+        onTemplateOpen={() => navigate("/template")}
+        onLogout={() => {
+          clearSession();
+          setHeaderUser(null);
+          navigate("/login");
+        }}
+      />
+      <header className="bg-white border-b">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <Button variant="ghost" size="icon" onClick={onBack}>
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            )}
+            <div>
+              <p className="text-sm text-slate-500">Public templates</p>
+              <h1 className="text-xl font-semibold flex items-center gap-2">
+                <LayoutDashboard className="w-5 h-5 text-indigo-500" />
+                Template library
+              </h1>
             </div>
-            <Button className="gap-2 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => setIsUploadDialogOpen(true)}>
-              <Plus className="w-4 h-4" />
-              Share Your Template
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm">
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+            <Button variant="default" size="sm">
+              <Sparkles className="w-4 h-4 mr-2" />
+              Submit template
             </Button>
           </div>
+        </div>
+      </header>
 
-          <div className="flex flex-col lg:flex-row gap-3 items-stretch">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <Input
-                placeholder="Search templates by name, description, or tags..."
-                className="pl-10 h-12 bg-slate-50 border-slate-200"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {loading && <div className="text-center text-slate-500 py-10">Loading templates...</div>}
+        {error && <div className="text-center text-red-600 text-sm">{error}</div>}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => setIsUploadDialogOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload template
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedTemplate(null)}>
+                <Filter className="h-4 w-4 mr-2" />
+                Filter
+              </Button>
+              <Button variant="ghost" size="sm">
+                <Star className="h-4 w-4 mr-2" />
+                Popular
+              </Button>
             </div>
-            <div className="w-full lg:w-[180px]">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
+                <Input
+                  placeholder="Search templates..."
+                  className="pl-9 w-64"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="h-12 bg-slate-50 border-slate-200">
-                  <Filter className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="All Templates" />
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
-                      {cat.label} ({cat.count})
+                      {cat.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <Tabs defaultValue="all" className="w-full">
-          <TabsList className="mb-6 bg-slate-100 border border-slate-200">
-            <TabsTrigger value="all" className="gap-2">
-              <LayoutDashboard className="w-4 h-4" />
-              All Templates
-            </TabsTrigger>
-            <TabsTrigger value="featured" className="gap-2">
-              <Star className="w-4 h-4" />
-              Featured
-            </TabsTrigger>
-            <TabsTrigger value="new" className="gap-2">
-              <Sparkles className="w-4 h-4" />
-              New Releases
-            </TabsTrigger>
-          </TabsList>
+          <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="w-full">
+            <TabsList className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-2">
+              {categories.map((category) => (
+                <TabsTrigger
+                  key={category.id}
+                  value={category.id}
+                  className="text-sm"
+                >
+                  {category.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-          <TabsContent value="all" className="mt-0">
-            {filteredTemplates.length === 0 ? (
-              <div className="text-center py-12">
-                <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg text-gray-600 mb-2">No templates found</h3>
-                <p className="text-gray-400">Try adjusting your search or filters</p>
+            <TabsContent value={selectedCategory} className="space-y-4">
+              {filteredTemplates.length === 0 ? (
+                <div className="border border-dashed rounded-lg p-10 text-center text-slate-500">
+                  No templates yet. Toggle public or add one to get started.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredTemplates.map((template) => (
+                    <TemplateCard key={template.id} template={template} />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          {featuredTemplates.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <h3 className="font-semibold">Featured</h3>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredTemplates.map((template) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {featuredTemplates.map((template) => (
                   <TemplateCard key={template.id} template={template} />
                 ))}
               </div>
-            )}
-          </TabsContent>
+            </section>
+          )}
 
-          <TabsContent value="featured" className="mt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {featuredTemplates.map((template) => (
-                <TemplateCard key={template.id} template={template} />
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="new" className="mt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {newTemplates.map((template) => (
-                <TemplateCard key={template.id} template={template} />
-              ))}
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {/* Upload Template Dialog */}
-      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Share Your Template</DialogTitle>
-            <DialogDescription>
-              Share your dashboard template with the community and help others build faster
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Template Name</Label>
-              <Input placeholder="e.g., Sales Analytics Dashboard" className="mt-1" />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                placeholder="Describe what your template does and what problems it solves..."
-                className="mt-1 min-h-[100px]"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Category</Label>
-                <Select>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="business">Business</SelectItem>
-                    <SelectItem value="ecommerce">E-Commerce</SelectItem>
-                    <SelectItem value="analytics">Analytics</SelectItem>
-                    <SelectItem value="crm">CRM</SelectItem>
-                    <SelectItem value="project">Project Management</SelectItem>
-                  </SelectContent>
-                </Select>
+          {newTemplates.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-500" />
+                <h3 className="font-semibold">New</h3>
               </div>
-              <div>
-                <Label>Template Type</Label>
-                <Select>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select type" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {newTemplates.map((template) => (
+                  <TemplateCard key={template.id} template={template} />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </main>
+
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Submit your template</DialogTitle>
+            <DialogDescription>Upload a dashboard template to share publicly.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input placeholder="Template name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea placeholder="What does this template include?" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Input placeholder="analytics / commerce / crm ..." />
+              </div>
+              <div className="space-y-2">
+                <Label>Price</Label>
+                <Select defaultValue="free">
+                  <SelectTrigger>
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="free">Free</SelectItem>
@@ -600,189 +485,56 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
                 </Select>
               </div>
             </div>
-            <div>
-              <Label>Tags (comma separated)</Label>
-              <Input placeholder="e.g., sales, analytics, reports" className="mt-1" />
-            </div>
-            <div>
-              <Label>Select Dashboard to Share</Label>
-              <Select>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Choose a dashboard" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="main-business">Main Business Hub</SelectItem>
-                  <SelectItem value="ecommerce-store">E-Commerce Store</SelectItem>
-                  <SelectItem value="sales-analytics">Sales Analytics</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button className="gap-2" onClick={() => setIsUploadDialogOpen(false)}>
-              <Share2 className="w-4 h-4" />
-              Share Template
-            </Button>
+            <Button className="w-full">Submit</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Preview Dialog */}
-      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <Dialog open={isPreviewDialogOpen && !!selectedTemplate} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{selectedTemplate?.name}</DialogTitle>
+            <DialogDescription>{selectedTemplate?.description}</DialogDescription>
+          </DialogHeader>
           {selectedTemplate && (
-            <>
-              <DialogHeader>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <DialogTitle className="text-2xl">{selectedTemplate.name}</DialogTitle>
-                    <DialogDescription className="mt-2">
-                      {selectedTemplate.description}
-                    </DialogDescription>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsPreviewDialogOpen(false)}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-6 py-4">
-                {/* Author Info */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        {selectedTemplate.authorAvatar}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold">{selectedTemplate.author}</p>
-                      <p className="text-sm text-gray-500">Updated {selectedTemplate.lastUpdated}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1">
-                      <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-                      <span className="font-semibold">{selectedTemplate.rating}</span>
-                      <span className="text-gray-400">({selectedTemplate.reviews} reviews)</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Download className="w-4 h-4" />
-                      <span>{selectedTemplate.downloads.toLocaleString()} downloads</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Preview Details */}
-                <div className="grid grid-cols-3 gap-4">
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <LayoutDashboard className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Widgets</p>
-                        <p className="text-xl font-semibold">{selectedTemplate.preview.widgets}</p>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-2 bg-green-100 rounded-lg">
-                        <Package className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Fields</p>
-                        <p className="text-xl font-semibold">{selectedTemplate.preview.fields}</p>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card className="p-4">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="p-2 bg-purple-100 rounded-lg">
-                        <Zap className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Integrations</p>
-                        <p className="text-xl font-semibold">{selectedTemplate.preview.integrations.length}</p>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-
-                {/* Integrations */}
-                <div>
-                  <h4 className="font-semibold mb-3">Integrations Included</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedTemplate.preview.integrations.map((integration) => (
-                      <Badge key={integration} className="gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        {integration}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Tags */}
-                <div>
-                  <h4 className="font-semibold mb-3">Tags</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedTemplate.tags.map((tag) => (
-                      <Badge key={tag} variant="outline">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {/* What's Included */}
-                <div>
-                  <h4 className="font-semibold mb-3">What's Included</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Pre-configured dashboard structure</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Custom fields and data types</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Sample data for testing</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span>Documentation and setup guide</span>
-                    </div>
-                  </div>
-                </div>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Badge>{selectedTemplate.category}</Badge>
+                {selectedTemplate.price && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    {selectedTemplate.price === "premium" ? <Crown className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                    {selectedTemplate.price}
+                  </Badge>
+                )}
               </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="p-3">
+                  <p className="text-sm text-slate-500">Widgets</p>
+                  <p className="text-xl font-semibold">{selectedTemplate.preview.widgets ?? 0}</p>
+                </Card>
+                <Card className="p-3">
+                  <p className="text-sm text-slate-500">Fields</p>
+                  <p className="text-xl font-semibold">{selectedTemplate.preview.fields ?? 0}</p>
+                </Card>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={() => handleCloneTemplate(selectedTemplate)}>Use template</Button>
                 <Button variant="outline" onClick={() => setIsPreviewDialogOpen(false)}>
+                  <X className="w-4 h-4 mr-2" />
                   Close
                 </Button>
-                <Button
-                  className="gap-2"
-                  onClick={() => {
-                    handleCloneTemplate(selectedTemplate);
-                    setIsPreviewDialogOpen(false);
-                  }}
-                >
-                  <Download className="w-4 h-4" />
-                  Clone This Template
-                </Button>
               </div>
-            </>
+            </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!copiedTemplateId} onOpenChange={() => setCopiedTemplateId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Link copied</DialogTitle>
+            <DialogDescription>Share this template link with your team.</DialogDescription>
+          </DialogHeader>
         </DialogContent>
       </Dialog>
     </div>

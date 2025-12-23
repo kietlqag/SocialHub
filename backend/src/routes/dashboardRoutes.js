@@ -18,6 +18,9 @@ import {
   createInsight,
   deleteInsight,
   patchInsight,
+  listPublicTemplates,
+  addPublicTemplate,
+  listPublicTemplateDashboards,
 } from "../controllers/dashboardController.js";
 import { getTableSchema, updateTableSchema } from "../controllers/tableSchemaController.js";
 
@@ -43,5 +46,8 @@ router.post("/dashboards/:id/widget-overrides/hide", asyncHandler(hideWidget));
 router.post("/dashboards/:id/insights", asyncHandler(createInsight));
 router.delete("/dashboards/:id/insights/:insightId", asyncHandler(deleteInsight));
 router.patch("/dashboards/:id/insights/:insightId", asyncHandler(patchInsight));
+router.get("/templates/public", asyncHandler(listPublicTemplates));
+router.get("/templates/public/dashboards", asyncHandler(listPublicTemplateDashboards));
+router.post("/templates/public", asyncHandler(addPublicTemplate));
 
 export default router;

@@ -25,6 +25,8 @@ type DashboardCardProps = {
   onToggleFavorite?: (id: string) => void;
   onShare?: (id: string) => void;
   shareLabel?: string;
+  onPublic?: (id: string) => void;
+  publicLabel?: string;
 };
 
 export function DashboardCard({
@@ -43,6 +45,8 @@ export function DashboardCard({
   onToggleFavorite,
   onShare,
   shareLabel = "Share",
+  onPublic,
+  publicLabel = "Public",
 }: DashboardCardProps) {
   const { Icon, toneClass } = icon;
   const metaChips = [
@@ -100,15 +104,28 @@ export function DashboardCard({
           </div>
           {lastViewed && <p className="dashboard-card__timestamp">Viewed {lastViewed}</p>}
         </div>
-        <div className="flex items-center gap-2 mt-3">
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
             Open dashboard
             <ArrowRight className="w-4 h-4" />
           </Button>
           {onShare && (
-            <Button variant="outline" size="sm" className="gap-1" onClick={(e) => { e.stopPropagation(); onShare(id); }}>
+            <Button variant="outline" size="sm" className="gap-1 whitespace-nowrap" onClick={(e) => { e.stopPropagation(); onShare(id); }}>
               <Share2 className="w-4 h-4" />
               {shareLabel}
+            </Button>
+          )}
+          {onPublic && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 whitespace-nowrap"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublic(id);
+              }}
+            >
+              {publicLabel}
             </Button>
           )}
         </div>
@@ -151,15 +168,28 @@ export function DashboardCard({
 
       <div className="dashboard-card__footer">
         {lastViewed && <p className="dashboard-card__timestamp">Updated {lastViewed}</p>}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
             Open dashboard
             <ArrowRight className="w-4 h-4" />
           </Button>
           {onShare && (
-            <Button variant="outline" size="sm" className="gap-1" onClick={(e) => { e.stopPropagation(); onShare(id); }}>
+            <Button variant="outline" size="sm" className="gap-1 whitespace-nowrap" onClick={(e) => { e.stopPropagation(); onShare(id); }}>
               <Share2 className="w-4 h-4" />
               {shareLabel}
+            </Button>
+          )}
+          {onPublic && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 whitespace-nowrap"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPublic(id);
+              }}
+            >
+              {publicLabel}
             </Button>
           )}
         </div>

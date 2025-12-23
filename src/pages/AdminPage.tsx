@@ -286,6 +286,9 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
   const [confirmDashboardText, setConfirmDashboardText] = useState("");
   const [tableRecords, setTableRecords] = useState<Record<string, any[]>>({});
   const [loadingTableKeys, setLoadingTableKeys] = useState<Set<string>>(new Set());
+  const [tableDetail, setTableDetail] = useState<{ dashboardId: string; dashboardName?: string; table: any } | null>(
+    null
+  );
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
@@ -891,7 +894,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     setConfirmDashboardText("");
   };
 
-  const handleLoadTableRecords = async (dashboardId: string, tableKey: string) => {
+  const handleLoadTableRecords = async (dashboardId: string, tableKey: string, silent?: boolean) => {
     const session = getCurrentSession();
     if (!session?.token) {
       toast.error("Please sign in again");
@@ -904,7 +907,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
         session.token
       );
       setTableRecords((prev) => ({ ...prev, [tableKey]: res.records || [] }));
-      toast.success("Loaded records");
+      if (!silent) toast.success("Loaded records");
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Failed to load records");
@@ -915,6 +918,11 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
         return next;
       });
     }
+  };
+
+  const handleOpenTableData = async (dashboard: DashboardItem, table: any) => {
+    await handleLoadTableRecords(dashboard.id, table.key, true);
+    setTableDetail({ dashboardId: dashboard.id, dashboardName: dashboard.name, table });
   };
 
   const filteredDashboards = dashboards.filter((d) => {
@@ -2240,7 +2248,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                               size="sm"
                               variant="outline"
                               disabled={loadingTableKeys.has(table.key)}
-                              onClick={() => handleLoadTableRecords(selectedItem.id, table.key)}
+                              onClick={() => handleOpenTableData(selectedItem, table)}
                             >
                               {loadingTableKeys.has(table.key) ? "Loading..." : "View data"}
                             </Button>
@@ -2459,6 +2467,103 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!tableDetail} onOpenChange={(open) => { if (!open) { setTableDetail(null); } }}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              {tableDetail?.table?.name || "Table"} data
+            </DialogTitle>
+            <DialogDescription>
+              {tableDetail?.dashboardName ? `Dashboard: ${tableDetail.dashboardName}` : "Table records"}
+            </DialogDescription>
+          </DialogHeader>
+          {tableDetail && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Database className="h-4 w-4" />
+                  <span>{tableDetail.table.fields?.length || 0} fields</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingTableKeys.has(tableDetail.table.key)}
+                  onClick={() => handleLoadTableRecords(tableDetail.dashboardId, tableDetail.table.key)}
+                >
+                  {loadingTableKeys.has(tableDetail.table.key) ? "Loading..." : "Refresh"}
+                </Button>
+              </div>
+              <div className="border rounded-lg overflow-x-auto">
+                {(() => {
+                  const rows =
+                    (tableRecords[tableDetail.table.key] && tableRecords[tableDetail.table.key].length > 0
+                      ? tableRecords[tableDetail.table.key]
+                      : tableDetail.table.sampleRows || []) || [];
+                  const hasCreated = rows.some((r: any) => r?.record?.createdAt || r?.createdAt);
+                  const hasUpdated = rows.some((r: any) => r?.record?.updatedAt || r?.updatedAt);
+                  const fields = tableDetail.table.fields || [];
+                  const columns = [
+                    ...fields,
+                    ...(hasCreated ? [{ key: "__created_at", name: "Created At" }] : []),
+                    ...(hasUpdated ? [{ key: "__updated_at", name: "Updated At" }] : []),
+                  ];
+                  const formatVal = (v: any) => {
+                    if (!v) return "-";
+                    const d = new Date(v);
+                    return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString();
+                  };
+                  return (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {columns.map((f: any) => (
+                            <TableHead key={f.key || f.name}>{f.name || f.key}</TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                          {rows.map((row: any, idx: number) => (
+                            <TableRow key={idx}>
+                              {columns.map((f: any) => {
+                                if (f.key === "__created_at") {
+                                  return (
+                                    <TableCell key="__created_at" className="text-sm">
+                                      {formatVal(row?.record?.createdAt || row?.createdAt)}
+                                    </TableCell>
+                                  );
+                                }
+                                if (f.key === "__updated_at") {
+                                  return (
+                                    <TableCell key="__updated_at" className="text-sm">
+                                      {formatVal(row?.record?.updatedAt || row?.updatedAt)}
+                                    </TableCell>
+                                  );
+                                }
+                                return (
+                                  <TableCell key={f.key || f.name} className="text-sm">
+                                    {row?.record?.[f.key] ?? row?.[f.key] ?? "-"}
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          ))}
+                    {!tableRecords[tableDetail.table.key]?.length && !(tableDetail.table.sampleRows || []).length && (
+                      <TableRow>
+                        <TableCell colSpan={(tableDetail.table.fields || []).length || 1} className="text-center text-sm text-gray-500">
+                          No records yet
+                        </TableCell>
+                      </TableRow>
+                    )}
+                      </TableBody>
+                    </Table>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

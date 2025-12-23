@@ -159,7 +159,7 @@ function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/template" element={<TemplatePage />} />
+        <Route path="/template" element={<TemplatePage currentUser={currentUser} />} />
         <Route
           path="/admin"
           element={

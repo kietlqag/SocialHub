@@ -14,6 +14,7 @@ export function Header({
   onLoginOpen,
   onSignUpOpen,
   onManageDash,
+  onTemplateOpen,
   currentUser,
   onLogout,
 }: {
@@ -22,6 +23,7 @@ export function Header({
   onLoginOpen?: () => void;
   onSignUpOpen?: () => void;
   onManageDash?: () => void;
+  onTemplateOpen?: () => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
 }) {
@@ -66,7 +68,12 @@ export function Header({
               {/* AI Chat moved into the nav between Testimonials and Contact */}
               <button onClick={onChatOpen} className={`nav-link text-sm ${activeKey === "chat" ? "active" : ""}`}>AI Chat</button>
               <a href="/contact" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Contact</a>
-              <a href="/template" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Template</a>
+              <button
+                onClick={onTemplateOpen ?? (() => navigate("/template"))}
+                className={`nav-link text-sm ${pathname.startsWith("/template") ? "active" : ""}`}
+              >
+                Template
+              </button>
             </div>
           </nav>
 
@@ -128,6 +135,9 @@ export function Header({
             <a href="#contact" className="block px-3 py-2 text-gray-700 hover:text-primary font-semibold">Contact</a>
               <div className="px-3 py-2 space-y-2">
               <Button variant="ghost" className="w-full" onClick={onChatOpen}>AI Chat</Button>
+              <Button variant="ghost" className="w-full" onClick={onTemplateOpen ?? (() => { setIsMenuOpen(false); navigate("/template"); })}>
+                Template
+              </Button>
                 {currentUser ? (
                   <>
                     <div className="flex items-center px-3 py-2 text-sm text-gray-700">

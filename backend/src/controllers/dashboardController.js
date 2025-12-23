@@ -20,6 +20,7 @@ import {
 } from "../services/dashboardService.js";
 import { getSocialhubDb } from "../mongo.js";
 import { insertActivity } from "../repositories/activityRepository.js";
+import { query } from "../db.js";
 
 const parseOwner = (req) => ({
   sessionId: req.body.sessionId || req.query.sessionId || null,
@@ -118,6 +119,68 @@ export async function getDashboardRecords(req, res) {
     userId: owner.userId,
   });
   res.json({ records });
+}
+
+export async function listPublicTemplates(req, res) {
+  const { rows } = await query("SELECT dashboard_id FROM public_templates ORDER BY created_at DESC");
+  res.json({ templateIds: rows.map((r) => r.dashboard_id) });
+}
+
+export async function listPublicTemplateDashboards(req, res) {
+  const { rows } = await query("SELECT dashboard_id FROM public_templates ORDER BY created_at DESC");
+  const ids = rows.map((r) => r.dashboard_id).filter(Boolean);
+  if (!ids.length) return res.json({ dashboards: [] });
+  const db = getSocialhubDb();
+  const objectIds = ids
+    .map((id) => {
+      try {
+        return new ObjectId(id);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  const docs = await db
+    .collection("dashboards")
+    .find({ _id: { $in: objectIds } })
+    .project({
+      name: 1,
+      description: 1,
+      type: 1,
+      widgets: 1,
+      fields: 1,
+      tables: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      userId: 1,
+      ownerId: 1,
+      "ui.userId": 1,
+    })
+    .toArray();
+
+  const dashboards = docs.map((d) => ({
+    id: d._id.toString(),
+    name: d.name || "Template",
+    description: d.description || "",
+    type: d.type || "general",
+    widgets: Array.isArray(d.widgets) ? d.widgets.length : 0,
+    fields: Array.isArray(d.fields) ? d.fields.length : 0,
+    tables: Array.isArray(d.tables) ? d.tables.length : 0,
+    createdAt: d.createdAt || null,
+    updatedAt: d.updatedAt || null,
+  }));
+
+  res.json({ dashboards });
+}
+
+export async function addPublicTemplate(req, res) {
+  const { dashboardId } = req.body || {};
+  if (!dashboardId) throw new HttpError(400, "dashboardId is required");
+  await query("INSERT INTO public_templates(dashboard_id) VALUES ($1) ON CONFLICT (dashboard_id) DO NOTHING", [
+    dashboardId,
+  ]);
+  res.status(201).json({ dashboardId });
 }
 
 export async function getDashboardRecordController(req, res) {

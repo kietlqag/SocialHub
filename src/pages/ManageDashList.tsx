@@ -6,6 +6,15 @@ import { Input } from "../components/ui/input";
 import { Header } from "../components/Header";
 import DashboardCard, { type DashboardCardIconPreset } from "../components/dashboard/DashboardCard";
 import { fetchMe, getCurrentSession, clearSession, type AuthUser } from "../services/auth";
+import { TemplatePage, type Template } from "./TemplatePage";
+import { api } from "../services/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import {
   LayoutDashboard,
   Search,
@@ -17,6 +26,7 @@ import {
   BarChart3,
   GraduationCap,
   HeartPulse,
+  Share2,
 } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
 import "../styles/managedash.css";
@@ -95,6 +105,9 @@ export default function ManageDashList() {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
+  const [showPublic, setShowPublic] = useState(false);
+  const [confirmPublicId, setConfirmPublicId] = useState<string | null>(null);
+  const [publicTemplateIds, setPublicTemplateIds] = useState<string[]>([]);
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
@@ -109,6 +122,13 @@ export default function ManageDashList() {
           setCurrentUser(null);
         });
     }
+  }, []);
+
+  useEffect(() => {
+    api
+      .get<{ templateIds: string[] }>("/api/templates/public")
+      .then((res) => setPublicTemplateIds(res.templateIds || []))
+      .catch(() => setPublicTemplateIds([]));
   }, []);
 
   useEffect(() => {
@@ -223,6 +243,10 @@ export default function ManageDashList() {
     }
   };
 
+  const handlePublicDashboard = (dashboardId: string) => {
+    setConfirmPublicId(dashboardId);
+  };
+
   const dataFileAttached = (draft: DraftDashboard) => {
     // Khi AI generator có parsedSchema sẽ đính sampleRows vào tables
     // Nếu không có parsedSchema -> tables chỉ là cấu trúc rỗng, tránh hiển thị mock
@@ -314,6 +338,70 @@ export default function ManageDashList() {
           .some((value) => value?.toLowerCase().includes(normalizedQuery)),
       )
     : derivedDashboards;
+  const templateDataAll: Template[] = useMemo(
+    () =>
+      dashboards.map((d, idx) => {
+        const domain = detectDashboardDomain(d);
+        const visual = domainVisuals[domain] ?? domainVisuals.general;
+        const colorByDomain: Record<string, string> = {
+          healthcare: "bg-rose-500",
+          commerce: "bg-emerald-500",
+          analytics: "bg-indigo-500",
+          education: "bg-amber-500",
+          general: "bg-slate-500",
+        };
+        const iconByDomain: Record<string, typeof LayoutDashboard> = {
+          healthcare: HeartPulse,
+          commerce: ShoppingCart,
+          analytics: BarChart3,
+          education: GraduationCap,
+          general: LayoutDashboard,
+        };
+        const icon = iconByDomain[domain] || visual.Icon || LayoutDashboard;
+        const color = colorByDomain[domain] || "bg-slate-500";
+        const widgetCount = Array.isArray(d.widgets) ? d.widgets.length : 0;
+        const tableCount = Array.isArray(d.tables) ? d.tables.length : 0;
+        const fieldCount = Array.isArray(d.fields) ? d.fields.length : 0;
+        const updated = (d as any).updatedAt || (d as any).updated_at || (d as any).createdAt || new Date().toISOString();
+        return {
+          id: d.id || `template-${idx}`,
+          name: d.name || "Template",
+          description: d.description || "Shared dashboard template",
+          author: (d as any).ownerName || currentUser?.name || "Team",
+          authorAvatar: ((d as any).ownerName || d.name || "T").slice(0, 2),
+          category: domain,
+          icon,
+          color,
+          downloads: (d as any).records || 0,
+          rating: 4.8,
+          reviews: 0,
+          price: "free",
+          isFeatured: idx < 2,
+          isNew: idx < 3,
+          tags: [d.type || domain],
+          preview: { widgets: widgetCount, fields: fieldCount || tableCount, integrations: [] },
+          lastUpdated: new Date(updated).toLocaleString(),
+        };
+      }),
+    [dashboards, currentUser?.name],
+  );
+  const templateData = useMemo(
+    () => (publicTemplateIds.length ? templateDataAll.filter((t) => publicTemplateIds.includes(t.id)) : templateDataAll),
+    [publicTemplateIds, templateDataAll],
+  );
+
+  if (showPublic) {
+    return (
+      <TemplatePage
+        templates={templateData}
+        onBack={() => {
+          setShowPublic(false);
+          setConfirmPublicId(null);
+        }}
+        onCloneTemplate={(templateId) => navigate(`/managedash/${templateId}?access=share`)}
+      />
+    );
+  }
 
   return (
     <div className="manage-dash-wrapper mdash-surface min-h-screen overflow-y-auto">
@@ -353,6 +441,9 @@ export default function ManageDashList() {
                   <Sparkles className="w-4 h-4" />
                   Create New Dashboard
                 </Button>
+                <Button variant="outline" onClick={() => setShowPublic(true)}>
+                  Open template library
+                </Button>
                 <div className="flex items-center gap-2 text-sm text-slate-600 bg-white/60 px-3 py-1.5 rounded-full shadow-inner">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -383,11 +474,11 @@ export default function ManageDashList() {
                 {hasDashboards ? (
                   <div className="dashboard-grid">
                     {recentlyViewed.map((dashboard) => (
-                      <DashboardCard
-                        key={dashboard.id}
-                        id={dashboard.id}
-                        title={dashboard.displayTitle}
-                        typeLabel={dashboard.domainLabel}
+                    <DashboardCard
+                      key={dashboard.id}
+                      id={dashboard.id}
+                      title={dashboard.displayTitle}
+                      typeLabel={dashboard.domainLabel}
                         overviewCount={dashboard.overviewCount}
                         insightCount={dashboard.insightsCount}
                         tableCount={dashboard.tableCount}
@@ -400,6 +491,8 @@ export default function ManageDashList() {
                         onToggleFavorite={toggleFavorite}
                         onShare={handleShareDashboard}
                         shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
+                        onPublic={handlePublicDashboard}
+                        publicLabel="Public"
                       />
                     ))}
                   </div>
@@ -432,12 +525,13 @@ export default function ManageDashList() {
                         icon={dashboard.iconPreset}
                         lastViewed={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
-                        onToggleFavorite={toggleFavorite}
-                        onShare={handleShareDashboard}
-                        shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
-                      />
-                    ))}
-                  </div>
+                      onToggleFavorite={toggleFavorite}
+                      onShare={handleShareDashboard}
+                      shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
+                      onPublic={handlePublicDashboard}
+                    />
+                  ))}
+                </div>
                 ) : (
                   <div className="dashboard-empty">Mark dashboards as favorites to see them highlighted here.</div>
                 )}
@@ -480,12 +574,13 @@ export default function ManageDashList() {
                         icon={dashboard.iconPreset}
                         lastViewed={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
-                        onToggleFavorite={toggleFavorite}
-                        onShare={handleShareDashboard}
-                        shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
-                      />
-                    ))}
-                    </div>
+                      onToggleFavorite={toggleFavorite}
+                      onShare={handleShareDashboard}
+                      shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
+                      onPublic={handlePublicDashboard}
+                    />
+                  ))}
+                </div>
                   ) : (
                     <div className="dashboard-empty">
                       No dashboards found for "{searchQuery}". Try a different term.
@@ -501,6 +596,50 @@ export default function ManageDashList() {
 
         {error && <div className="text-sm text-red-600">{error}</div>}
       </main>
+
+      <Dialog open={!!confirmPublicId} onOpenChange={(open) => { if (!open) setConfirmPublicId(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Make this dashboard public?</DialogTitle>
+            <DialogDescription>
+              Opening the template view lets you share or reuse this dashboard. Continue?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              You can copy the public link or clone it as a template on the next screen.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setConfirmPublicId(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!confirmPublicId) return;
+                api
+                  .post("/api/templates/public", { dashboardId: confirmPublicId })
+                  .then(() => {
+                    setPublicTemplateIds((prev) =>
+                      prev.includes(confirmPublicId) ? prev : [...prev, confirmPublicId],
+                    );
+                    toast.success("Dashboard is now public and visible in templates");
+                  })
+                  .catch((err: any) => {
+                    console.error(err);
+                    toast.error(err?.message || "Failed to publish template");
+                  })
+                  .finally(() => {
+                    const target = templateData.find((t) => t.id === confirmPublicId);
+                    if (target?.name) setSearchQuery(target.name);
+                    setConfirmPublicId(null);
+                    // stay on this page, user can open template library separately
+                  });
+              }}
+            >
+              Yes, make public
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AIDashboardGenerator
         isOpen={generatorOpen}

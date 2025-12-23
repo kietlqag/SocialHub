@@ -194,3 +194,10 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON activity_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_target ON activity_logs(target_type, target_id);
+
+-- Public templates (dashboard ids that are publicly listed)
+CREATE TABLE IF NOT EXISTS public_templates (
+    id SERIAL PRIMARY KEY,
+    dashboard_id TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
