@@ -94,6 +94,7 @@ export default function ManageDashList() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
   const sessionId = useMemo(getSessionId, []);
   const navigate = useNavigate();
 
@@ -201,6 +202,24 @@ export default function ManageDashList() {
       navigate(`/managedash/${res.dashboard.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create dashboard");
+    }
+  };
+
+  const getShareUrl = (dashboardId: string) => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.origin;
+    return `${base}/managedash/${dashboardId}?access=share`;
+  };
+
+  const handleShareDashboard = async (dashboardId: string) => {
+    const url = getShareUrl(dashboardId);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedShareId(dashboardId);
+      setTimeout(() => setCopiedShareId((current) => (current === dashboardId ? null : current)), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Khong the copy link chia se");
     }
   };
 
@@ -379,6 +398,8 @@ export default function ManageDashList() {
                         lastViewed={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
                         onToggleFavorite={toggleFavorite}
+                        onShare={handleShareDashboard}
+                        shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
                       />
                     ))}
                   </div>
@@ -412,6 +433,8 @@ export default function ManageDashList() {
                         lastViewed={dashboard.lastViewedLabel}
                         onOpen={openDashboard}
                         onToggleFavorite={toggleFavorite}
+                        onShare={handleShareDashboard}
+                        shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
                       />
                     ))}
                   </div>
@@ -452,14 +475,16 @@ export default function ManageDashList() {
                           overviewCount={dashboard.overviewCount}
                           insightCount={dashboard.insightsCount}
                           tableCount={dashboard.tableCount}
-                          status={dashboard.statusLabel}
-                          isFavorite={favoriteIds.has(dashboard.id)}
-                          icon={dashboard.iconPreset}
-                          lastViewed={dashboard.lastViewedLabel}
-                          onOpen={openDashboard}
-                          onToggleFavorite={toggleFavorite}
-                        />
-                      ))}
+                        status={dashboard.statusLabel}
+                        isFavorite={favoriteIds.has(dashboard.id)}
+                        icon={dashboard.iconPreset}
+                        lastViewed={dashboard.lastViewedLabel}
+                        onOpen={openDashboard}
+                        onToggleFavorite={toggleFavorite}
+                        onShare={handleShareDashboard}
+                        shareLabel={copiedShareId === dashboard.id ? "Copied" : "Share"}
+                      />
+                    ))}
                     </div>
                   ) : (
                     <div className="dashboard-empty">

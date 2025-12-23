@@ -1,5 +1,5 @@
 import type { ComponentType, KeyboardEvent, MouseEvent } from "react";
-import { ArrowRight, Star } from "lucide-react";
+import { ArrowRight, Share2, Star } from "lucide-react";
 import { Button } from "../ui/button";
 
 export type DashboardCardVariant = "grid" | "favorite" | "recent";
@@ -23,6 +23,8 @@ type DashboardCardProps = {
   icon: DashboardCardIconPreset;
   onOpen?: (id: string) => void;
   onToggleFavorite?: (id: string) => void;
+  onShare?: (id: string) => void;
+  shareLabel?: string;
 };
 
 export function DashboardCard({
@@ -39,6 +41,8 @@ export function DashboardCard({
   icon,
   onOpen,
   onToggleFavorite,
+  onShare,
+  shareLabel = "Share",
 }: DashboardCardProps) {
   const { Icon, toneClass } = icon;
   const metaChips = [
@@ -96,10 +100,18 @@ export function DashboardCard({
           </div>
           {lastViewed && <p className="dashboard-card__timestamp">Viewed {lastViewed}</p>}
         </div>
-        <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
-          Open dashboard
-          <ArrowRight className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-2 mt-3">
+          <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
+            Open dashboard
+            <ArrowRight className="w-4 h-4" />
+          </Button>
+          {onShare && (
+            <Button variant="outline" size="sm" className="gap-1" onClick={(e) => { e.stopPropagation(); onShare(id); }}>
+              <Share2 className="w-4 h-4" />
+              {shareLabel}
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -139,10 +151,18 @@ export function DashboardCard({
 
       <div className="dashboard-card__footer">
         {lastViewed && <p className="dashboard-card__timestamp">Updated {lastViewed}</p>}
-        <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
-          Open dashboard
-          <ArrowRight className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" className="dashboard-card__cta" onClick={handleOpen}>
+            Open dashboard
+            <ArrowRight className="w-4 h-4" />
+          </Button>
+          {onShare && (
+            <Button variant="outline" size="sm" className="gap-1" onClick={(e) => { e.stopPropagation(); onShare(id); }}>
+              <Share2 className="w-4 h-4" />
+              {shareLabel}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

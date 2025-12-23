@@ -12,6 +12,7 @@ import { AIConversation } from "./pages/AIConversation";
 import { AdminPage } from "./pages/AdminPage";
 import { ProfileSettings } from "./pages/ProfileSettings";
 import { NotificationPage } from "./pages/NotificationPage";
+import { TemplatePage } from "./pages/TemplatePage";
 import Profile from "./pages/Profile";
 import ManageDashList from "./pages/ManageDashList";
 import ManageDashDetail from "./pages/ManageDashDetail";
@@ -158,6 +159,7 @@ function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/template" element={<TemplatePage />} />
         <Route
           path="/admin"
           element={

@@ -1,12 +1,10 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AIDashboardGenerator } from "../components/AIDashboardGenerator";
 import { CreatedDashboardView } from "../components/CreatedDashboardView";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
-import { Avatar, AvatarFallback } from "../components/ui/avatar";
-import { NotificationDropdown } from "../components/NotificationDropdown";
 import {
   LayoutDashboard,
   Search,
@@ -22,6 +20,7 @@ import {
   Package,
   ShoppingCart,
   BarChart3,
+  Share2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { dashboardApi, type Dashboard, type DashboardField } from "../services/dashboards";
@@ -76,6 +75,7 @@ export default function ManageDash() {
   const [createdOpen, setCreatedOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null);
   const sessionId = useMemo(getSessionId, []);
 
   useEffect(() => {
@@ -102,9 +102,27 @@ export default function ManageDash() {
   }, [sessionId]);
 
   const handleCreateDashboard = (data: DraftDashboard) => {
-    // Nếu đã persist (có id) thì mở preview luôn, không gọi create nữa
+    // If draft already has an id (persisted), open preview instead of creating again
     setSelected(data);
     setCreatedOpen(true);
+  };
+
+  const getShareUrl = (dashboardId: string) => {
+    if (typeof window === "undefined") return "";
+    const base = window.location.origin;
+    return `${base}/managedash/${dashboardId}?access=share`;
+  };
+
+  const handleShareDashboard = async (dashboardId: string) => {
+    const url = getShareUrl(dashboardId);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedShareId(dashboardId);
+      setTimeout(() => setCopiedShareId((current) => (current === dashboardId ? null : current)), 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Khong the copy link chia se");
+    }
   };
 
   const handleSaveDashboard = async (dash: DraftDashboard) => {
@@ -196,11 +214,6 @@ export default function ManageDash() {
   const recentlyViewed = derivedDashboards.slice(0, 3);
   const favoriteDashboards = derivedDashboards.slice(0, 3);
 
-  const initials = useMemo(() => {
-    if (!sessionId) return "SH";
-    return sessionId.slice(0, 2).toUpperCase();
-  }, [sessionId]);
-
   return (
     <div className="manage-dash-wrapper min-h-screen overflow-y-auto bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -245,6 +258,36 @@ export default function ManageDash() {
           </div>
         </section>
 
+        <section className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="p-2 bg-indigo-50 rounded-lg">
+              <Users className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-gray-900">Chia se & phe duyet truy cap</h3>
+              <Badge className="bg-sky-100 text-sky-800">Default: Viewer</Badge>
+              <Badge className="bg-amber-100 text-amber-800">Admin duyet</Badge>
+            </div>
+          </div>
+          <p className="text-sm text-gray-700">
+            Vi du: tao mot dashboard hieu suat, bam Share va gui link cho thanh vien. Khi ho join, he thong tu gan quyen mac dinh la <strong>viewer</strong>. Admin se nhan thong bao co yeu cau truy cap va duyet/ tu choi ngay trong Manage Dash.
+          </p>
+          <div className="grid md:grid-cols-3 gap-3 text-sm text-gray-700">
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
+              <p className="font-medium text-gray-900 mb-1">B1: Share dashboard</p>
+              <p>Copy link invite hoac nhap email nguoi nhan truc tiep tu man hinh nay.</p>
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
+              <p className="font-medium text-gray-900 mb-1">B2: Join = Viewer</p>
+              <p>Nguoi moi vao se duoc gan quyen Viewer mac dinh; ho chi xem du lieu va khong sua cau truc.</p>
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
+              <p className="font-medium text-gray-900 mb-1">B3: Admin duyet</p>
+              <p>Admin duoc thong bao, bam Approve/Reject de bat them quyen Editor neu can truoc khi cho phep truy cap.</p>
+            </div>
+          </div>
+        </section>
+
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-500 gap-2">
             <Loader2 className="w-5 h-5 animate-spin" /> Loading dashboards...
@@ -252,10 +295,10 @@ export default function ManageDash() {
         ) : (
           <>
             <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="w-5 h-5 text-gray-600" />
-                <h3 className="text-xl font-semibold text-gray-900">Recently viewed</h3>
-              </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock className="w-5 h-5 text-gray-600" />
+                  <h3 className="text-xl font-semibold text-gray-900">Recently viewed</h3>
+                </div>
               {hasDashboards ? (
                 <div className="flex gap-4 overflow-x-auto pb-2">
                   {recentlyViewed.map((item) => {
@@ -275,6 +318,18 @@ export default function ManageDash() {
                             <p className="text-xs text-gray-500">{item.updatedLabel || item.createdLabel}</p>
                           </div>
                           <ArrowRight className="w-4 h-4 text-gray-400" />
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <Button size="sm" variant="outline" className="gap-2" onClick={(e) => { e.stopPropagation(); openDashboardPreview(item); }}>
+                            Open
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1" onClick={(e) => { e.stopPropagation(); handleShareDashboard(item.id); }}>
+                            <Share2 className="w-4 h-4" />
+                            <span className="text-xs">
+                              {copiedShareId === item.id ? "Copied" : "Share"}
+                            </span>
+                          </Button>
                         </div>
                       </Card>
                     );
@@ -297,12 +352,12 @@ export default function ManageDash() {
                     const isFavorite = index % 2 === 0;
                     return (
                       <Card key={dashboard.id} className="p-6 hover:shadow-lg transition-all cursor-pointer group" onClick={() => openDashboardPreview(dashboard)}>
-                        <div className="flex items-start justify-between mb-4">
-                          <div className={`p-3 ${dashboard.accentColor} rounded-xl`}>
-                            <IconComponent className="w-6 h-6 text-white" />
-                          </div>
-                          <Star className={`w-5 h-5 ${isFavorite ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} />
-                        </div>
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={`p-3 ${dashboard.accentColor} rounded-xl`}>
+                        <IconComponent className="w-6 h-6 text-white" />
+                      </div>
+                      <Star className={`w-5 h-5 ${isFavorite ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} />
+                    </div>
                         <h4 className="text-lg font-semibold text-gray-900 mb-2">{dashboard.name}</h4>
                         <p className="text-sm text-gray-600 mb-4 line-clamp-2">{dashboard.description || "Custom dashboard"}</p>
                         <div className="grid grid-cols-3 gap-4 text-sm">
@@ -329,17 +384,33 @@ export default function ManageDash() {
                           <span>Updated {dashboard.updatedLabel || dashboard.createdLabel}</span>
                           <Badge className="bg-green-100 text-green-800">Active</Badge>
                         </div>
-                        <Button
-                          className="w-full mt-4 gap-2"
-                          variant="outline"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openDashboardPreview(dashboard);
-                          }}
-                        >
-                          Open dashboard
-                          <ArrowRight className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-2 mt-4">
+                          <Button
+                            className="flex-1 gap-2"
+                            variant="outline"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openDashboardPreview(dashboard);
+                            }}
+                          >
+                            Open
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleShareDashboard(dashboard.id);
+                            }}
+                          >
+                            <Share2 className="w-4 h-4" />
+                            <span className="text-xs">
+                              {copiedShareId === dashboard.id ? "Copied" : "Share"}
+                            </span>
+                          </Button>
+                        </div>
                       </Card>
                     );
                   })}
@@ -387,7 +458,7 @@ export default function ManageDash() {
                         <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-gray-100">
                           <div className="flex items-center gap-3">
                             <span>{dashboard.fieldCount} fields</span>
-                            <span>•</span>
+                            <span>|</span>
                             <span>{dashboard.widgetCount} widgets</span>
                           </div>
                           <Badge className="bg-green-100 text-green-800">Active</Badge>
@@ -397,11 +468,17 @@ export default function ManageDash() {
                             Open dashboard
                             <ArrowRight className="w-4 h-4" />
                           </Button>
+                          <Button variant="outline" size="sm" className="gap-1" onClick={() => handleShareDashboard(dashboard.id)} title="Share dashboard">
+                            <Share2 className="w-4 h-4 text-gray-700" />
+                            <span className="text-xs">
+                              {copiedShareId === dashboard.id ? "Copied" : "Share"}
+                            </span>
+                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => handleDelete(dashboard.id)}>
                             <Trash2 className="w-4 h-4 text-red-500" />
                           </Button>
                         </div>
-                      </Card>
+                  </Card>
                     );
                   })}
                 </div>
@@ -432,3 +509,5 @@ export default function ManageDash() {
     </div>
   );
 }
+
+

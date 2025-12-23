@@ -66,6 +66,7 @@ export function Header({
               {/* AI Chat moved into the nav between Testimonials and Contact */}
               <button onClick={onChatOpen} className={`nav-link text-sm ${activeKey === "chat" ? "active" : ""}`}>AI Chat</button>
               <a href="/contact" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Contact</a>
+              <a href="/template" className={`nav-link ${activeKey === "contact" ? "active" : ""}`}>Template</a>
             </div>
           </nav>
 
