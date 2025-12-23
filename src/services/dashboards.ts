@@ -347,6 +347,28 @@ export const dashboardApi = {
     const queryString = query.toString() ? `?${query.toString()}` : "";
     return api.get<TableSchemaResponse>(`/api/dashboards/${dashboardId}/tables/${tableKey}/schema${queryString}`);
   },
+  renameTable: (
+    dashboardId: string,
+    tableKey: string,
+    payload: { name: string; sessionId?: string; userId?: string | null },
+  ) => {
+    const body: Record<string, any> = { name: payload.name };
+    if (payload.sessionId) body.sessionId = payload.sessionId;
+    if (payload.userId) body.userId = payload.userId;
+    return api.patch<{ table: DashboardTable }>(
+      `/api/dashboards/${dashboardId}/tables/${tableKey}/rename`,
+      body,
+    );
+  },
+  deleteTable: (dashboardId: string, tableKey: string, params: { sessionId?: string; userId?: string | null } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.delete<{ success: boolean }>(
+      `/api/dashboards/${dashboardId}/tables/${tableKey}${queryString}`,
+    );
+  },
   updateTableSchema: (
     dashboardId: string,
     tableKey: string,

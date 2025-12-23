@@ -20,6 +20,8 @@ import {
   updateInsight,
   getDashboardByIdForViewer,
   getReferenceLookups,
+  renameDashboardTable as renameDashboardTableService,
+  deleteDashboardTable as deleteDashboardTableService,
 } from "../services/dashboardService.js";
 import { findDashboardForOwner, findDashboardById } from "../repositories/dashboardRepository.js";
 import { listTablesByDashboard } from "../repositories/dashboardTableRepository.js";
@@ -248,6 +250,53 @@ export async function createDashboardTable(req, res) {
     }
     throw err;
   }
+}
+
+export async function renameDashboardTable(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId, tableKey } = req.params;
+  const { name } = req.body || {};
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  if (!tableKey) throw new HttpError(400, "tableKey required");
+  if (!owner.userId) throw new HttpError(400, "userId required");
+  const newName = (name || "").toString().trim();
+  if (!newName) throw new HttpError(400, "name is required");
+  const table = await renameDashboardTableService({
+    dashboardId,
+    tableKey,
+    name: newName,
+    userId: owner.userId,
+  });
+  res.json({ table });
+}
+
+export async function deleteDashboardTable(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId, tableKey } = req.params;
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  if (!tableKey) throw new HttpError(400, "tableKey required");
+  if (!owner.userId) throw new HttpError(400, "userId required");
+  const result = await deleteDashboardTableService({
+    dashboardId,
+    tableKey,
+    userId: owner.userId,
+  });
+  if (!result.ok) {
+    if (result.conflict === "data") {
+      return res.status(409).json({
+        message: "Cannot remove table: table contains data",
+        recordCount: result.recordCount ?? 0,
+      });
+    }
+    if (result.conflict === "references") {
+      return res.status(409).json({
+        message: "Cannot remove table: table is referenced by other tables",
+        referencedBy: result.referencedBy || [],
+      });
+    }
+    return res.status(409).json({ message: "Cannot remove table" });
+  }
+  res.json({ success: true });
 }
 
 export async function deleteDashboard(req, res) {

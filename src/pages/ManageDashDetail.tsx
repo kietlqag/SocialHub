@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from "react";
+﻿import type { KeyboardEvent, ReactNode } from "react";
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
@@ -22,6 +22,7 @@ import {
   Users,
   X,
   Settings2,
+  Settings,
   MoreHorizontal,
   Layers3,
   ChartBar,
@@ -54,12 +55,19 @@ import { Input } from "../components/ui/input";
 import { EditTableStructureModal } from "../components/EditTableStructureModal";
 import { CreateTableModal } from "../components/CreateTableModal";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { RenameTableModal } from "../components/RenameTableModal";
 import { toast } from "sonner";
 import "../styles/managedash-detail.css";
 import { SYSTEM_FIELDS, isSystemField } from "../../shared/systemFields";
@@ -2156,6 +2164,13 @@ function ManageDashDetail() {
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [referenceLookups, setReferenceLookups] = useState<ReferenceLookupMap>({});
   const [referenceTableStatus, setReferenceTableStatus] = useState<ReferenceTableStatusMap>({});
+  const [renameTarget, setRenameTarget] = useState<{ key: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ key: string; name: string; count: number } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteReferences, setDeleteReferences] = useState<Array<{ tableKey: string; fieldKey: string }>>([]);
+  const [deleteRecordCount, setDeleteRecordCount] = useState<number | null>(null);
+  const [isDeletingTable, setIsDeletingTable] = useState(false);
+  const [openTableMenu, setOpenTableMenu] = useState<string | null>(null);
   const getReferenceData = useCallback(
     (field: NormalizedField): ReferenceFieldOptions => {
       const info = getFieldReferenceKeyInfo(field);
@@ -2467,15 +2482,19 @@ function ManageDashDetail() {
 
   const tableOptions = useMemo(
     () =>
-      mergedTables.map((table, idx) => ({
-        id: table.key || table.id || `table-${idx}`,
-        title: table.name || `Table ${idx + 1}`,
-        description: table.description || table.purpose || "",
-        count:
-          (recordsByTable[table.key || table.id || ""] || []).length ||
-          (Array.isArray((table as any).sampleRows) ? (table as any).sampleRows.length : 0),
-        ref: table,
-      })),
+      mergedTables.map((table, idx) => {
+        const key = table.key || table.id || `table-${idx}`;
+        return {
+          id: key,
+          title: table.name || `Table ${idx + 1}`,
+          description: table.description || table.purpose || "",
+          count:
+            (recordsByTable[key || ""] || []).length ||
+            (Array.isArray((table as any).sampleRows) ? (table as any).sampleRows.length : 0),
+          ref: table,
+          tableKey: key,
+        };
+      }),
     [mergedTables, recordsByTable],
   );
   const filteredTableOptions = useMemo(() => {
@@ -2483,6 +2502,157 @@ function ManageDashDetail() {
     const term = sidebarSearch.trim().toLowerCase();
     return tableOptions.filter((t) => (t.title || "").toLowerCase().includes(term));
   }, [tableOptions, sidebarSearch]);
+
+  const existingTableNames = useMemo(
+    () => mergedTables.map((table) => table.name || table.key || table.id || "").filter((name) => name && name.trim().length),
+    [mergedTables],
+  );
+
+  const handleRenameTable = useCallback(
+    async (nextName: string) => {
+      if (!dashId || !renameTarget) {
+        throw new Error("Missing table context");
+      }
+      try {
+        const response = await dashboardApi.renameTable(dashId, renameTarget.key, {
+          name: nextName,
+          sessionId,
+          userId: currentUser?.id,
+        });
+        const updatedName = response?.table?.name || nextName;
+        setDashboard((prev) => {
+          if (!prev) return prev;
+          const nextTables = (prev.tables || []).map((table) => {
+            const key = table.key || table.id;
+            if (key === renameTarget.key) {
+              return { ...table, name: updatedName };
+            }
+            return table;
+          });
+          return { ...prev, tables: nextTables };
+        });
+        toast.success(`Renamed table to "${updatedName}"`);
+      } catch (error: any) {
+        if (error?.status === 409) {
+          const message = error?.data?.message || "Another table already uses this name";
+          throw new Error(message);
+        }
+        const message = error?.message || "Failed to rename table";
+        throw new Error(message);
+      }
+    },
+    [dashId, renameTarget, sessionId, currentUser?.id],
+  );
+
+  const handleCancelDelete = useCallback(() => {
+    setDeleteTarget(null);
+    setDeleteError(null);
+    setDeleteReferences([]);
+    setDeleteRecordCount(null);
+    setIsDeletingTable(false);
+    setOpenTableMenu(null);
+  }, []);
+
+  const handleDeleteTable = useCallback(async () => {
+    if (!dashId || !deleteTarget) return;
+    const targetKey = deleteTarget.key;
+    setIsDeletingTable(true);
+    setDeleteError(null);
+    setDeleteReferences([]);
+    setDeleteRecordCount(null);
+    try {
+      await dashboardApi.deleteTable(dashId, targetKey, { sessionId, userId: currentUser?.id });
+      toast.success(`Removed table "${deleteTarget.name}"`);
+      const remainingTables = mergedTables.filter((table) => (table.key || table.id) !== targetKey);
+      setDashboard((prev) => {
+        if (!prev) return prev;
+        const nextTables = (prev.tables || []).filter((table) => (table.key || table.id) !== targetKey);
+        return { ...prev, tables: nextTables };
+      });
+      setRecordsByTable((prev) => {
+        if (!prev || !prev[targetKey]) return prev;
+        const next = { ...prev };
+        delete next[targetKey];
+        return next;
+      });
+      setReferenceLookups((prev) => {
+        const next = { ...prev };
+        delete next[targetKey];
+        return next;
+      });
+      setReferenceTableStatus((prev) => {
+        const next = { ...prev };
+        delete next[targetKey];
+        return next;
+      });
+      setTableFilters(targetKey, null);
+      preloadedTablesRef.current.delete(targetKey);
+      if (schemaTargetKey === targetKey) {
+        setSchemaTargetKey(null);
+        setIsEditSchemaOpen(false);
+      }
+      if (openTableMenu === targetKey) {
+        setOpenTableMenu(null);
+      }
+      if (activeTableId === targetKey) {
+        if (remainingTables.length) {
+          const fallback = remainingTables[0];
+          const fallbackKey = fallback?.key || fallback?.id || null;
+          if (fallbackKey) {
+            setActiveTableId(fallbackKey);
+            setActiveSection(fallbackKey);
+          } else {
+            setActiveTableId(null);
+            setActiveSection("overview");
+          }
+        } else {
+          setActiveTableId(null);
+          setActiveSection("overview");
+        }
+      } else if (activeSection === targetKey) {
+        setActiveSection("overview");
+      }
+      handleCancelDelete();
+    } catch (error: any) {
+      let message = error?.message || "Failed to remove table";
+      if (error?.status === 409) {
+        const info = error?.data || {};
+        if (typeof info?.recordCount === "number") {
+          setDeleteRecordCount(info.recordCount);
+          message = `Cannot remove table: table contains data (${info.recordCount} record${info.recordCount === 1 ? "" : "s"})`;
+          toast.error(message);
+        } else if (Array.isArray(info?.referencedBy) && info.referencedBy.length) {
+          setDeleteReferences(info.referencedBy);
+          const list = info.referencedBy
+            .map((ref: any) => `${ref.tableKey || "unknown"}.${ref.fieldKey || "field"}`)
+            .join(", ");
+          message = "Cannot remove table: table is referenced by other tables";
+          toast.error(`${message}: ${list}`);
+        } else {
+          toast.error(message);
+        }
+        setDeleteError(message);
+      } else {
+        setDeleteError(message);
+        toast.error(message);
+      }
+    } finally {
+      setIsDeletingTable(false);
+    }
+  }, [
+    dashId,
+    deleteTarget,
+    sessionId,
+    currentUser?.id,
+    mergedTables,
+    setTableFilters,
+    preloadedTablesRef,
+    schemaTargetKey,
+    openTableMenu,
+    activeTableId,
+    activeSection,
+    handleCancelDelete,
+  ]);
 
   useEffect(() => {
     if (!tableOptions.length) return;
@@ -3822,6 +3992,9 @@ function ManageDashDetail() {
           label: table.title,
           icon: TableIcon,
           count: table.count,
+          tableKey: table.tableKey,
+          tableName: table.title,
+          tableRef: table.ref,
         })),
       );
       if (canModifyLayout) {
@@ -3876,25 +4049,133 @@ function ManageDashDetail() {
             />
           </div>
           <nav className="mdSidebarNav">
-            {sidebarItems.map((item) => (
-              <button
-                key={item.id}
-                className={`mdNavItem ${!item.add && activeSection === item.id ? "active" : ""} ${item.add ? "mdNavItemGhost" : ""}`}
-                onClick={() => {
-                  if (item.add) {
-                    setIsCreateTableOpen(true);
-                    return;
-                  }
-                  setActiveSection(item.id);
-                  const targetTable = tableOptions.find((t) => t.id === item.id);
-                  if (targetTable) setActiveTableId(item.id);
-                }}
-              >
-                <item.icon className="w-4 h-4" />
-                <span>{item.label}</span>
-                {typeof item.count === "number" && <span className="mdNavBadge">{item.count}</span>}
-              </button>
-            ))}
+            {sidebarItems.map((item) => {
+              const tableKey = typeof item.tableKey === "string" ? item.tableKey : undefined;
+              const isAdd = Boolean(item.add);
+              const isActive = !isAdd && activeSection === item.id;
+              const hasCount = typeof item.count === "number";
+              const showGear = Boolean(canManageAccess && tableKey);
+
+              const handleNavigate = () => {
+                if (isAdd) {
+                  setIsCreateTableOpen(true);
+                  return;
+                }
+                setActiveSection(item.id);
+                const targetTable = tableOptions.find((t) => t.id === item.id);
+                if (targetTable) setActiveTableId(item.id);
+              };
+
+              const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleNavigate();
+                }
+              };
+
+              return (
+                <div key={item.id} className="mdNavItemRow">
+                  <div
+                    className={`mdNavItem ${!isAdd && isActive ? "active" : ""} ${isAdd ? "mdNavItemGhost" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleNavigate}
+                    onKeyDown={handleKeyDown}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                    {hasCount ? (
+                      <div className="mdNavMeta">
+                        <span className="mdNavBadge">{item.count}</span>
+                        {showGear ? (
+                          <DropdownMenu
+                            open={openTableMenu === tableKey}
+                            onOpenChange={(next) => setOpenTableMenu(next && tableKey ? tableKey : null)}
+                          >
+                            <DropdownMenuTrigger asChild>
+                              <span
+                                className="mdNavGear"
+                                role="button"
+                                tabIndex={-1}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  event.preventDefault();
+                                  if (!tableKey) return;
+                                  setOpenTableMenu((prev) => (prev === tableKey ? null : tableKey));
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === " " || event.key === "Enter") {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    if (!tableKey) return;
+                                    setOpenTableMenu((prev) => (prev === tableKey ? null : tableKey));
+                                  }
+                                }}
+                              >
+                                <Settings className="w-4 h-4" />
+                              </span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="mdNavMenu">
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  setOpenTableMenu(null);
+                                  if (tableKey) {
+                                    setRenameTarget({ key: tableKey, name: item.tableName || item.label });
+                                  }
+                                }}
+                              >
+                                <span className="mdNavMenuLabel">
+                                  <Pencil className="mdNavMenuIcon" />
+                                  Rename table
+                                </span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  setOpenTableMenu(null);
+                                  if (tableKey) {
+                                    setSchemaTargetKey(tableKey);
+                                    setIsEditSchemaOpen(true);
+                                  }
+                                }}
+                              >
+                                <span className="mdNavMenuLabel">
+                                  <Layers3 className="mdNavMenuIcon" />
+                                  Edit columns
+                                </span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="mdNavMenuDanger"
+                                onSelect={(event) => {
+                                  event.preventDefault();
+                                  setOpenTableMenu(null);
+                                  if (tableKey) {
+                                    setDeleteError(null);
+                                    setDeleteReferences([]);
+                                    setDeleteRecordCount(null);
+                                    setDeleteTarget({
+                                      key: tableKey,
+                                      name: item.tableName || item.label,
+                                      count: typeof item.count === "number" ? item.count : 0,
+                                    });
+                                  }
+                                }}
+                              >
+                                <span className="mdNavMenuLabel">
+                                  <Trash2 className="mdNavMenuIcon danger" />
+                                  Remove table
+                                </span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </nav>
         </aside>
 
@@ -3935,6 +4216,69 @@ function ManageDashDetail() {
         userId={currentUser?.id}
         onCreated={handleTableCreated}
       />
+
+      <RenameTableModal
+        open={Boolean(renameTarget)}
+        currentName={renameTarget?.name || ""}
+        existingNames={existingTableNames}
+        onClose={() => {
+          setRenameTarget(null);
+          setOpenTableMenu(null);
+        }}
+        onSubmit={handleRenameTable}
+      />
+
+      {deleteTarget ? (
+        <div
+          className="mdModalOverlay"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !isDeletingTable) {
+              handleCancelDelete();
+            }
+          }}
+        >
+          <div className="mdModal deleteModal" role="dialog" aria-modal="true">
+            <div className="mdModalHeader">
+              <div>
+                <p className="mdMainSubtitle">Remove table</p>
+                <h3 className="mdModalTitle">Delete {deleteTarget.name}?</h3>
+                <p className="mdMainSubtitle">This action cannot be undone.</p>
+                {deleteError ? <div className="mdInputError mt-3">{deleteError}</div> : null}
+                {!deleteError && deleteTarget.count > 0 ? (
+                  <p className="mdMainSubtitle mt-3">
+                    This table currently lists {deleteTarget.count} record{deleteTarget.count === 1 ? "" : "s"}.
+                  </p>
+                ) : null}
+                {deleteRecordCount !== null ? (
+                  <div className="mt-3 text-sm bg-amber-50 text-amber-800 border border-amber-200 rounded-lg p-3">
+                    Cannot remove table while it contains {deleteRecordCount} record{deleteRecordCount === 1 ? "" : "s"}.
+                  </div>
+                ) : null}
+                {deleteReferences.length ? (
+                  <div className="mt-3 text-sm bg-amber-50 text-amber-800 border border-amber-200 rounded-lg p-3">
+                    <div className="font-semibold mb-2">Referenced by:</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      {deleteReferences.map((ref) => (
+                        <li key={`${ref.tableKey}-${ref.fieldKey}`}>
+                          <span className="font-medium">{ref.tableKey}</span> · <span>{ref.fieldKey}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="mdModalFooter">
+              <Button variant="outline" className="mdGhostBtn" onClick={handleCancelDelete} disabled={isDeletingTable}>
+                Cancel
+              </Button>
+              <Button className="primaryBtn danger" onClick={handleDeleteTable} disabled={isDeletingTable}>
+                {isDeletingTable ? "Removing..." : "Remove"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <TableFiltersModal
         isOpen={isFiltersOpen}

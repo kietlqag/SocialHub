@@ -19,21 +19,26 @@ import {
   insertRelationships,
   listRelationshipsByDashboard,
   deleteRelationshipsByDashboard,
+  deleteRelationshipsForTable,
 } from "../repositories/dashboardRelationshipRepository.js";
 import {
   insertRecord as insertDashboardRecord,
   listRecordsByDashboard,
   updateRecordById,
   deleteRecordById,
+  countRecordsByDashboard,
   countRecordsByFieldValue,
+  deleteRecordsByTable,
+  findRecordById,
 } from "../repositories/dashboardRecordRepository.js";
 import { upsertHideOverride, listOverridesByDashboard } from "../repositories/dashboardWidgetOverrideRepository.js";
 import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
-import { findRecordById } from "../repositories/dashboardRecordRepository.js";
 import { canEditDashboard, canViewDashboard } from "../utils/dashboardAuth.js";
 import { createNotification as createNotificationRepo } from "../repositories/notificationRepository.js";
 import { summarizeSamplePreview } from "./sampleDataParser.js";
 import { seedSampleDataForDashboard } from "./sampleDataSeeder.js";
+import { DashboardTableModel } from "../models/dashboardTableModel.js";
+import { mongoose } from "../mongoose.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -438,6 +443,64 @@ const STRING_LIKE_TYPES = new Set(["string", "text", "enum", "email", "phone", "
 
 const getFieldKey = (field = {}) => (field.key || field.name || field.fieldName || field.id || "").toString();
 const normalizeTableKey = (value = "") => value.toString().trim().toLowerCase();
+
+const pruneDashboardArtifactsForTable = async ({ dashboard, dashboardId, tableKey }) => {
+  if (!dashboardId || !dashboard) return;
+  const updates = {};
+
+  if (Array.isArray(dashboard.widgets)) {
+    const filteredWidgets = dashboard.widgets.filter((widget) => {
+      if (!widget) return false;
+      if (widget.sourceTable && normalizeTableKey(widget.sourceTable) === tableKey) return false;
+      if (widget.tableKey && normalizeTableKey(widget.tableKey) === tableKey) return false;
+      return true;
+    });
+    if (filteredWidgets.length !== dashboard.widgets.length) {
+      updates.widgets = filteredWidgets;
+    }
+  }
+
+  if (Array.isArray(dashboard.insights)) {
+    const filteredInsights = dashboard.insights.filter((insight) => {
+      if (!insight) return false;
+      if (insight.sourceTable && normalizeTableKey(insight.sourceTable) === tableKey) return false;
+      return true;
+    });
+    if (filteredInsights.length !== dashboard.insights.length) {
+      updates.insights = filteredInsights;
+    }
+  }
+
+  if (dashboard.ui && typeof dashboard.ui === "object") {
+    const nextUi = { ...dashboard.ui };
+    let uiChanged = false;
+    if (Array.isArray(nextUi.tableDropdownOrder)) {
+      const filteredOrder = nextUi.tableDropdownOrder.filter((entry) => normalizeTableKey(entry) !== tableKey);
+      if (filteredOrder.length !== nextUi.tableDropdownOrder.length) {
+        nextUi.tableDropdownOrder = filteredOrder;
+        uiChanged = true;
+      }
+    }
+    if (Array.isArray(nextUi.widgets)) {
+      const filteredUiWidgets = nextUi.widgets.filter((widget) => {
+        if (!widget) return false;
+        if (widget.tableKey && normalizeTableKey(widget.tableKey) === tableKey) return false;
+        return true;
+      });
+      if (filteredUiWidgets.length !== nextUi.widgets.length) {
+        nextUi.widgets = filteredUiWidgets;
+        uiChanged = true;
+      }
+    }
+    if (uiChanged) {
+      updates.ui = nextUi;
+    }
+  }
+
+  if (Object.keys(updates).length) {
+    await updateDashboardById(dashboardId, updates);
+  }
+};
 
 const resolveDisplayConfigForTable = (table = {}) => {
   const fields = Array.isArray(table.fields) ? table.fields : [];
@@ -2693,6 +2756,155 @@ export async function deleteDashboardRecordService({ dashboardId, tableKey, reco
   const deleted = await deleteRecordById({ dashboardId, tableKey, recordId });
   if (!deleted) throw new HttpError(404, "Record not found");
   return true;
+}
+
+export async function renameDashboardTable({ dashboardId, tableKey, name, userId }) {
+  if (!dashboardId || !tableKey) {
+    throw new HttpError(400, "dashboardId and tableKey are required");
+  }
+  const newName = (name || "").toString().trim();
+  if (!newName) {
+    throw new HttpError(400, "name is required");
+  }
+
+  await assertCanEditDashboard(dashboardId, userId);
+  const tables = await listTablesByDashboard(dashboardId);
+  const normalizedKey = normalizeTableKey(tableKey);
+  const targetTable = tables.find((table) => {
+    const candidateKey = table.key || table.id || "";
+    if (!candidateKey) return false;
+    if (normalizeTableKey(candidateKey) === normalizedKey) return true;
+    return table.id && table.id === tableKey;
+  });
+  if (!targetTable) {
+    throw new HttpError(404, "Table not found");
+  }
+
+  const duplicate = tables.find((table) => {
+    if (!table || table.id === targetTable.id) return false;
+    const tableName = (table.name || "").toString().trim();
+    return tableName.toLowerCase() === newName.toLowerCase();
+  });
+  if (duplicate) {
+    throw new HttpError(409, "Duplicate table name");
+  }
+
+  const filter = {
+    dashboardId: new mongoose.Types.ObjectId(dashboardId),
+    $or: [],
+  };
+
+  if (targetTable.key) {
+    filter.$or.push({ key: targetTable.key });
+  }
+  if (targetTable.id && mongoose.Types.ObjectId.isValid(targetTable.id)) {
+    filter.$or.push({ _id: new mongoose.Types.ObjectId(targetTable.id) });
+  }
+  if (mongoose.Types.ObjectId.isValid(tableKey)) {
+    filter.$or.push({ _id: new mongoose.Types.ObjectId(tableKey) });
+  }
+  if (!filter.$or.length) {
+    filter.$or.push({ key: normalizedKey });
+  }
+
+  const updated = await DashboardTableModel.findOneAndUpdate(
+    filter,
+    { $set: { name: newName, updatedAt: new Date() } },
+    { new: true },
+  );
+
+  if (!updated) {
+    throw new HttpError(404, "Table not found");
+  }
+
+  return {
+    key: updated.key,
+    name: updated.name,
+    description: updated.description,
+    id: updated._id?.toString(),
+  };
+}
+
+export async function deleteDashboardTable({ dashboardId, tableKey, userId }) {
+  if (!dashboardId || !tableKey) {
+    throw new HttpError(400, "dashboardId and tableKey are required");
+  }
+
+  const dashboard = await assertCanEditDashboard(dashboardId, userId);
+  const tables = await listTablesByDashboard(dashboardId);
+  const normalizedKey = normalizeTableKey(tableKey);
+  const targetTable = tables.find((table) => {
+    const candidateKey = table.key || table.id || "";
+    if (!candidateKey) return false;
+    if (normalizeTableKey(candidateKey) === normalizedKey) return true;
+    return table.id && table.id === tableKey;
+  });
+  if (!targetTable) {
+    throw new HttpError(404, "Table not found");
+  }
+
+  const storedTableKey = targetTable.key || targetTable.id || normalizedKey;
+  const normalizedTargetKey = normalizeTableKey(storedTableKey);
+
+  let recordCount = await countRecordsByDashboard({ dashboardId, tableKey: storedTableKey });
+  if (recordCount === 0 && storedTableKey !== normalizedTargetKey) {
+    recordCount = await countRecordsByDashboard({ dashboardId, tableKey: normalizedTargetKey });
+  }
+  if (recordCount > 0) {
+    return { ok: false, conflict: "data", recordCount };
+  }
+
+  const referencedBy = [];
+  tables.forEach((table) => {
+    const key = table.key || table.id;
+    if (!key || normalizeTableKey(key) === normalizedTargetKey) return;
+    const fields = Array.isArray(table.fields) ? table.fields : [];
+    fields.forEach((field) => {
+      const fieldKey = (field?.key || field?.id || field?.name || "").toString();
+      if (!fieldKey) return;
+      if (isReferenceFieldToTable(field, normalizedTargetKey)) {
+        referencedBy.push({ tableKey: key, fieldKey });
+      }
+    });
+  });
+
+  if (referencedBy.length) {
+    return { ok: false, conflict: "references", referencedBy };
+  }
+
+  const filter = {
+    dashboardId: new mongoose.Types.ObjectId(dashboardId),
+    $or: [],
+  };
+  if (storedTableKey && typeof storedTableKey === "string") {
+    filter.$or.push({ key: storedTableKey });
+  }
+  if (targetTable.id && mongoose.Types.ObjectId.isValid(targetTable.id)) {
+    filter.$or.push({ _id: new mongoose.Types.ObjectId(targetTable.id) });
+  }
+  if (mongoose.Types.ObjectId.isValid(tableKey)) {
+    filter.$or.push({ _id: new mongoose.Types.ObjectId(tableKey) });
+  }
+  if (!filter.$or.length) {
+    filter.$or.push({ key: normalizedTargetKey });
+  }
+
+  const deletion = await DashboardTableModel.deleteOne(filter);
+  if (!deletion.deletedCount) {
+    throw new HttpError(404, "Table not found");
+  }
+
+  await deleteRecordsByTable({ dashboardId, tableKey: storedTableKey });
+  if (storedTableKey !== normalizedTargetKey) {
+    await deleteRecordsByTable({ dashboardId, tableKey: normalizedTargetKey });
+  }
+  await deleteRelationshipsForTable(dashboardId, storedTableKey);
+  if (storedTableKey !== normalizedTargetKey) {
+    await deleteRelationshipsForTable(dashboardId, normalizedTargetKey);
+  }
+  await pruneDashboardArtifactsForTable({ dashboard, dashboardId, tableKey: normalizedTargetKey });
+
+  return { ok: true };
 }
 
 export async function getDashboardData({ dashboardId, sessionId, userId, from, to }) {

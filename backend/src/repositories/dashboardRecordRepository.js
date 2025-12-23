@@ -84,6 +84,13 @@ export async function deleteRecordById({ dashboardId, tableKey, recordId }) {
   return res.deletedCount > 0;
 }
 
+export async function deleteRecordsByTable({ dashboardId, tableKey }) {
+  if (!dashboardId || !tableKey) return 0;
+  const filter = { dashboardId: new ObjectId(dashboardId), tableKey };
+  const res = await collection().deleteMany(filter);
+  return res.deletedCount || 0;
+}
+
 export async function countRecordsByFieldValue({ dashboardId, tableKey, fieldKey, value }) {
   if (!dashboardId || !tableKey || !fieldKey) return 0;
   const normalizedFieldKey = fieldKey.toString();

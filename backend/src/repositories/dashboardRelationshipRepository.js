@@ -36,3 +36,11 @@ export async function deleteRelationshipsByDashboard(dashboardId) {
   if (!dashboardId) return;
   await collection().deleteMany({ dashboardId: new ObjectId(dashboardId) });
 }
+
+export async function deleteRelationshipsForTable(dashboardId, tableKey) {
+  if (!dashboardId || !tableKey) return;
+  await collection().deleteMany({
+    dashboardId: new ObjectId(dashboardId),
+    $or: [{ fromTableKey: tableKey }, { toTableKey: tableKey }],
+  });
+}
