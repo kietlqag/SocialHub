@@ -82,6 +82,7 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
   const [likedTemplates, setLikedTemplates] = useState<Set<string>>(new Set());
+  const [copiedTemplateId, setCopiedTemplateId] = useState<string | null>(null);
 
   const categories = [
     { id: "all", label: "All Templates", count: 24 },
@@ -279,16 +280,20 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
     },
   ];
 
-  const filteredTemplates = templates.filter((template) => {
-    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCategory = selectedCategory === "all" || template.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const applyFilters = (list: Template[]) => {
+    return list.filter((template) => {
+      const matchesSearch =
+        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesCategory = selectedCategory === "all" || template.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  };
 
-  const featuredTemplates = templates.filter(t => t.isFeatured);
-  const newTemplates = templates.filter(t => t.isNew);
+  const filteredTemplates = applyFilters(templates);
+  const featuredTemplates = applyFilters(templates.filter((t) => t.isFeatured));
+  const newTemplates = applyFilters(templates.filter((t) => t.isNew));
 
   const handleLike = (templateId: string) => {
     setLikedTemplates(prev => {
@@ -307,14 +312,24 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
     // Show success message or redirect
   };
 
+  const handleShareTemplate = async (template: Template) => {
+    const url = `${window.location.origin}/template?id=${template.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedTemplateId(template.id);
+      setTimeout(() => setCopiedTemplateId((current) => (current === template.id ? null : current)), 1500);
+    } catch (err) {
+      console.error("Copy failed", err);
+    }
+  };
+
   const TemplateCard = ({ template }: { template: Template }) => {
     const Icon = template.icon;
     const isLiked = likedTemplates.has(template.id);
 
     return (
-      <Card className="group overflow-hidden hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20">
-        {/* Header with gradient */}
-        <div className={`${template.color} p-6 relative`}>
+      <Card className="group overflow-hidden hover:shadow-lg transition-all duration-300 border border-slate-200">
+        <div className={`${template.color} p-5 relative h-28 flex items-center`}>
           <div className="absolute top-3 right-3 flex gap-2">
             {template.price === "premium" && (
               <Badge className="bg-yellow-400 text-yellow-900 border-0">
@@ -330,37 +345,33 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
             )}
           </div>
           <div className="flex items-center gap-3 text-white">
-            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
-              <Icon className="w-8 h-8" />
+            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl shadow-inner">
+              <Icon className="w-7 h-7" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">{template.name}</h3>
-              <div className="flex items-center gap-1 mt-1">
-                <Star className="w-4 h-4 fill-yellow-300 text-yellow-300" />
-                <span className="text-sm">{template.rating}</span>
-                <span className="text-sm text-white/70 ml-1">({template.reviews})</span>
-              </div>
+              <h3 className="font-semibold text-lg leading-tight">{template.name}</h3>
             </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-6">
-          <p className="text-sm text-gray-600 mb-4 line-clamp-2">
-            {template.description}
-          </p>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
+            <Star className="w-4 h-4 fill-yellow-300 text-yellow-400" />
+            <span className="font-semibold">{template.rating}</span>
+            <span className="text-slate-500">({template.reviews})</span>
+          </div>
 
-          {/* Tags */}
-          <div className="flex flex-wrap gap-2 mb-4">
+          <p className="text-sm text-gray-700 leading-relaxed line-clamp-2">{template.description}</p>
+
+          <div className="flex flex-wrap gap-2">
             {template.tags.map((tag) => (
-              <Badge key={tag} variant="outline" className="text-xs">
+              <Badge key={tag} variant="outline" className="text-xs bg-slate-50">
                 {tag}
               </Badge>
             ))}
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
+          <div className="flex justify-between items-center px-4 py-3 bg-slate-50 rounded-lg border border-slate-100 text-sm">
             <div className="text-center">
               <p className="text-xs text-gray-500">Widgets</p>
               <p className="font-semibold text-sm">{template.preview.widgets}</p>
@@ -375,8 +386,7 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
             </div>
           </div>
 
-          {/* Author */}
-          <div className="flex items-center justify-between mb-4 pb-4 border-b">
+          <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
               <Avatar className="w-6 h-6">
                 <AvatarFallback className="text-xs bg-primary text-primary-foreground">
@@ -388,25 +398,34 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
                 <p className="text-xs text-gray-400">{template.lastUpdated}</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLike(template.id);
-              }}
-              className="hover:bg-transparent"
-            >
-              <Heart
-                className={`w-5 h-5 transition-all ${
-                  isLiked ? "fill-red-500 text-red-500" : "text-gray-400"
-                }`}
-              />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLike(template.id);
+                }}
+                className="hover:bg-transparent"
+              >
+                <Heart className={`w-5 h-5 transition-all ${isLiked ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleShareTemplate(template);
+                }}
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="text-xs">{copiedTemplateId === template.id ? "Copied" : "Share"}</span>
+              </Button>
+            </div>
           </div>
 
-          {/* Actions */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 pt-2">
             <Button
               variant="outline"
               className="w-full gap-2"
@@ -418,10 +437,7 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
               <Eye className="w-4 h-4" />
               Preview
             </Button>
-            <Button
-              className="w-full gap-2 bg-primary hover:bg-primary/90"
-              onClick={() => handleCloneTemplate(template)}
-            >
+            <Button className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => handleCloneTemplate(template)}>
               <Download className="w-4 h-4" />
               Clone
             </Button>
@@ -432,12 +448,11 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white">
+      <div className="bg-white border-b sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 py-6 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
               {onBack && (
                 <Button variant="ghost" onClick={onBack} className="gap-2">
                   <ArrowLeft className="w-4 h-4" />
@@ -445,53 +460,48 @@ export function TemplatePage({ onBack, onCloneTemplate }: TemplatePageProps) {
                 </Button>
               )}
               <div>
-                <h1 className="text-3xl text-gray-900">Template Marketplace</h1>
-                <p className="text-gray-600 mt-1">
-                  Browse and clone dashboard templates from the community
-                </p>
+                <h1 className="text-3xl font-semibold text-slate-900">Template Marketplace</h1>
+                <p className="text-slate-600 mt-1">Browse and clone dashboard templates from the community</p>
               </div>
             </div>
-            <Button
-              className="gap-2 bg-primary hover:bg-primary/90"
-              onClick={() => setIsUploadDialogOpen(true)}
-            >
+            <Button className="gap-2 bg-slate-900 hover:bg-slate-800 text-white" onClick={() => setIsUploadDialogOpen(true)}>
               <Plus className="w-4 h-4" />
               Share Your Template
             </Button>
           </div>
 
-          {/* Search and Filters */}
-          <div className="flex gap-4">
+          <div className="flex flex-col lg:flex-row gap-3 items-stretch">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <Input
                 placeholder="Search templates by name, description, or tags..."
-                className="pl-10 h-12"
+                className="pl-10 h-12 bg-slate-50 border-slate-200"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[200px] h-12">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.label} ({cat.count})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="w-full lg:w-[180px]">
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="h-12 bg-slate-50 border-slate-200">
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="All Templates" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.label} ({cat.count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 bg-slate-100 border border-slate-200">
             <TabsTrigger value="all" className="gap-2">
               <LayoutDashboard className="w-4 h-4" />
               All Templates
