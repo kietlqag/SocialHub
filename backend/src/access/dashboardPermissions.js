@@ -2,12 +2,14 @@ export const DASHBOARD_ROLE_DEFAULTS = {
   owner: { view: true, create: true, edit: true, delete: true, manageAccess: true },
   admin: { view: true, create: true, edit: true, delete: true, manageAccess: true },
   manager: { view: true, create: true, edit: true, delete: false, manageAccess: false },
-  analyst: { view: true, create: false, edit: false, delete: false, manageAccess: false },
   viewer: { view: true, create: false, edit: false, delete: false, manageAccess: false },
 };
 
+const resolveOwnerId = (dashboard) => dashboard?.userId || dashboard?.createdBy || null;
+
 export function getUserDashboardRoleId(dashboard, userId = null) {
   if (!dashboard || !userId) return null;
+  const ownerId = resolveOwnerId(dashboard);
   const ac = dashboard.accessControl || {};
   const assignments = Array.isArray(ac.userAssignments)
     ? ac.userAssignments
@@ -16,7 +18,7 @@ export function getUserDashboardRoleId(dashboard, userId = null) {
       : [];
   const found = assignments.find((a) => a?.userId === userId);
   if (found?.role) return found.role.toLowerCase();
-  if (dashboard.userId && dashboard.userId === userId) return "owner";
+  if (ownerId && ownerId === userId) return "owner";
   return null;
 }
 
@@ -24,6 +26,8 @@ export function getRolePermissions(dashboard, roleId) {
   const ac = dashboard?.accessControl || {};
   const roleKey = roleId ? roleId.toLowerCase() : null;
   if (!roleKey) return { view: false, create: false, edit: false, delete: false, manageAccess: false };
+  if (roleKey === "owner") return DASHBOARD_ROLE_DEFAULTS.owner;
+  if (roleKey === "analyst") return { ...DASHBOARD_ROLE_DEFAULTS.viewer }; // Analyst is deprecated
   const fromArray = Array.isArray(ac.rolePermissions)
     ? ac.rolePermissions.find((r) => r?.role?.toLowerCase() === roleKey)
     : null;

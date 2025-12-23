@@ -2425,20 +2425,24 @@ export async function saveDashboard({ sessionId, userId, name, description, fiel
     samplePreview,
   });
   // Observer: persist notification when a dashboard is created (best-effort, non-blocking)
-  try {
-    await createNotificationRepo({
-      title: "New dashboard created",
-      message: `Dashboard "${payload.name}" has been created.`,
-      type: "dashboard_created",
-      metadata: {
-        dashboardId: payload.id,
-        createdBy: userId || null,
-      },
-      user_id: userId || null,
-      read: false,
-    });
-  } catch (err) {
-    console.error("Failed to record dashboard creation notification", err);
+  if (userId) {
+    try {
+      await createNotificationRepo({
+        title: "New dashboard created",
+        message: `Dashboard "${payload.name}" has been created.`,
+        type: "dashboard_created",
+        metadata: {
+          dashboardId: payload.id,
+          createdBy: userId,
+        },
+        user_id: userId,
+        read: false,
+      });
+    } catch (err) {
+      console.error("Failed to record dashboard creation notification", err);
+    }
+  } else {
+    console.warn("[saveDashboard] Skip notification because userId is missing", { dashboardId: payload.id });
   }
   return payload;
 }

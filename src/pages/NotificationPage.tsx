@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
+import { getCurrentSession } from "../services/auth";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -60,12 +61,37 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
   const [selectedNotifications, setSelectedNotifications] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    const currentUserId = session?.user?.id;
+    if (!token || !currentUserId) {
+      console.warn("[NotificationPage] Missing auth session; skip loading notifications");
+      return;
+    }
     setLoading(true);
     api
-      .get<{ data: any[] }>("/notifications")
+      .get<{ data: any[] }>("/notifications", token)
       .then((res) => {
         const rows = res?.data || [];
-        const mapped = rows.map((r: any) => ({ id: r.id, type: r.type || "info", category: r.category || "updates", title: r.title || r.message || "Notification", message: r.message || r.body || "", time: r.time || new Date(r.created_at || r.updated_at || Date.now()).toLocaleString(), timestamp: r.created_at || r.updated_at || new Date().toISOString(), read: !!r.read, starred: !!r.starred })) as NotificationItem[];
+        const filtered = rows.filter((r: any) => {
+          const matches = !r.user_id || String(r.user_id) === String(currentUserId);
+          if (!matches) console.warn("[NotificationPage] Dropped notification for different user", { notificationUser: r.user_id, currentUserId });
+          return matches;
+        });
+        const mapped = filtered.map(
+          (r: any) =>
+            ({
+              id: r.id,
+              type: r.type || "info",
+              category: r.category || "updates",
+              title: r.title || r.message || "Notification",
+              message: r.message || r.body || "",
+              time: r.time || new Date(r.created_at || r.updated_at || Date.now()).toLocaleString(),
+              timestamp: r.created_at || r.updated_at || new Date().toISOString(),
+              read: !!r.read,
+              starred: !!r.starred,
+            }) as NotificationItem,
+        );
         setNotifications(mapped);
       })
       .catch((e) => {
@@ -83,9 +109,15 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
   };
 
   const markAsRead = async (id: string) => {
+    const session = getCurrentSession();
+    const token = session?.token;
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
     updateLocal(id, { read: true });
     try {
-      await api.patch(`/notifications/${id}`, { read: true });
+      await api.patch(`/notifications/${id}`, { read: true }, token);
       toast.success("Marked as read");
     } catch (err) {
       console.error(err);

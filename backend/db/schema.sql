@@ -130,17 +130,19 @@ CREATE INDEX IF NOT EXISTS idx_ai_feedback_user ON ai_message_feedbacks(user_id)
 -- Notifications table (moved from Mongo to Postgres)
 CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
-    message TEXT,
+    message TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'error', 'system')),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     is_read BOOLEAN NOT NULL DEFAULT false,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS notifications_user_read_idx ON notifications(user_id, is_read);
 
 -- Extended user profile/settings table for frontend ProfileSettings
 -- Stores phone, job title, location, bio, website and misc preferences

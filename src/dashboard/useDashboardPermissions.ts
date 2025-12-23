@@ -27,6 +27,7 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
   const [accessMode, setAccessMode] = useState<DashboardAccessMode>("restricted");
   const [rolePermissions, setRolePermissions] = useState<DashboardRolePermission[]>([]);
   const [assignments, setAssignments] = useState<DashboardUserAssignment[]>([]);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +41,7 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
         setAccessMode(data.accessMode);
         setRolePermissions(data.rolePermissions || []);
         setAssignments(data.userAssignments || []);
+        setOwnerId((data as DashboardAccessPayload).ownerId || null);
         setError(null);
       })
       .catch((err: any) => {
@@ -71,9 +73,9 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
     const empty = { ...DEFAULT_PERMS };
     if (!dashboardId) return empty;
 
+    const isOwner = Boolean(ownerId && opts.userId && String(ownerId) === String(opts.userId));
     const roleKey = (currentRole || "").toLowerCase();
     const rolePerm = roleKey ? roleMap.get(roleKey) : undefined;
-    const isOwner = roleKey === "owner";
 
     // Helper to apply role-specific fallback overrides
     const applyRoleFallback = (p: Record<PermissionKey, boolean>) => {
@@ -87,6 +89,12 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
         // other perms remain as returned from DB (default false)
       }
     };
+
+    if (isOwner) {
+      const ownerPerms: Record<PermissionKey, boolean> = { view: true, create: true, edit: true, delete: true, manageAccess: true };
+      console.log("DEBUG perms", { roleKey: "owner", accessMode, mergedPerms: ownerPerms });
+      return ownerPerms;
+    }
 
     // Private: only owner or global admin can see
     if (accessMode === "private") {
@@ -136,11 +144,12 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
 
   const canViewDashboard = useMemo(() => {
     if (!dashboardId) return false;
+    if (ownerId && opts.userId && String(ownerId) === String(opts.userId)) return true;
     if (accessMode === "public") return true;
     if (accessMode === "restricted") return perms.view;
     if (accessMode === "private") return perms.view;
     return false;
-  }, [accessMode, dashboardId, perms.view]);
+  }, [accessMode, dashboardId, ownerId, opts.userId, perms.view]);
 
   const hasPermission = (permission: PermissionKey) => !!perms[permission];
 
@@ -159,6 +168,7 @@ export const useDashboardPermissions = (dashboardId?: string, opts: UseDashboard
       setAccessMode((data as DashboardAccessPayload).accessMode);
       setRolePermissions((data as DashboardAccessPayload).rolePermissions || []);
       setAssignments((data as DashboardAccessPayload).userAssignments || []);
+      setOwnerId((data as DashboardAccessPayload).ownerId || null);
     },
   };
 };

@@ -5,6 +5,10 @@ import { query } from "../db.js";
  * Writes a dashboard creation notification to Postgres.
  */
 export async function notifyDashboardCreated({ userId, dashboardId, dashboardName }) {
+  if (!userId) {
+    console.warn("[notifyDashboardCreated] Skip notification because userId is missing", { dashboardId, dashboardName });
+    return null;
+  }
   const id = uuidv4();
   const now = new Date();
   const safeName = dashboardName && dashboardName.trim().length ? dashboardName : "Dashboard";
@@ -19,7 +23,7 @@ export async function notifyDashboardCreated({ userId, dashboardId, dashboardNam
       dashboardName: safeName,
     },
     is_read: false,
-    user_id: userId || null,
+    user_id: userId,
     created_at: now,
     updated_at: now,
   };

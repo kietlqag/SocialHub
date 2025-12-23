@@ -18,10 +18,8 @@ type DashboardAccessControlProps = {
 };
 
 const DEFAULT_ROLE_PERMS: DashboardRolePermission[] = [
-  { role: "Owner", permissions: { view: true, create: true, edit: true, delete: true, manageAccess: true } },
   { role: "Admin", permissions: { view: true, create: true, edit: true, delete: true, manageAccess: true } },
   { role: "Manager", permissions: { view: true, create: true, edit: true, delete: false, manageAccess: false } },
-  { role: "Analyst", permissions: { view: true, create: false, edit: false, delete: false, manageAccess: false } },
   { role: "Viewer", permissions: { view: true, create: false, edit: false, delete: false, manageAccess: false } },
 ];
 
@@ -43,6 +41,7 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
   const [rolePermissions, setRolePermissions] = useState<DashboardRolePermission[]>(DEFAULT_ROLE_PERMS);
   const [roleBaseline, setRoleBaseline] = useState<DashboardRolePermission[]>(DEFAULT_ROLE_PERMS);
   const [assignments, setAssignments] = useState<DashboardUserAssignment[]>([]);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -66,6 +65,7 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
       setRolePermissions(perms);
       setRoleBaseline(perms);
       setAssignments(data.userAssignments || []);
+      setOwnerId((data as DashboardAccessPayload).ownerId || null);
     } catch (err: any) {
       const message = err?.message || "Failed to load access control. Using defaults.";
       toast.error(message);
@@ -162,7 +162,13 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
     }
   };
 
-  const roleOptions = useMemo(() => rolePermissions.map((r) => r.role), [rolePermissions]);
+  const roleOptions = useMemo(
+    () =>
+      rolePermissions
+        .map((r) => r.role)
+        .filter((role) => ["admin", "manager", "viewer"].includes(role.toLowerCase())),
+    [rolePermissions],
+  );
 
   const renderToggle = (role: string, key: keyof DashboardRolePermission["permissions"]) => {
     const rolePerm = rolePermissions.find((r) => r.role === role);
@@ -202,8 +208,19 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
   const handleConfirmSavePermissions = async () => {
     try {
       setSaving(true);
-      await dashboardApi.updateRolePermissions(dashboardId, rolePermissions, { sessionId, userId: userId || undefined });
-      setRoleBaseline(rolePermissions);
+      const sanitizedRolePermissions = rolePermissions.filter((r) => ["admin", "manager", "viewer"].includes(r.role.toLowerCase()));
+      const payload = { rolePermissions: sanitizedRolePermissions, accessMode };
+      console.log("[AccessControl] Saving permissions", {
+        method: "PUT",
+        url: `/api/dashboards/${dashboardId}/access`,
+        dashboardId,
+        sessionId,
+        userId,
+        payload,
+      });
+      await dashboardApi.updateRolePermissions(dashboardId, sanitizedRolePermissions, { sessionId, userId: userId || undefined });
+      setRolePermissions(sanitizedRolePermissions);
+      setRoleBaseline(sanitizedRolePermissions);
       toast.success("Permissions updated");
       setPermissionsEditable(false);
     } catch (err: any) {
@@ -258,6 +275,7 @@ export function AccessControlTab({ dashboardId, sessionId, userId }: DashboardAc
                 <p className="acCardSubtitle">Control how this dashboard can be accessed.</p>
               </div>
               <span className="acBadge">{accessMode}</span>
+              {ownerId && userId && String(ownerId) === String(userId) ? <span className="acBadge">Owner (Creator)</span> : null}
             </div>
             <div className="acRadioGroup">
               {accessModeOptions.map((opt) => (

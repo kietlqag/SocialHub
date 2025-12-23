@@ -15,6 +15,8 @@ const resolveRolePermissions = (dashboard) => {
 const toLowerArray = (values) =>
   Array.isArray(values) ? values.map((val) => (typeof val === "string" ? val.toLowerCase() : String(val || "").toLowerCase())) : [];
 
+const resolveOwnerId = (dashboard) => dashboard?.userId || dashboard?.createdBy || null;
+
 export const isGlobalAdminUser = (user) => {
   if (!user) return false;
   if (user.isGlobalAdmin) return true;
@@ -44,7 +46,8 @@ export const canViewDashboard = (dashboard, currentUserId, options = {}) => {
   const access = dashboard.accessControl || {};
   const accessMode = access.accessMode || "restricted";
   const assignments = Array.isArray(access.userAssignments) ? access.userAssignments : [];
-  const isOwner = dashboard.userId && sameId(dashboard.userId, currentUserId);
+  const ownerId = resolveOwnerId(dashboard);
+  const isOwner = ownerId && sameId(ownerId, currentUserId);
   const isGlobalAdmin = Boolean(options?.isGlobalAdmin);
   const hasAssignment = Boolean(
     currentUserId && assignments.some((assignment) => assignment && sameId(assignment.userId, currentUserId)),
@@ -75,6 +78,7 @@ export const canViewDashboard = (dashboard, currentUserId, options = {}) => {
 
 export const canEditDashboard = (dashboard, currentUserId) => {
   if (!dashboard) return false;
-  if (dashboard.userId && sameId(dashboard.userId, currentUserId)) return true;
+  const ownerId = resolveOwnerId(dashboard);
+  if (ownerId && sameId(ownerId, currentUserId)) return true;
   return userHasManageAccess(dashboard, currentUserId);
 };

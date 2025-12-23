@@ -2264,10 +2264,11 @@ function ManageDashDetail() {
   const [widgetPage, setWidgetPage] = useState(1);
   const [chartPage, setChartPage] = useState(1);
   const permissions = useDashboardPermissions(dashId, { userId: currentUser?.id ?? null, sessionId });
+  const dashboardOwnerId = dashboard?.userId || dashboard?.createdBy;
   const isOwner = Boolean(
-    dashboard?.userId &&
-      currentUser?.id &&
-      String(dashboard.userId) === String(currentUser.id)
+    dashboardOwnerId &&
+    currentUser?.id &&
+    String(dashboardOwnerId) === String(currentUser.id)
   );
 
   // Record-level permissions

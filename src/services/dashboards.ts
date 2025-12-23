@@ -53,7 +53,7 @@ export type RecordReferenceInfo = {
 export type DashboardAccessMode = "public" | "restricted" | "private";
 
 export type DashboardRolePermission = {
-  role: string;
+  role: "Admin" | "Manager" | "Viewer" | string;
   permissions: {
     view: boolean;
     create: boolean;
@@ -72,6 +72,7 @@ export type DashboardUserAssignment = {
 };
 
 export type DashboardAccessPayload = {
+  ownerId?: string | null;
   accessMode: DashboardAccessMode;
   rolePermissions: DashboardRolePermission[];
   userAssignments: DashboardUserAssignment[];
@@ -99,6 +100,7 @@ export type TableDefinition = {
 export type Dashboard = Omit<SharedDashboard, "tables"> & {
   id: string;
   userId?: string;
+  createdBy?: string | null;
   fields?: DashboardField[];
   tables?: DashboardTable[];
   insights?: InsightWidget[];
@@ -439,7 +441,7 @@ export const dashboardApi = {
     if (params.sessionId) query.set("sessionId", params.sessionId);
     if (params.userId) query.set("userId", params.userId);
     const queryString = query.toString() ? `?${query.toString()}` : "";
-    return api.patch<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/permissions${queryString}`, { rolePermissions });
+    return api.put<DashboardAccessPayload>(`/api/dashboards/${dashboardId}/access${queryString}`, { rolePermissions });
   },
   searchUsers: (queryStr: string) =>
     api.get<{ users: Array<{ id: string; fullName: string; email: string }> }>(`/api/users?query=${encodeURIComponent(queryStr)}`),

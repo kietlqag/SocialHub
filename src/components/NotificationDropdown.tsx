@@ -14,6 +14,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { api } from "../services/api";
+import { getCurrentSession } from "../services/auth";
 
 interface NotificationItem {
   id: string;
@@ -23,6 +24,7 @@ interface NotificationItem {
   time: string;
   read: boolean;
   icon: any;
+  userId?: string | null;
 }
 
 interface NotificationDropdownProps {
@@ -81,19 +83,34 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
   // fetch notifications when dropdown opens (first time or subsequent opens)
   useEffect(() => {
     async function load() {
+      const session = getCurrentSession();
+      const token = session?.token;
+      const currentUserId = session?.user?.id;
+      if (!token || !currentUserId) {
+        console.warn("[NotificationDropdown] No session/token; skip loading notifications");
+        setHasLoadedOnce(true);
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       try {
-        const res = await api.get<{ data: any[] }>("/notifications");
+        const res = await api.get<{ data: any[] }>("/notifications", token);
         const items = Array.isArray(res?.data) ? res.data : [];
-        const mapped = items.map(
+        const filtered = items.filter((d) => {
+          const matches = !d.user_id || String(d.user_id) === String(currentUserId);
+          if (!matches) console.warn("[NotificationDropdown] Dropped notification for different user", { notificationUser: d.user_id, currentUserId });
+          return matches;
+        });
+        const mapped = filtered.map(
           (d) =>
             ({
               id: String(d._id || d.id),
               type: d.type || "info",
               title: d.title || "(no title)",
               message: d.message || "",
-              time: d.createdAt || d.time || d.updatedAt || new Date().toISOString(),
+              time: d.created_at || d.updated_at || d.createdAt || d.time || new Date().toISOString(),
               read: !!d.read,
+              userId: d.user_id || d.userId || null,
               icon:
                 d.type === "success"
                   ? Package
@@ -122,7 +139,10 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
 
   const markAsRead = async (id: string) => {
     try {
-      const res = await api.patch<{ data: any }>(`/notifications/${id}`, { read: true });
+      const session = getCurrentSession();
+      const token = session?.token;
+      if (!token) throw new Error("Missing auth token");
+      const res = await api.patch<{ data: any }>(`/notifications/${id}`, { read: true }, token);
       const updated = res?.data;
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: !!updated?.read } : n)));
     } catch (err) {
@@ -133,7 +153,10 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
   const markAllAsRead = async () => {
     const unread = notifications.filter((n) => !n.read).map((n) => n.id);
     try {
-      await Promise.all(unread.map((id) => api.patch(`/notifications/${id}`, { read: true })));
+      const session = getCurrentSession();
+      const token = session?.token;
+      if (!token) throw new Error("Missing auth token");
+      await Promise.all(unread.map((id) => api.patch(`/notifications/${id}`, { read: true }, token)));
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch (err) {
       console.error("Error marking all as read", err);
@@ -142,7 +165,10 @@ export function NotificationDropdown({ onViewAll }: NotificationDropdownProps = 
 
   const removeNotification = async (id: string) => {
     try {
-      await api.delete(`/notifications/${id}`);
+      const session = getCurrentSession();
+      const token = session?.token;
+      if (!token) throw new Error("Missing auth token");
+      await api.delete(`/notifications/${id}`, token);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification", err);
