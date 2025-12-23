@@ -737,7 +737,7 @@ const MetricCard = ({
     <div className={`kpiCard relative ${className}`}>
       {deletable && onDelete && (
         <button className="metricDeleteBtn" title="Remove widget" aria-label="Remove widget" onClick={onDelete}>
-          <X className="w-3.5 h-3.5" />
+          ×
         </button>
       )}
       <div className="kpiIcon" style={{ background: iconStyle.bg, boxShadow: iconStyle.shadow }}>
@@ -3754,18 +3754,15 @@ function ManageDashDetail() {
                             const info = getFieldReferenceKeyInfo(fieldMeta);
                             const lookup = referenceLookups[info.normalized] || {};
                             const matched = lookup[String(val)];
-                            const displayValue = matched?.display;
-                            const hasMatch = Boolean(displayValue);
-                            const baseDisplay = hasMatch ? displayValue : "(Not found)";
+                            const displayValue = matched?.display || val;
                             const display =
-                              typeof baseDisplay === "string" && baseDisplay.length > 16
-                                ? `${baseDisplay.slice(0, 6)}...${baseDisplay.slice(-4)}`
-                                : renderRecordValue(baseDisplay);
+                              typeof displayValue === "string" && displayValue.length > 16
+                                ? `${displayValue.slice(0, 6)}?${displayValue.slice(-4)}`
+                                : renderRecordValue(displayValue);
                             return (
                               <span
                                 className="underline text-sm cursor-pointer hover:opacity-80"
                                 style={{ color: "#2563eb" }}
-                                title={hasMatch ? undefined : String(val)}
                                 onClick={() => openReferenceModal(fieldMeta.referenceTableKey as string, String(val))}
                               >
                                 {display}
@@ -4100,4 +4097,3 @@ function ManageDashDetailWithBoundary(props: any) {
 }
 
 export default ManageDashDetailWithBoundary;
-

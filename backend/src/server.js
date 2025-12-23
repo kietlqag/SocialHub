@@ -73,7 +73,11 @@ app.use((err, req, res, next) => {
   console.error(err);
   const status = err instanceof HttpError && err.status ? err.status : err.status || 500;
   const message = err.status ? err.message : "Internal Server Error";
-  res.status(status).json({ error: message, message });
+  const payload = { error: message, message };
+  if (err?.references) {
+    payload.references = err.references;
+  }
+  res.status(status).json(payload);
 });
 
 async function start() {

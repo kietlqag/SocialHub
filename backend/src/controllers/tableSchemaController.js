@@ -6,6 +6,7 @@ import { migrateFieldRenames } from "../utils/schemaMigration.js";
 import { mongoose } from "../mongoose.js";
 import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
 import { canEditDashboard, canViewDashboard, isGlobalAdminUser } from "../utils/dashboardAuth.js";
+import { listRelationshipsByDashboard } from "../repositories/dashboardRelationshipRepository.js";
 
 const FIELD_TYPES = new Set(["string", "number", "boolean", "date", "enum", "reference", "id"]);
 const SYSTEM_KEY_SET = new Set(["id", "_id", "created_at", "updated_at"]);
@@ -102,6 +103,72 @@ const validateFields = (fields) => {
   });
 };
 
+const normalizeLower = (value = "") => normalizeKey(value).toLowerCase();
+
+const findReferenceDependencies = async ({ dashboardId, tableKey, tableId, removedKeys }) => {
+  const normalizedRemoved = new Set(
+    (removedKeys || [])
+      .map((key) => normalizeLower(key))
+      .filter((key) => key && !SYSTEM_KEY_SET.has(key)),
+  );
+  if (!normalizedRemoved.size) return [];
+
+  const normalizedTableKey = normalizeLower(tableKey);
+  const otherTables = await DashboardTableModel.find({
+    dashboardId: new mongoose.Types.ObjectId(dashboardId),
+    ...(tableId ? { _id: { $ne: tableId } } : {}),
+  }).lean();
+
+  const dependencies = [];
+  otherTables.forEach((tbl) => {
+    const fields = Array.isArray(tbl?.fields) ? tbl.fields : [];
+    fields.forEach((field) => {
+      const refTarget = normalizeLower(
+        field.referenceTable || field.referenceTableKey || field.ref || field?.references?.tableKey,
+      );
+      const type = (field.type || field.fieldType || "").toString().toLowerCase();
+      const semanticType = (field.semanticType || "").toString().toLowerCase();
+      const isReferenceField = type === "reference" || semanticType === "reference" || Boolean(refTarget);
+      if (!isReferenceField) return;
+      if (!refTarget || refTarget !== normalizedTableKey) return;
+
+      const candidatePairs = [
+        field.displayField,
+        field.displayKey,
+        field.labelKey,
+        field?.references?.fieldKey,
+        field?.references?.field,
+      ];
+      const match = candidatePairs
+        .map((key) => ({ raw: key, normalized: normalizeLower(key) }))
+        .find((entry) => entry.normalized && normalizedRemoved.has(entry.normalized));
+      if (match) {
+        dependencies.push({
+          targetField: match.raw || match.normalized,
+          sourceTable: tbl.name || tbl.key || tbl._id?.toString?.(),
+          sourceField: field.key || field.name || field.id,
+        });
+      }
+    });
+  });
+
+  const relationships = await listRelationshipsByDashboard(dashboardId);
+  relationships.forEach((rel) => {
+    const targetTable = normalizeLower(rel.toTableKey);
+    const targetField = normalizeLower(rel.toFieldKey);
+    if (!targetField || !targetTable) return;
+    if (targetTable !== normalizedTableKey) return;
+    if (!normalizedRemoved.has(targetField)) return;
+    dependencies.push({
+      targetField: rel.toFieldKey || rel.toField,
+      sourceTable: rel.fromTableKey || rel.fromTable || "unknown",
+      sourceField: rel.fromFieldKey || rel.fromField || null,
+    });
+  });
+
+  return dependencies;
+};
+
 export async function getTableSchema(req, res) {
   const owner = parseOwner(req);
   const { dashboardId, tableKey } = req.params;
@@ -188,6 +255,40 @@ export async function updateTableSchema(req, res) {
   );
 
   validateFields(normalizedIncoming);
+
+  const incomingKeySet = new Set(normalizedIncoming.map((f) => normalizeLower(f.key)).filter(Boolean));
+  const existingKeyMap = new Map();
+  const removedKeys = [];
+  existingFields.forEach((f) => {
+    const normalizedKey = normalizeLower(f.key);
+    if (!normalizedKey || SYSTEM_KEY_SET.has(normalizedKey)) return;
+    if (!existingKeyMap.has(normalizedKey)) {
+      existingKeyMap.set(normalizedKey, f.key || normalizedKey);
+    }
+    if (!incomingKeySet.has(normalizedKey)) {
+      removedKeys.push(normalizedKey);
+    }
+  });
+
+  if (removedKeys.length) {
+    const dependencies = await findReferenceDependencies({
+      dashboardId,
+      tableKey: table.key || tableKey,
+      tableId: table._id,
+      removedKeys,
+    });
+    if (dependencies.length) {
+      const dep = dependencies[0];
+      const targetKey = normalizeLower(dep.targetField || "") || removedKeys[0];
+      const humanField = existingKeyMap.get(targetKey) || dep.targetField || targetKey;
+      const sourceTable = dep.sourceTable || "another table";
+      const sourceField = dep.sourceField ? `field "${dep.sourceField}"` : "a reference field";
+      throw new HttpError(
+        400,
+        `Cannot delete field "${humanField}" because ${sourceField} in table "${sourceTable}" references it. Update or remove that reference first.`,
+      );
+    }
+  }
 
   const incomingById = new Map();
   const incomingByKey = new Map();

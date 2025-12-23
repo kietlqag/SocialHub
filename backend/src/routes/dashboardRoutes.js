@@ -24,6 +24,7 @@ import {
   getDashboardByIdController,
   generateStructureWithUpload,
   getReferenceLookupsController,
+  getRecordReferencesController,
 } from "../controllers/dashboardController.js";
 import {
   getDashboardAccess,
@@ -52,6 +53,10 @@ router.post("/dashboards/:id/records", asyncHandler(createDashboardRecord));
 router.post("/dashboards/records", asyncHandler(createDashboardRecord));
 router.get("/records", asyncHandler(getDashboardRecords));
 router.get("/dashboards/:id/tables/:tableKey/records/:recordId", asyncHandler(getDashboardRecordController));
+router.get(
+  "/dashboards/:dashboardId/records/:tableKey/:recordId/references",
+  asyncHandler(getRecordReferencesController),
+);
 router.put("/dashboards/:id/tables/:tableKey/records/:recordId", asyncHandler(updateDashboardRecordController));
 router.delete("/dashboards/:id/tables/:tableKey/records/:recordId", asyncHandler(deleteDashboardRecordController));
 router.get("/dashboards/:dashboardId/tables/:tableKey/schema", asyncHandler(getTableSchema));

@@ -257,24 +257,24 @@ export default function ManageDash() {
                 <h3 className="text-xl font-semibold text-gray-900">Recently viewed</h3>
               </div>
               {hasDashboards ? (
-                <div className="flex gap-4 overflow-x-auto pb-2">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {recentlyViewed.map((item) => {
                     const IconComponent = item.icon;
                     return (
                       <Card
                         key={item.id}
-                        className="min-w-[280px] p-4 hover:shadow-lg transition-all cursor-pointer"
+                        className="p-4 hover:shadow-lg transition-all cursor-pointer w-full max-w-2xl justify-self-start"
                         onClick={() => openDashboardPreview(item)}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className={`p-2 rounded-lg ${item.accentColor}`}>
                             <IconComponent className="w-5 h-5 text-white" />
                           </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                            <p className="text-xs text-gray-500">{item.updatedLabel || item.createdLabel}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{item.updatedLabel || item.createdLabel}</p>
                           </div>
-                          <ArrowRight className="w-4 h-4 text-gray-400" />
+                          <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         </div>
                       </Card>
                     );
@@ -291,12 +291,16 @@ export default function ManageDash() {
                 <h3 className="text-xl font-semibold text-gray-900">Favorite dashboards</h3>
               </div>
               {hasDashboards ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {favoriteDashboards.map((dashboard, index) => {
                     const IconComponent = dashboard.icon;
                     const isFavorite = index % 2 === 0;
                     return (
-                      <Card key={dashboard.id} className="p-6 hover:shadow-lg transition-all cursor-pointer group" onClick={() => openDashboardPreview(dashboard)}>
+                      <Card
+                        key={dashboard.id}
+                        className="p-6 hover:shadow-lg transition-all cursor-pointer group w-full max-w-2xl justify-self-start"
+                        onClick={() => openDashboardPreview(dashboard)}
+                      >
                         <div className="flex items-start justify-between mb-4">
                           <div className={`p-3 ${dashboard.accentColor} rounded-xl`}>
                             <IconComponent className="w-6 h-6 text-white" />
@@ -355,11 +359,14 @@ export default function ManageDash() {
                 <Button variant="outline" size="sm">Sort by: Recent</Button>
               </div>
               {hasDashboards ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {derivedDashboards.map((dashboard) => {
                     const IconComponent = dashboard.icon;
                     return (
-                      <Card key={dashboard.id} className="p-6 flex flex-col gap-4 hover:shadow-lg transition">
+                      <Card
+                        key={dashboard.id}
+                        className="p-6 flex flex-col gap-4 hover:shadow-lg transition w-full max-w-2xl justify-self-start"
+                      >
                         <div className="flex items-start justify-between">
                           <div className={`p-3 ${dashboard.accentColor} rounded-xl`}>
                             <IconComponent className="w-6 h-6 text-white" />

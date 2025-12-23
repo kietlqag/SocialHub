@@ -73,6 +73,7 @@ export const CardDash = ({
           onOpen?.(id);
         }
       }}
+      style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
     >
       <div className="dashboard-card__header">
         <div className={`dashboard-card__icon ${toneClass}`}>

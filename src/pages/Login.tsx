@@ -73,11 +73,11 @@ export function Login({
 
   const handleResetPassword = async () => {
     if (!email || !resetCode || !newPassword) {
-      toast.error("Nhap day du email, ma reset va mat khau moi.");
+      toast.error("Please enter email, reset code, and a new password.");
       return;
     }
     if (newPassword !== confirmNewPassword) {
-      toast.error("Mat khau moi nhap lai khong khop.");
+      toast.error("New passwords do not match.");
       return;
     }
     setLoading(true);
@@ -88,13 +88,13 @@ export function Login({
       setResetCode("");
       setConfirmNewPassword("");
       setResetRequested(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Khong the dat lai mat khau.";
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unable to reset password.";
+    toast.error(message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="login-page">
@@ -177,7 +177,7 @@ export function Login({
               {resetRequested && (
                 <div className="login-reset-panel space-y-2">
                   <p className="login-reset-copy">
-                    Ma reset da duoc gui den email cua ban. Nhap ma va mat khau moi de hoan tat.
+                    A reset code has been sent to your email. Enter the code and your new password to complete the reset.
                   </p>
                   <Label htmlFor="resetCode" className="login-label">
                     Reset code

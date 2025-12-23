@@ -107,11 +107,11 @@ export function AIDashboardGenerator({ isOpen, onClose, onCreateDashboard, sessi
   ];
 
   const dashboardTypes = [
-    { value: "ecommerce", label: "Thuong mai dien tu", description: "Theo doi don hang, doanh thu, ton kho va hanh vi khach hang." },
-    { value: "healthcare", label: "Y te", description: "Quan ly benh nhan, lich hen, ket qua xet nghiem va hieu suat phong kham." },
-    { value: "education", label: "Giao duc", description: "Theo doi lop hoc, tien do hoc tap, diem so va dang ky khoa hoc." },
-    { value: "finance", label: "Tai chinh", description: "Tong hop dong tien, chi phi, loi nhuan, KPI tai chinh va rui ro." },
-    { value: "saas", label: "SaaS / San pham so", description: "Theo doi subscription, churn, MRR, hanh vi nguoi dung va funnel chuyen doi." },
+    { value: "ecommerce", label: "E-commerce", description: "Track orders, revenue, inventory, and customer behavior." },
+    { value: "healthcare", label: "Healthcare", description: "Manage patients, appointments, lab results, and clinic performance." },
+    { value: "education", label: "Education", description: "Track classes, learning progress, grades, and course enrollments." },
+    { value: "finance", label: "Finance", description: "Summarize cash flow, costs, profit, financial KPIs, and risk." },
+    { value: "saas", label: "SaaS / Digital product", description: "Track subscriptions, churn, MRR, user behavior, and conversion funnels." },
   ];
   const dashboardTemplates: Record<
     string,

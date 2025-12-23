@@ -25,14 +25,14 @@ const randomCode = (digits = 6) => Math.floor(10 ** (digits - 1) + Math.random()
 
 export async function registerUser({ email, password, fullName, company }) {
   if (!email || !password) {
-    throw new HttpError(400, "Email và password là bắt buộc.");
+    throw new HttpError(400, "Email and password are required.");
   }
   if (password.length < 6) {
-    throw new HttpError(400, "Password phải từ 6 ký tự.");
+    throw new HttpError(400, "Password must be at least 6 characters.");
   }
   const exists = await findUserByEmail(email);
   if (exists) {
-    throw new HttpError(409, "Email đã tồn tại.");
+    throw new HttpError(409, "Email already exists.");
   }
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await insertUser({ email, passwordHash, fullName, company });
@@ -43,14 +43,14 @@ export async function registerUser({ email, password, fullName, company }) {
 export async function loginUser(email, password) {
   const user = await findUserByEmail(email);
   if (!user) {
-    throw new HttpError(401, "Sai email hoặc password.");
+    throw new HttpError(401, "Invalid email or password.");
   }
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) {
-    throw new HttpError(401, "Sai email hoặc password.");
+    throw new HttpError(401, "Invalid email or password.");
   }
   if (!user.isVerified) {
-    throw new HttpError(403, "Account chưa được xác thực email.");
+    throw new HttpError(403, "Account email is not verified.");
   }
   const token = await issueJwt(user);
   const { password_hash, ...clean } = user;
@@ -92,7 +92,7 @@ export async function resendVerification(email) {
 
 export async function createPasswordReset(email) {
   const user = await findUserByEmail(email);
-  if (!user) throw new HttpError(404, "Email không tồn tại");
+  if (!user) throw new HttpError(404, "Email does not exist");
   if (!user.isVerified) throw new HttpError(400, "Account email is not verified.");
   const code = randomCode();
   const hash = await hashCode(code);
@@ -105,7 +105,7 @@ export async function resetPassword(email, code, newPassword) {
   const user = await findUserByEmail(email);
   if (!user) throw new HttpError(404, "User not found");
   if (!newPassword || newPassword.length < 6) {
-    throw new HttpError(400, "Password phải từ 6 ký tự.");
+    throw new HttpError(400, "Password must be at least 6 characters.");
   }
   const latestToken = await getLatestResetToken(user.id);
   if (!latestToken) throw new HttpError(400, "No reset token");

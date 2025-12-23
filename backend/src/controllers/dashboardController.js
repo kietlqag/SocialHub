@@ -11,6 +11,7 @@ import {
   getDashboardRecord,
   updateDashboardRecordService,
   deleteDashboardRecordService,
+  getRecordReferences,
   listDashboardWidgets,
   addManualWidget,
   removeWidget,
@@ -367,6 +368,23 @@ export async function getDashboardRecordController(req, res) {
     userId: owner.userId,
   });
   res.json({ record });
+}
+
+export async function getRecordReferencesController(req, res) {
+  const owner = parseOwner(req);
+  const { dashboardId, tableKey, recordId } = req.params;
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  const dashboard = await findDashboardByIdRepo(dashboardId);
+  if (!canDeleteRecords(dashboard, owner.userId)) {
+    throw new HttpError(403, "Forbidden");
+  }
+  const references = await getRecordReferences({
+    dashboardId,
+    tableKey,
+    recordId,
+    userId: owner.userId,
+  });
+  res.json({ references });
 }
 
 export async function updateDashboardRecordController(req, res) {

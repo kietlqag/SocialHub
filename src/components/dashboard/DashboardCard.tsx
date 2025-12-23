@@ -71,6 +71,7 @@ export function DashboardCard({
         onClick={() => onOpen?.(id)}
         role="button"
         tabIndex={0}
+        style={{ width: "100%", maxWidth: "100%", minWidth: 0, gridColumn: "auto" }}
         onKeyDown={handleKeyDown}
       >
         <div className={`dashboard-card__icon ${toneClass}`}>
@@ -110,6 +111,7 @@ export function DashboardCard({
       onClick={() => onOpen?.(id)}
       role="button"
       tabIndex={0}
+      style={{ width: "100%", maxWidth: "100%", minWidth: 0, gridColumn: "auto" }}
       onKeyDown={handleKeyDown}
     >
       <div className="dashboard-card__header">

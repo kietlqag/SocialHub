@@ -44,6 +44,12 @@ export type DashboardTable = Omit<TableConfig, "fields"> & {
   sampleRows?: Record<string, any>[];
 };
 
+export type RecordReferenceInfo = {
+  tableKey: string;
+  fieldKey: string;
+  count: number;
+};
+
 export type DashboardAccessMode = "public" | "restricted" | "private";
 
 export type DashboardRolePermission = {
@@ -294,6 +300,20 @@ export const dashboardApi = {
     const queryString = query.toString() ? `?${query.toString()}` : "";
     return api.delete<{ success: boolean }>(
       `/api/dashboards/${dashboardId}/tables/${tableKey}/records/${recordId}${queryString}`,
+    );
+  },
+  getRecordReferences: (
+    dashboardId: string,
+    tableKey: string,
+    recordId: string,
+    params: { sessionId?: string; userId?: string | null } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.sessionId) query.set("sessionId", params.sessionId);
+    if (params.userId) query.set("userId", params.userId);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return api.get<{ references: RecordReferenceInfo[] }>(
+      `/api/dashboards/${dashboardId}/records/${tableKey}/${recordId}/references${queryString}`,
     );
   },
   createDashboardTable: async (

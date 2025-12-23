@@ -25,6 +25,7 @@ import {
   listRecordsByDashboard,
   updateRecordById,
   deleteRecordById,
+  countRecordsByFieldValue,
 } from "../repositories/dashboardRecordRepository.js";
 import { upsertHideOverride, listOverridesByDashboard } from "../repositories/dashboardWidgetOverrideRepository.js";
 import { SYSTEM_FIELDS, isSystemField } from "../../../shared/systemFields.js";
@@ -436,6 +437,7 @@ const SYSTEM_FIELD_KEYS = new Set(["id", "_id", "created_at", "updated_at"]);
 const STRING_LIKE_TYPES = new Set(["string", "text", "enum", "email", "phone", "varchar"]);
 
 const getFieldKey = (field = {}) => (field.key || field.name || field.fieldName || field.id || "").toString();
+const normalizeTableKey = (value = "") => value.toString().trim().toLowerCase();
 
 const resolveDisplayConfigForTable = (table = {}) => {
   const fields = Array.isArray(table.fields) ? table.fields : [];
@@ -561,6 +563,51 @@ const resolveDisplayValueForRecord = (record = {}, table = {}, config = {}) => {
   if (idValue !== undefined && idValue !== null) return String(idValue);
   return "";
 };
+
+const isReferenceFieldToTable = (field = {}, targetTableKey = "") => {
+  const type = (field.type || field.fieldType || "").toString().toLowerCase();
+  const semanticType = (field.semanticType || "").toString().toLowerCase();
+  const refTarget =
+    field.referenceTableKey ||
+    field.referenceTable ||
+    field.ref ||
+    (field.references && (field.references.tableKey || field.references.table));
+  const normalizedTarget = normalizeTableKey(targetTableKey);
+  const normalizedRef = normalizeTableKey(refTarget);
+  const isReferenceField = type === "reference" || semanticType === "reference" || Boolean(normalizedRef);
+  if (!isReferenceField) return false;
+  if (!normalizedRef) return false;
+  return normalizedRef === normalizedTarget;
+};
+
+export async function findRecordReferences({ dashboardId, targetTableKey, targetId }) {
+  if (!dashboardId || !targetTableKey || !targetId) return [];
+  const tables = await listTablesByDashboard(dashboardId);
+  const referenceFields = [];
+
+  tables.forEach((table) => {
+    const tableKey = table?.key || table?.id;
+    if (!tableKey) return;
+    const fields = Array.isArray(table.fields) ? table.fields : [];
+    fields.forEach((field) => {
+      const fieldKey = getFieldKey(field);
+      if (!fieldKey) return;
+      if (!isReferenceFieldToTable(field, targetTableKey)) return;
+      referenceFields.push({ tableKey, fieldKey });
+    });
+  });
+
+  if (!referenceFields.length) return [];
+
+  const counts = await Promise.all(
+    referenceFields.map(async ({ tableKey, fieldKey }) => {
+      const count = await countRecordsByFieldValue({ dashboardId, tableKey, fieldKey, value: targetId });
+      return { tableKey, fieldKey, count };
+    }),
+  );
+
+  return counts.filter((entry) => entry.count > 0);
+}
 
 const inferForeignKeysFromSamples = (tables = []) => {
   if (!Array.isArray(tables) || !tables.length) return tables;
@@ -2610,6 +2657,14 @@ export async function getDashboardRecord({ dashboardId, tableKey, recordId, sess
   return record;
 }
 
+export async function getRecordReferences({ dashboardId, tableKey, recordId, userId }) {
+  if (!dashboardId || !tableKey || !recordId) {
+    throw new HttpError(400, "dashboardId, tableKey, and recordId are required");
+  }
+  await assertCanEditDashboard(dashboardId, userId);
+  return findRecordReferences({ dashboardId, targetTableKey: tableKey, targetId: recordId });
+}
+
 export async function updateDashboardRecordService({ dashboardId, tableKey, recordId, record, sessionId, userId }) {
   if (!dashboardId || !tableKey || !recordId || !record) {
     throw new HttpError(400, "dashboardId, tableKey, recordId, and record are required");
@@ -2625,6 +2680,12 @@ export async function deleteDashboardRecordService({ dashboardId, tableKey, reco
     throw new HttpError(400, "dashboardId, tableKey, and recordId are required");
   }
   await assertCanEditDashboard(dashboardId, userId);
+  const references = await findRecordReferences({ dashboardId, targetTableKey: tableKey, targetId: recordId });
+  if (references.length) {
+    const err = new HttpError(409, "Cannot delete: record is referenced");
+    err.references = references;
+    throw err;
+  }
   const deleted = await deleteRecordById({ dashboardId, tableKey, recordId });
   if (!deleted) throw new HttpError(404, "Record not found");
   return true;

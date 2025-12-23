@@ -52,7 +52,7 @@ async function withUniqueSlug(name, insertFn) {
 async function ensureMembership(userId, organizationId) {
   const membership = await findMembership(userId, organizationId);
   if (!membership) {
-    throw new HttpError(404, "Ban khong thuoc to chuc nay.");
+    throw new HttpError(404, "Organization membership not found.");
   }
   return membership;
 }
@@ -60,10 +60,10 @@ async function ensureMembership(userId, organizationId) {
 async function ensureDashboard(organizationId, dashboardId) {
   const dashboard = await findDashboardById(dashboardId);
   if (!dashboard) {
-    throw new HttpError(404, "Khong tim thay dashboard.");
+    throw new HttpError(404, "Dashboard not found.");
   }
   if (dashboard.organization_id !== organizationId) {
-    throw new HttpError(403, "Dashboard khong thuoc to chuc nay.");
+    throw new HttpError(403, "Dashboard does not belong to this organization.");
   }
   return dashboard;
 }
@@ -71,17 +71,17 @@ async function ensureDashboard(organizationId, dashboardId) {
 async function ensureServiceProfile(organizationId, serviceProfileId) {
   const profile = await findServiceProfileById(serviceProfileId);
   if (!profile) {
-    throw new HttpError(404, "Khong tim thay cau hinh dich vu.");
+    throw new HttpError(404, "Service profile not found.");
   }
   if (profile.organization_id !== organizationId) {
-    throw new HttpError(403, "Dich vu khong thuoc to chuc nay.");
+    throw new HttpError(403, "Service profile does not belong to this organization.");
   }
   return profile;
 }
 
 export async function createOrganization(ownerId, payload) {
   if (!payload?.name) {
-    throw new HttpError(400, "Ten to chuc la bat buoc.");
+    throw new HttpError(400, "Organization name is required.");
   }
   const metadata = payload.metadata || {
     departments: payload.departments ?? [],
@@ -102,7 +102,7 @@ export async function listUserOrganizations(userId) {
 export async function createDataSource(userId, organizationId, payload) {
   await ensureMembership(userId, organizationId);
   if (!payload?.name || !payload?.type) {
-    throw new HttpError(400, "Bo sung name va type cho data source.");
+    throw new HttpError(400, "Data source name and type are required.");
   }
   return insertDataSource(organizationId, payload);
 }
@@ -115,7 +115,7 @@ export async function listDataSources(userId, organizationId) {
 export async function createDashboard(userId, organizationId, payload) {
   await ensureMembership(userId, organizationId);
   if (!payload?.title) {
-    throw new HttpError(400, "Dashboard can mot tieu de.");
+    throw new HttpError(400, "Dashboard title is required.");
   }
   const dashboard = await insertDashboard(organizationId, payload, userId);
   // Observer: persist notification on dashboard creation (best-effort)
@@ -147,7 +147,7 @@ export async function createWidget(userId, organizationId, dashboardId, payload)
   await ensureMembership(userId, organizationId);
   await ensureDashboard(organizationId, dashboardId);
   if (!payload?.title || !payload?.visualization) {
-    throw new HttpError(400, "Widget can title va visualization.");
+    throw new HttpError(400, "Widget title and visualization are required.");
   }
   return insertWidget(dashboardId, payload);
 }
@@ -161,7 +161,7 @@ export async function listWidgets(userId, organizationId, dashboardId) {
 export async function createServiceProfile(userId, organizationId, payload) {
   await ensureMembership(userId, organizationId);
   if (!payload?.name || !payload?.serviceType) {
-    throw new HttpError(400, "Dich vu can name va serviceType.");
+    throw new HttpError(400, "Service profile name and serviceType are required.");
   }
   return insertServiceProfile(organizationId, payload);
 }
@@ -190,7 +190,7 @@ const buildRecommendationResult = (payload) => {
   const services = payload.services ?? ["database", "security"];
   const dashboards = departments.map((dept, index) => ({
     title: `${dept} Control`,
-    description: `Theo doi KPI quan trong cho ${dept.toLowerCase()}`,
+    description: `Track key KPIs for ${dept.toLowerCase()}`,
     widgets: metrics.map((metric) => ({
       title: `${metric} trend`,
       visualization: metric.toLowerCase().includes("rate") ? "line" : "bar",
@@ -208,13 +208,13 @@ const buildRecommendationResult = (payload) => {
         : `Managed ${svc}`,
     notes:
       svc === "database"
-        ? "Tu dong sao luu, theo doi hieu nang va scaling."
+        ? "Automatic backups, performance monitoring, and scaling."
         : svc === "security"
-        ? "SSO, RBAC, theo doi truy cap."
-        : "Thiet lap, giam sat, tu dong canh bao.",
+        ? "SSO, RBAC, and access monitoring."
+        : "Setup, monitoring, and automated alerting.",
   }));
   return {
-    summary: `Da phan tich ${departments.length} phong ban va ${metrics.length} KPI de de xuat dashboard.`,
+    summary: `Analyzed ${departments.length} departments and ${metrics.length} KPIs to propose dashboards.`,
     dashboards,
     managedServices,
   };
@@ -223,7 +223,7 @@ const buildRecommendationResult = (payload) => {
 export async function createRecommendation(userId, organizationId, payload) {
   await ensureMembership(userId, organizationId);
   if (!payload?.companyName) {
-    throw new HttpError(400, "companyName la bat buoc de goi y dashboard.");
+    throw new HttpError(400, "companyName is required to generate dashboard recommendations.");
   }
   const prompt = {
     companyName: payload.companyName,
