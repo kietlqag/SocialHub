@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Send } from "lucide-react";
+import { Pencil, Send, Trash2 } from "lucide-react";
 import { StarRating } from "./StarRating";
 import { ReviewCard } from "./ReviewCard";
-import { fetchMyReview, submitReview, updateReview, type ReviewItem } from "../../services/reviews";
+import { fetchMyReview, submitReview, updateReview, deleteReview, type ReviewItem } from "../../services/reviews";
 import { getCurrentSession, type AuthUser } from "../../services/auth";
 import styles from "./ReviewsSection.module.css";
 
@@ -110,6 +110,24 @@ export function ReviewsSection({ currentUser }: { currentUser?: AuthUser | null 
     }
   };
 
+  const handleDelete = async () => {
+    if (!existingReview) return;
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in again.");
+      return;
+    }
+    try {
+      await deleteReview(existingReview.id, session.token);
+      setExistingReview(null);
+      setEditing(false);
+      setForm(initialForm);
+      toast.success("Your review has been deleted.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete review.");
+    }
+  };
+
   return (
     <section className={styles.reviewsSection}>
       <div className={styles.reviewsHeader}>
@@ -130,10 +148,16 @@ export function ReviewsSection({ currentUser }: { currentUser?: AuthUser | null 
         ) : existingReview && !editing ? (
           <div className={styles.reviewActions}>
             <ReviewCard review={existingReview} />
-            <button type="button" className={styles.editBtn} onClick={() => setEditing(true)}>
-              Edit review
-              <Pencil className={styles.editIcon} aria-hidden="true" />
-            </button>
+            <div className={styles.reviewButtons}>
+              <button type="button" className={styles.editBtn} onClick={() => setEditing(true)}>
+                Edit review
+                <Pencil className={styles.editIcon} aria-hidden="true" />
+              </button>
+              <button type="button" className={styles.deleteBtn} onClick={handleDelete}>
+                Delete
+                <Trash2 className={styles.deleteIcon} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         ) : (
           <form className={styles.reviewsForm} onSubmit={handleSubmit}>

@@ -43,3 +43,7 @@ export async function fetchMyReview(token: string) {
 export async function updateReview(id: string, payload: SubmitReviewPayload, token: string) {
   return api.patch<{ review: ReviewItem }>(`/api/reviews/${id}`, payload, token);
 }
+
+export async function deleteReview(id: string, token: string) {
+  return api.delete<void>(`/api/reviews/${id}`, token);
+}

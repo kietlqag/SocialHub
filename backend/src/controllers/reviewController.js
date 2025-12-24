@@ -9,6 +9,7 @@ import {
   insertReview,
   updateReviewStatus as updateReviewStatusRepo,
   updateReviewById,
+  deleteReviewById,
 } from "../repositories/reviewRepository.js";
 
 const clampLimit = (value, fallback = 6, max = 12) => {
@@ -118,6 +119,14 @@ export async function updateMyReview(req, res) {
   });
   if (!updated) return res.status(404).json({ error: "Review not found" });
   res.json({ review: updated });
+}
+
+export async function deleteMyReview(req, res) {
+  const userId = req.user?.id;
+  if (!userId) throw new HttpError(401, "Unauthorized");
+  const deleted = await deleteReviewById(req.params.id, userId);
+  if (!deleted) return res.status(404).json({ error: "Review not found" });
+  res.status(204).end();
 }
 
 export async function updateReviewStatus(req, res) {

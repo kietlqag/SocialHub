@@ -161,3 +161,12 @@ export async function updateReviewById(id, userId, payload) {
   );
   return res.rows[0] || null;
 }
+
+export async function deleteReviewById(id, userId) {
+  const res = await query(
+    `DELETE FROM system_reviews
+     WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+  return res.rowCount > 0;
+}
