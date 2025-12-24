@@ -9,7 +9,6 @@ import {
   feedbackController,
   listConversationsController,
   sendConversationMessageController,
-  suggestForOrgController,
   updateConversationController,
 } from "../controllers/aiController.js";
 

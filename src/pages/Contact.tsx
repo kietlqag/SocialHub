@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail, Phone, MapPin, Facebook, Twitter, Linkedin, Send } from "lucide-react";
 import { Header } from "../components/Header";
+import { ReviewsSection } from "../components/reviews/ReviewsSection";
 import type { AuthUser } from "../services/auth";
 import "../styles/contact.css";
 
@@ -173,6 +174,7 @@ export default function Contact({ currentUser, onLogout }: { currentUser?: AuthU
               </form>
             </div>
           </div>
+          <ReviewsSection currentUser={currentUser} />
         </div>
       </div>
     </>

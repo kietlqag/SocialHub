@@ -14,7 +14,6 @@ import {
   upsertFeedback,
 } from "../repositories/aiRepository.js";
 import { HttpError } from "../utils/httpError.js";
-import { ensureOrgMembership, loadOrgContext } from "./platformService.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -250,43 +249,3 @@ export async function saveFeedback({ conversationId, messageId, userId, value })
   return { messageId, feedback: null };
 }
 
-export async function suggestForOrganization(userId, orgId, { message, goals, metrics }) {
-  if (!message || typeof message !== "string") {
-    throw new HttpError(400, "Missing message");
-  }
-  await ensureOrgMembership(userId, orgId);
-  const ctx = await loadOrgContext(orgId);
-  if (!ctx) throw new HttpError(404, "Organization not found");
-  const client = requireOpenAI();
-
-  const promptMessages = [
-    {
-      role: "system",
-      content:
-        "You are SocialHub's AI assistant. You suggest dashboard layouts for a given organization using only the provided data sources. Output JSON with: summary, recommended_kpis[], widgets[], data_needs[], next_actions[]. Do not invent links or credentials.",
-    },
-    {
-      role: "system",
-      content: `Organization: ${ctx.organization.name || "N/A"} | Industry: ${ctx.organization.industry || "N/A"} | Size: ${ctx.organization.employeeCount || "N/A"} | Data volume: ${ctx.organization.dataVolume || "N/A"}. Data sources: ${ctx.dataSources
-        .map((d) => `${d.name} (${d.type}, ${d.status})`)
-        .join("; ") || "none"}.`,
-    },
-    {
-      role: "user",
-      content: `User request: ${message}\nGoals: ${goals || "unspecified"}\nMetrics: ${metrics || "unspecified"}`,
-    },
-  ];
-
-  const completion = await client.chat.completions.create({
-    model: OPENAI_MODEL,
-    messages: promptMessages,
-    max_tokens: 500,
-    temperature: 0.6,
-  });
-
-  const reply = completion.choices?.[0]?.message?.content?.trim();
-  if (!reply) {
-    throw new HttpError(500, "AI response empty");
-  }
-  return reply;
-}

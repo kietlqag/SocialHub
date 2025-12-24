@@ -3,7 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
-import orgRoutes from "./routes/orgRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import notificationPreferenceRoutes from "./routes/notificationPreferenceRoutes.js";
 import notificationCountRoutes from "./routes/notificationCountRoutes.js";
@@ -18,6 +17,7 @@ import { HttpError } from "./utils/httpError.js";
 import { login } from "./controllers/authController.js";
 import { asyncHandler } from "./utils/asyncHandler.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
 
 dotenv.config();
 
@@ -48,7 +48,7 @@ app.post("/login", asyncHandler(login));
 
 app.use("/auth", authRoutes);
 app.use("/ai", aiRoutes);
-app.use(orgRoutes);
+app.use("/api/reviews", reviewRoutes);
 // Notifications now served from Postgres - mount API at /api/notifications (keep legacy /notifications)
 app.use("/api/notifications", notificationRoutes);
 app.use("/notifications", notificationRoutes);

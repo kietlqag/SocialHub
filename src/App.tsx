@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { Hero } from "./components/Hero";
 import { Features } from "./components/Features";
-import { Testimonials } from "./components/Testimonials";
+import { Reviews } from "./components/Reviews";
 import { Pricing } from "./components/Pricing";
 import { Footer } from "./components/Footer";
 import { Login } from "./pages/Login";
@@ -38,7 +38,7 @@ const Landing = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLo
       <main>
         <Hero onLoginOpen={() => navigate("/login")} onSignUpOpen={() => navigate("/register")} isAuthenticated={!!currentUser} />
         <Features />
-        <Testimonials />
+        <Reviews />
         <Pricing />
       </main>
       <Footer />

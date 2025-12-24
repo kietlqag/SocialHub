@@ -268,6 +268,26 @@
   padding: 2.25rem;
 }
 
+.testimonial-slider {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 1fr);
+  gap: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-snap-type: x mandatory;
+}
+
+.testimonial-slide {
+  scroll-snap-align: start;
+}
+
+@media (min-width: 1024px) {
+  .testimonial-slider {
+    grid-auto-columns: minmax(320px, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .testimonial-card__content {
     padding: 1.75rem;

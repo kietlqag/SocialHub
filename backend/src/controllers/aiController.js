@@ -7,7 +7,6 @@ import {
   patchConversationTitle,
   saveFeedback,
   sendMessage,
-  suggestForOrganization,
 } from "../services/aiService.js";
 
 export async function chatController(req, res) {
@@ -89,14 +88,3 @@ export async function updateConversationController(req, res) {
   }
 }
 
-export async function suggestForOrgController(req, res) {
-  const { orgId } = req.params;
-  const { message, goals, metrics } = req.body || {};
-  try {
-    const suggestion = await suggestForOrganization(req.user.id, orgId, { message, goals, metrics });
-    res.json({ suggestion });
-  } catch (err) {
-    const status = err.status || 500;
-    res.status(status).json({ error: err.message });
-  }
-}
