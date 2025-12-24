@@ -152,6 +152,12 @@
   flex: 1;
 }
 
+.aiChatConvItem .icon-sm {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .aiChatConvItem .convTitle p {
   font-weight: 600;
   margin: 0;

@@ -18,6 +18,7 @@ import {
   addInsight,
   removeInsight,
   updateInsight,
+  updateDashboard,
   getDashboardByIdForViewer,
   getReferenceLookups,
   renameDashboardTable as renameDashboardTableService,
@@ -332,6 +333,17 @@ export async function renameDashboardTable(req, res) {
     userId: owner.userId,
   });
   res.json({ table });
+}
+
+export async function updateDashboardController(req, res) {
+  const owner = parseOwner(req);
+  const { id: dashboardId } = req.params;
+  const { name } = req.body || {};
+  if (!dashboardId) throw new HttpError(400, "dashboardId required");
+  const nextName = (name || "").toString().trim();
+  if (!nextName) throw new HttpError(400, "name is required");
+  const dashboard = await updateDashboard(dashboardId, owner, { name: nextName });
+  res.json({ dashboard });
 }
 
 export async function deleteDashboardTable(req, res) {

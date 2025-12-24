@@ -79,9 +79,26 @@ const ChatPage = () => {
   return <AIConversation onBack={() => navigate("/")} />;
 };
 
-const SettingsPage = () => {
+const SettingsPage = ({ currentUser, onLogout }: { currentUser: AuthUser | null; onLogout: () => void }) => {
   const navigate = useNavigate();
-  return <ProfileSettings onBack={() => navigate("/")} onLogout={() => navigate("/")} />;
+  return (
+    <div className="min-h-screen">
+      <Header
+        onChatOpen={() => navigate("/chat")}
+        onLoginOpen={() => navigate("/login")}
+        onSignUpOpen={() => navigate("/register")}
+        onProfileOpen={() => navigate("/profile")}
+        onSettingsOpen={() => navigate("/settings")}
+        onManageDash={() => navigate("/managedash")}
+        onAdmin={() => navigate("/admin")}
+        currentUser={currentUser}
+        onLogout={onLogout}
+      />
+      <main>
+        <ProfileSettings onBack={() => navigate("/")} onLogout={() => navigate("/")} />
+      </main>
+    </div>
+  );
 };
 
 const OAuthCallbackPage = ({ onLoginSuccess }: { onLoginSuccess: (user: AuthUser) => void }) => {
@@ -191,7 +208,7 @@ function App() {
         <Route path="/register" element={<SignUpPage onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/auth/callback" element={<OAuthCallbackPage onLoginSuccess={handleLoginSuccess} />} />
         <Route path="/chat" element={<ChatPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<SettingsPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/contact" element={<ContactPage currentUser={currentUser} onLogout={handleLogout} />} />
         <Route path="/profile" element={<Profile />} />

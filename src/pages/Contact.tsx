@@ -46,6 +46,7 @@ export default function Contact({ currentUser, onLogout }: { currentUser?: AuthU
         onProfileOpen={() => navigate("/profile")}
         onSettingsOpen={() => navigate("/settings")}
         onManageDash={() => navigate("/managedash")}
+        onAdmin={() => navigate("/admin")}
         currentUser={currentUser}
         onLogout={onLogout}
       />

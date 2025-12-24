@@ -162,6 +162,16 @@
     0 14px 32px rgba(73, 38, 200, 0.35);
 }
 
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus,
+.login-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f7f8ff;
+  box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+  border-color: rgba(255, 255, 255, 0.12);
+  transition: background-color 9999s ease, color 9999s ease;
+}
+
 .login-inline-toggle {
   display: inline-flex;
   align-items: center;

@@ -104,7 +104,7 @@ export default function UserMenu({
               }}
             >
               <Shield className="w-4 h-4" />
-              <span>Admin Panel</span>
+              <span>Admin Portal</span>
             </button>
           </>
         )}

@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { ArrowRight, Share2, Star } from "lucide-react";
+import { ArrowRight, Pencil, Share2, Star } from "lucide-react";
 import { Button } from "../ui/button";
 import { domainVisuals } from "./dashboardCardUtils";
 import type { DashboardCardIconPreset } from "./DashboardCard";
@@ -23,6 +24,7 @@ export type CardDashProps = {
   onToggleFavorite?: (id: string) => void;
   onShare?: (id: string) => void;
   onUseTemplate?: (id: string) => void;
+  onRename?: (id: string, nextTitle: string) => void;
 };
 
 const resolveIconPreset = (preset?: DashboardCardIconPreset | keyof typeof domainVisuals): DashboardCardIconPreset => {
@@ -51,10 +53,13 @@ export const CardDash = ({
   onToggleFavorite,
   onShare,
   onUseTemplate,
+  onRename,
   createdBy,
   hideStats = false,
 }: CardDashProps) => {
   const { Icon, toneClass } = resolveIconPreset(iconPreset ?? icon);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(title);
   const metaChips = [
     { label: "Key metrics", value: overviewCount },
     { label: "Tables", value: tableCount },
@@ -77,22 +82,44 @@ export const CardDash = ({
     onUseTemplate?.(id);
   };
 
+  useEffect(() => {
+    if (!isEditingTitle) {
+      setDraftTitle(title);
+    }
+  }, [title, isEditingTitle]);
+
+  const handleStartRename = (event?: MouseEvent | KeyboardEvent) => {
+    event?.stopPropagation?.();
+    if (!onRename) return;
+    setDraftTitle(title);
+    setIsEditingTitle(true);
+  };
+
+  const handleCommitRename = () => {
+    if (!onRename) {
+      setIsEditingTitle(false);
+      return;
+    }
+    const nextTitle = draftTitle.trim();
+    if (!nextTitle) {
+      setDraftTitle(title);
+      setIsEditingTitle(false);
+      return;
+    }
+    if (nextTitle !== title) {
+      onRename(id, nextTitle);
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleCancelRename = () => {
+    setDraftTitle(title);
+    setIsEditingTitle(false);
+  };
+
   return (
     <div
       className={`dashboard-card ${isFavorite ? "is-favorite" : ""}`}
-      role="button"
-      tabIndex={0}
-      onClick={() => {
-        if (isLocked) return;
-        onOpen?.(id);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          if (isLocked) return;
-          onOpen?.(id);
-        }
-      }}
       style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
     >
       <div className="dashboard-card__header">
@@ -101,7 +128,41 @@ export const CardDash = ({
         </div>
         <div className="dashboard-card__title-group">
           {(domainLabel || typeLabel) && <p className="dashboard-card__type">{domainLabel || typeLabel}</p>}
-          <h4 className="dashboard-card__title">{title}</h4>
+          <div className="dashboard-card__title-row">
+            {isEditingTitle ? (
+              <input
+                type="text"
+                value={draftTitle}
+                onChange={(event) => setDraftTitle(event.target.value)}
+                onBlur={handleCommitRename}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleCommitRename();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    handleCancelRename();
+                  }
+                }}
+                className="dashboard-card__title-input"
+                autoFocus
+              />
+            ) : (
+              <h4 className="dashboard-card__title">{title}</h4>
+            )}
+            {onRename && !isEditingTitle && (
+              <button
+                type="button"
+                className="dashboard-card__title-edit"
+                onClick={handleStartRename}
+                aria-label="Rename dashboard"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="dashboard-card__header-actions">
           {status && <span className={`dashboard-status ${status.toLowerCase() === "active" ? "dashboard-status--active" : "dashboard-status--draft"}`}>{status}</span>}

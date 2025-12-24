@@ -201,6 +201,57 @@ export default function ManageDashList() {
     setUseTemplateOpen(true);
   };
 
+  const canRenameDashboard = (dashboard: DecoratedDashboard) => {
+    if (!currentUser?.id) return false;
+    if (dashboard.userId === currentUser.id) return true;
+    const assignments = dashboard.accessControl?.userAssignments || [];
+    return assignments.some((assignment) => assignment.userId === currentUser.id && assignment.role === "Admin");
+  };
+
+  const handleRenameDashboard = async (id: string, nextTitle: string) => {
+    if (!currentUser?.id) {
+      toast.error("Please sign in to rename dashboards.");
+      return;
+    }
+    const current = dashboards.find((dashboard) => dashboard.id === id);
+    if (!current) return;
+    if (!canRenameDashboard(current as DecoratedDashboard)) {
+      toast.error("You don't have permission to rename this dashboard.");
+      return;
+    }
+    const previousName = current.name;
+    setDashboards((prev) =>
+      prev.map((dashboard) =>
+        dashboard.id === id
+          ? {
+              ...dashboard,
+              name: nextTitle,
+            }
+          : dashboard,
+      ),
+    );
+    try {
+      await dashboardApi.update(id, {
+        name: nextTitle,
+        sessionId,
+        userId: currentUser.id,
+      });
+    } catch (err) {
+      setDashboards((prev) =>
+        prev.map((dashboard) =>
+          dashboard.id === id
+            ? {
+                ...dashboard,
+                name: previousName,
+              }
+            : dashboard,
+        ),
+      );
+      const message = err instanceof Error ? err.message : "Failed to rename dashboard.";
+      toast.error(message);
+    }
+  };
+
   const handleConfirmUseTemplate = async (openAfter: boolean) => {
     if (!useTemplateTarget) return;
     const session = getCurrentSession();
@@ -273,6 +324,7 @@ export default function ManageDashList() {
         onSignUpOpen={() => navigate("/register")}
         onProfileOpen={() => navigate("/profile")}
         onSettingsOpen={() => navigate("/settings")}
+        onAdmin={() => navigate("/admin")}
         currentUser={currentUser}
         onLogout={() => {
           clearSession();
@@ -346,9 +398,10 @@ export default function ManageDashList() {
                           lastUpdatedLabel={dashboard.lastViewedLabel}
                           onOpen={openDashboard}
                           onToggleFavorite={toggleFavorite}
-                          onShare={() => handleShare(dashboard)}
-                          onUseTemplate={() => handleUseTemplate(dashboard)}
-                        />
+                        onShare={() => handleShare(dashboard)}
+                        onUseTemplate={() => handleUseTemplate(dashboard)}
+                        onRename={canRenameDashboard(dashboard) ? handleRenameDashboard : undefined}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -380,9 +433,10 @@ export default function ManageDashList() {
                             lastUpdatedLabel={dashboard.lastViewedLabel}
                             onOpen={openDashboard}
                             onToggleFavorite={toggleFavorite}
-                            onShare={() => handleShare(dashboard)}
-                            onUseTemplate={() => handleUseTemplate(dashboard)}
-                          />
+                          onShare={() => handleShare(dashboard)}
+                          onUseTemplate={() => handleUseTemplate(dashboard)}
+                          onRename={canRenameDashboard(dashboard) ? handleRenameDashboard : undefined}
+                        />
                     ))}
                   </div>
                 ) : (
@@ -432,6 +486,7 @@ export default function ManageDashList() {
                           onToggleFavorite={toggleFavorite}
                           onShare={() => handleShare(dashboard)}
                           onUseTemplate={() => handleUseTemplate(dashboard)}
+                          onRename={canRenameDashboard(dashboard) ? handleRenameDashboard : undefined}
                         />
                       ))}
                     </div>

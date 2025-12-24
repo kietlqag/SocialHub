@@ -139,15 +139,8 @@ export function ProfileSettings({ onBack }: ProfileSettingsProps) {
       <div className="settingsContainer">
         <div className="settingsHeader">
           <div>
-            <p className="settingsSubtitle">Settings</p>
             <p className="settingsTitle">SocialHub Settings</p>
           </div>
-          {onBack && (
-            <Button type="button" variant="ghost" className={`${secondaryBtn} flex items-center gap-2 px-4 py-2`} onClick={onBack}>
-              <ArrowLeft className="h-4 w-4" />
-              Back to home
-            </Button>
-          )}
         </div>
 
         <div className="settingsLayout">

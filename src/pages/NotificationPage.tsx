@@ -347,6 +347,7 @@ export function NotificationPage({ onBack }: { onBack?: () => void }) {
         onSignUpOpen={() => navigate("/register")}
         onProfileOpen={() => navigate("/profile")}
         onSettingsOpen={() => navigate("/settings")}
+        onAdmin={() => navigate("/admin")}
         onManageDash={() => navigate("/managedash")}
       />
       <div className="notificationsBg" />

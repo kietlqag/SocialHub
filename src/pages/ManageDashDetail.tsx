@@ -3834,10 +3834,10 @@ function ManageDashDetail() {
     return (
       <div className="tableCardGlass">
         <div className="tableHeader">
-          <div>
-            <h3 className="mainTitle">{activeOption.title}</h3>
-            <p className="mdMainSubtitle">{activeOption.description || "Manage records and fields"}</p>
-          </div>
+            <div>
+              <h3 className="mainTitle">{activeOption.title}</h3>
+              <p className="mdMainSubtitle">{activeOption.description || "Manage records and fields"}</p>
+            </div>
           <div className="tableActions">
             <div className="mdSearch">
               <Search className="searchIcon" />

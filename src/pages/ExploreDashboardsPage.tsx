@@ -172,6 +172,7 @@ export const ExploreDashboardsPage = ({ currentUser, onLogout }: { currentUser?:
         onProfileOpen={() => navigate("/profile")}
         onSettingsOpen={() => navigate("/settings")}
         onManageDash={() => navigate("/managedash")}
+        onAdmin={() => navigate("/admin")}
       />
       <div className="explore-page">
         <div className="max-w-6xl mx-auto px-6">

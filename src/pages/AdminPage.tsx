@@ -1270,7 +1270,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
 
           {/* Permissions Tab */}
           <TabsContent value="permissions" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4">
               <Card className="p-4">
                 <div className="flex items-center justify-between">
                   <div>

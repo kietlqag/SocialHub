@@ -26,6 +26,7 @@ import {
   getReferenceLookupsController,
   getRecordReferencesController,
   renameDashboardTable,
+  updateDashboardController,
   deleteDashboardTable,
   useTemplateDashboard,
 } from "../controllers/dashboardController.js";
@@ -51,6 +52,7 @@ router.get("/dashboards", asyncHandler(listDashboard));
 router.get("/dashboards/public", asyncHandler(getPublicDashboards));
 router.get("/dashboards/:id", asyncHandler(getDashboardByIdController));
 router.post("/dashboards/:id/use-template", authenticate, asyncHandler(useTemplateDashboard));
+router.patch("/dashboards/:id", asyncHandler(updateDashboardController));
 router.get("/dashboards/:dashboardId/tables", asyncHandler(listDashboardTables));
 router.post("/dashboards/:dashboardId/tables/create", asyncHandler(createDashboardTable));
 router.patch("/dashboards/:dashboardId/tables/:tableKey/rename", asyncHandler(renameDashboardTable));

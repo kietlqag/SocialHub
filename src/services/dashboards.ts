@@ -101,6 +101,7 @@ export type Dashboard = Omit<SharedDashboard, "tables"> & {
   id: string;
   userId?: string;
   createdBy?: string | null;
+  accessControl?: DashboardAccessPayload | null;
   fields?: DashboardField[];
   tables?: DashboardTable[];
   insights?: InsightWidget[];
@@ -235,6 +236,14 @@ export const dashboardApi = {
     const queryString = query.toString() ? `?${query.toString()}` : "";
     return api.get<{ dashboard: Dashboard }>(`/api/dashboards/${id}${queryString}`);
   },
+  update: (
+    id: string,
+    payload: {
+      name: string;
+      sessionId?: string;
+      userId?: string | null;
+    },
+  ) => api.patch<{ dashboard: Dashboard }>(`/api/dashboards/${id}`, payload),
   delete: (id: string, sessionId: string, userId?: string | null) =>
     api.delete<{ success: boolean }>(`/api/dashboards/${id}${withOwnerParams(sessionId, userId || undefined)}`),
   listRecords: (params: { dashboardId: string; tableKey: string; sessionId?: string; userId?: string | null }) => {
