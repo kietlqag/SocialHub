@@ -53,13 +53,14 @@ export async function getDashboards(req, res) {
     .find(
       {},
       {
-        projection: {
-          name: 1,
-          description: 1,
-          type: 1,
-          widgets: 1,
-          insights: 1,
-          tables: 1,
+          projection: {
+            name: 1,
+            description: 1,
+            type: 1,
+            status: 1,
+            widgets: 1,
+            insights: 1,
+            tables: 1,
           createdAt: 1,
           updatedAt: 1,
           userId: 1,
@@ -232,9 +233,17 @@ export async function updateDashboardStatus(req, res) {
   );
   if (!doc.value) return res.status(404).json({ error: "Dashboard not found" });
   try {
+    const action =
+      status === "locked"
+        ? "dashboard.lock"
+        : status === "archived"
+          ? "dashboard.archive"
+          : status === "active"
+            ? "dashboard.activate"
+            : "dashboard.status_update";
     await insertActivity({
       userId: req.user?.id || null,
-      action: status === "locked" ? "dashboard.lock" : "dashboard.unlock",
+      action,
       targetType: "dashboard",
       targetId: req.params.id,
       metadata: { status },

@@ -65,6 +65,17 @@
   scrollbar-gutter: stable;
 }
 
+.admin-dialog--scroll {
+  height: 85vh;
+  max-height: 85vh;
+  min-height: 0;
+}
+
+.admin-dialog__body--scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .admin-icon-plain {
   border: none;
   background: transparent;

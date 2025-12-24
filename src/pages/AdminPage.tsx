@@ -423,7 +423,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               : d.createdAt
                 ? new Date(d.createdAt).toLocaleString()
                 : "",
-            status: "active",
+            status: d.status || "active",
             size: d.size || "",
             widgets: d.widgetCount || 0,
             insights: d.insightCount || 0,
@@ -888,6 +888,31 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
     }
   };
 
+  const handleArchiveDashboard = async (dashboardId: string, archive: boolean) => {
+    const session = getCurrentSession();
+    if (!session?.token) {
+      toast.error("Please sign in again");
+      return;
+    }
+    setBusyDashboardIds((prev) => new Set(prev).add(dashboardId));
+    try {
+      await api.patch(`/admin/dashboards/${dashboardId}/status`, { status: archive ? "archived" : "active" }, session.token);
+      setDashboards((prev) =>
+        prev.map((d) => (d.id === dashboardId ? { ...d, status: archive ? "archived" : "active" } : d))
+      );
+      toast.success(archive ? "Dashboard archived" : "Dashboard restored");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to update status");
+    } finally {
+      setBusyDashboardIds((prev) => {
+        const next = new Set(prev);
+        next.delete(dashboardId);
+        return next;
+      });
+    }
+  };
+
   const handleDeleteDashboard = async (dashboardId: string) => {
     setConfirmDeleteDashboard(dashboardId);
     setConfirmDashboardText("");
@@ -962,13 +987,6 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
               >
                 <Users className="h-4 w-4" />
                 Users
-              </TabsTrigger>
-              <TabsTrigger
-                value="permissions"
-                className="gap-2 whitespace-nowrap flex-1 md:flex-none rounded-lg px-3 py-2 text-slate-600 data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm hover:bg-slate-100/70 transition-all"
-              >
-                <UserCog className="h-4 w-4" />
-                Permissions
               </TabsTrigger>
               <TabsTrigger
                 value="dashboards"
@@ -1089,8 +1107,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                     <SelectContent>
                       <SelectItem value="all">All Roles</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="editor">Editor</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select defaultValue="all">
@@ -1268,100 +1285,6 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
             </Card>
           </TabsContent>
 
-          {/* Permissions Tab */}
-          <TabsContent value="permissions" className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-              <Card className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Admins</p>
-                    <p className="text-2xl mt-1">{users.filter((u) => u.role === "admin").length}</p>
-                  </div>
-                  <Shield className="h-8 w-8 text-purple-600" />
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Editors</p>
-                    <p className="text-2xl mt-1">{users.filter((u) => u.role === "editor").length}</p>
-                  </div>
-                  <UserCog className="h-8 w-8 text-blue-600" />
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Viewers/Users</p>
-                    <p className="text-2xl mt-1">
-                      {users.filter((u) => u.role === "viewer" || u.role === "user").length}
-                    </p>
-                  </div>
-                  <Users2 className="h-8 w-8 text-green-600" />
-                </div>
-              </Card>
-            </div>
-
-            <Card className="admin-card rounded-2xl shadow-md border">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg">Role Management</h3>
-                  <Badge variant="outline">{users.length} users</Badge>
-                </div>
-
-                <div className="border rounded-lg shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[840px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>User</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Role</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {users.map((u) => (
-                            <TableRow key={u.id}>
-                              <TableCell className="font-medium">{u.name}</TableCell>
-                              <TableCell className="text-sm text-gray-600 max-w-[220px] truncate">{u.email}</TableCell>
-                              <TableCell>
-                                <Badge className={getRoleColor(u.role)}>{u.role}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge className={getStatusColor(u.status)}>{u.status}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center justify-end gap-2">
-                                  <Select
-                                    value={u.role}
-                                    onValueChange={(value) => handleChangeUserRole(u, value as User["role"])}
-                                  >
-                                    <SelectTrigger className="w-[140px]">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="admin">Admin</SelectItem>
-                                      <SelectItem value="editor">Editor</SelectItem>
-                                      <SelectItem value="user">User</SelectItem>
-                                      <SelectItem value="viewer">Viewer</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-
           {/* Dashboards Tab */}
           <TabsContent value="dashboards" className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1495,13 +1418,22 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                                       variant="ghost"
                                       size="icon"
                                       disabled={busyDashboardIds.has(dashboard.id)}
+                                      onClick={() => handleArchiveDashboard(dashboard.id, dashboard.status !== "archived")}
+                                      title={dashboard.status === "archived" ? "Restore" : "Archive"}
+                                    >
+                                      <Clock className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      disabled={busyDashboardIds.has(dashboard.id)}
                                       onClick={() => handleLockToggleDashboard(dashboard.id, dashboard.status !== "locked")}
                                       title={dashboard.status === "locked" ? "Unlock" : "Lock"}
                                     >
                                       {dashboard.status === "locked" ? (
-                                        <Unlock className="h-4 w-4" />
-                                      ) : (
                                         <Lock className="h-4 w-4" />
+                                      ) : (
+                                        <Unlock className="h-4 w-4" />
                                       )}
                                     </Button>
                                     <Button
@@ -2184,7 +2116,11 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
 
       {/* Dialogs */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col admin-dialog">
+        <DialogContent
+          className={`max-h-[85vh] overflow-hidden flex flex-col admin-dialog ${
+            dialogType === "dashboard-details" ? "max-w-4xl w-[92vw] admin-dialog--scroll" : "max-w-2xl"
+          }`}
+        >
           <DialogHeader>
             <DialogTitle>
               {dialogType === "user-details" && "User Details"}
@@ -2202,7 +2138,7 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4 space-y-4 flex-1 overflow-y-auto pr-2 admin-dialog__body">
+            <div className="py-4 space-y-4 flex-1 pr-2 admin-dialog__body admin-dialog__body--scroll">
             {dialogType === "user-details" && selectedItem && (
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
@@ -2315,46 +2251,50 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                     <p>{selectedItem.ownerName}</p>
                   </div>
                 )}
-                <div>
-                  <Label className="text-sm text-gray-600 mb-2 block">
-                    Tables ({selectedItem.tableCount || selectedItem.tables?.length || 0})
-                  </Label>
-                  <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2">
-                    {(selectedItem.tables || []).map((table: any) => (
-                      <div key={table.key || table.name} className="p-3 border rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Database className="h-4 w-4 text-gray-400" />
-                              <span className="font-medium">{table.name || table.key}</span>
+                  <div>
+                    <Label className="text-sm text-gray-600 mb-2 block">
+                      Tables ({selectedItem.tableCount || selectedItem.tables?.length || 0})
+                    </Label>
+                    <div className="space-y-2 max-h-[50vh] overflow-y-auto overflow-x-hidden pr-2">
+                      {(selectedItem.tables || []).map((table: any) => (
+                        <div key={table.key || table.name} className="w-full p-3 border rounded-lg">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Database className="h-4 w-4 text-gray-400" />
+                                <span className="font-medium">{table.name || table.key}</span>
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                {table.fields?.length || 0} fields
+                              </p>
                             </div>
-                            <p className="text-xs text-gray-500">
-                              {table.fields?.length || 0} fields
-                            </p>
+                            <div className="flex items-center gap-2">
+                              {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
+                                <Badge variant="outline">Sample rows</Badge>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={loadingTableKeys.has(table.key)}
+                                onClick={() => handleOpenTableData(selectedItem, table)}
+                              >
+                                {loadingTableKeys.has(table.key) ? "Loading..." : "View data"}
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
-                              <Badge variant="outline">Sample rows</Badge>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={loadingTableKeys.has(table.key)}
-                              onClick={() => handleOpenTableData(selectedItem, table)}
-                            >
-                              {loadingTableKeys.has(table.key) ? "Loading..." : "View data"}
-                            </Button>
-                          </div>
-                        </div>
-                        {Array.isArray(table.fields) && table.fields.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {table.fields.map((f: any) => (
-                              <Badge key={f.key || f.name} variant="secondary" className="text-xs">
-                                {f.name || f.key} - {f.type}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
+                          {Array.isArray(table.fields) && table.fields.length > 0 && (
+                            <div className="mt-2 flex flex-nowrap gap-2 overflow-x-auto pb-1">
+                              {table.fields.map((f: any) => (
+                                <Badge
+                                  key={f.key || f.name}
+                                  variant="secondary"
+                                  className="text-xs whitespace-nowrap"
+                                >
+                                  {f.name || f.key} - {f.type}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         {Array.isArray(table.sampleRows) && table.sampleRows.length > 0 && (
                           <div className="mt-3 max-h-[240px] overflow-x-auto overflow-y-auto">
                             <Table>
@@ -2443,12 +2383,10 @@ export function AdminPage({ onBack }: AdminPageProps = {}) {
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="editor">Editor</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
-                        <SelectItem value="user">User</SelectItem>
-                      </SelectContent>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
+                    </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
