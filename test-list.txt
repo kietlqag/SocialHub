@@ -1,0 +1,56 @@
+﻿Listing tests:
+  admin.spec.ts:131:5 ΓÇ║ Admin portal loads users and supports search
+  admin.spec.ts:144:5 ΓÇ║ Admin user details dialog opens
+  admin.spec.ts:155:5 ΓÇ║ Admin dashboards tab renders
+  admin.spec.ts:165:5 ΓÇ║ Admin notifications can be sent
+  admin.spec.ts:179:5 ΓÇ║ Admin activity tab shows logs
+  ai-chat.spec.ts:14:5 ΓÇ║ AI chat loads conversation and sends message
+  ai-chat.spec.ts:70:5 ΓÇ║ AI chat settings updates reply language
+  auth.spec.ts:14:5 ΓÇ║ Logout clears session and shows sign in
+  dashboard-detail.spec.ts:420:5 ΓÇ║ Dashboard detail loads and shows records search
+  dashboard-detail.spec.ts:433:5 ΓÇ║ Dashboard record search filters rows
+  dashboard-detail.spec.ts:450:5 ΓÇ║ Dashboard add record modal opens
+  dashboard-detail.spec.ts:463:5 ΓÇ║ Dashboard add chart and widget modals open
+  dashboard-detail.spec.ts:477:5 ΓÇ║ Dashboard access control tab opens
+  dashboard-detail.spec.ts:487:5 ΓÇ║ Dashboard create table modal opens
+  dashboard-detail.spec.ts:497:5 ΓÇ║ Dashboard rename table modal opens
+  dashboard-detail.spec.ts:509:5 ΓÇ║ Dashboard edit columns modal opens
+  dashboard-detail.spec.ts:520:5 ΓÇ║ Dashboard delete record confirmation opens
+  dashboard-detail.spec.ts:533:5 ΓÇ║ Dashboard view record modal opens
+  dashboard-detail.spec.ts:546:5 ΓÇ║ Dashboard edit record updates via API
+  dashboard-detail.spec.ts:569:5 ΓÇ║ Dashboard remove table via UI
+  dashboard-detail.spec.ts:589:5 ΓÇ║ Dashboard remove widget via UI
+  dashboard-detail.spec.ts:610:5 ΓÇ║ Dashboard remove chart via UI
+  dashboard-detail.spec.ts:633:5 ΓÇ║ Dashboard access control can add user
+  dashboard-detail.spec.ts:655:5 ΓÇ║ Dashboard access control can update and remove user
+  dashboard-detail.spec.ts:677:7 ΓÇ║ Real API ΓÇ║ Dashboard adds record via UI and persists to API
+  dashboard-detail.spec.ts:724:7 ΓÇ║ Real API ΓÇ║ Dashboard adds widget via UI and persists to API
+  dashboard-detail.spec.ts:779:7 ΓÇ║ Real API ΓÇ║ Dashboard adds chart via UI and persists to API
+  dashboard-detail.spec.ts:830:7 ΓÇ║ Real API ΓÇ║ Dashboard updates access mode via UI
+  dashboard-detail.spec.ts:863:7 ΓÇ║ Real API ΓÇ║ Dashboard creates table via UI and persists to API
+  dashboard-detail.spec.ts:907:7 ΓÇ║ Real API ΓÇ║ Dashboard renames table via UI and persists to API
+  dashboard-detail.spec.ts:950:7 ΓÇ║ Real API ΓÇ║ Dashboard edits columns via UI and persists to API
+  dashboard-detail.spec.ts:995:7 ΓÇ║ Real API ΓÇ║ Dashboard deletes record via UI and persists to API
+  dashboard-detail.spec.ts:1048:7 ΓÇ║ Real API ΓÇ║ Dashboard detail loads records from real API
+  explore.spec.ts:24:5 ΓÇ║ Explore dashboards shows public list
+  explore.spec.ts:40:5 ΓÇ║ Explore dashboards search filters results
+  login.spec.ts:8:5 ΓÇ║ Login with valid credentials redirects to home
+  login.spec.ts:34:5 ΓÇ║ Login with invalid credentials shows error toast
+  login.spec.ts:57:5 ΓÇ║ Forgot password without email shows validation toast
+  login.spec.ts:64:5 ΓÇ║ Forgot password with email shows reset panel
+  login.spec.ts:81:5 ΓÇ║ Reset password success returns to login form
+  manage-dash.spec.ts:72:5 ΓÇ║ Create from AI button opens the generator dialog
+  manage-dash.spec.ts:107:5 ΓÇ║ ManageDash search filters dashboards in All dashboards
+  manage-dash.spec.ts:139:5 ΓÇ║ ManageDash can rename dashboard
+  manage-dash.spec.ts:180:5 ΓÇ║ ManageDash can toggle favorite
+  manage-dash.spec.ts:215:5 ΓÇ║ ManageDash share dialog opens
+  manage-dash.spec.ts:256:5 ΓÇ║ ManageDash can use template without navigation
+  manage-dash.spec.ts:307:7 ΓÇ║ Real API ΓÇ║ ManageDash lists dashboards from real API
+  profile.spec.ts:17:5 ΓÇ║ Profile page shows user info
+  profile.spec.ts:54:5 ΓÇ║ Profile update saves changes
+  reviews.spec.ts:5:5 ΓÇ║ Submit review from contact page
+  signup.spec.ts:5:5 ΓÇ║ Signup with invalid data shows invalid email
+  signup.spec.ts:24:5 ΓÇ║ Signup with valid data shows verification step
+  signup.spec.ts:51:5 ΓÇ║ Signup with existing email shows error
+  signup.spec.ts:74:5 ΓÇ║ Signup success redirects to login
+Total: 54 tests in 10 files

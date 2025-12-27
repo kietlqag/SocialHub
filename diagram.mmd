@@ -1,0 +1,259 @@
+---
+title: SocialHub - Class Diagram (Mermaid)
+---
+classDiagram
+direction LR
+note "SocialHub entities (PostgreSQL + MongoDB)"
+
+%% =======================
+%% PostgreSQL (Relational)
+%% =======================
+class User {
+  +id: uuid
+  +email: text
+  +password_hash: text?
+  +full_name: text?
+  +company: text?
+  +role: text
+  +is_verified: boolean
+  +provider: text?
+  +provider_id: text?
+  +avatar_url: text?
+  +created_at: timestamptz
+  +updated_at: timestamptz
+}
+
+class UserProfile {
+  +user_id: uuid
+  +phone: text?
+  +job_title: text?
+  +location: text?
+  +bio: text?
+  +website: text?
+  +preferences: jsonb
+  +created_at: timestamptz
+  +updated_at: timestamptz
+}
+
+class PasswordResetToken {
+  +id: uuid
+  +user_id: uuid
+  +token_hash: text
+  +expires_at: timestamptz
+  +used_at: timestamptz?
+  +created_at: timestamptz
+}
+
+class EmailVerificationToken {
+  +id: uuid
+  +user_id: uuid
+  +token_hash: text
+  +expires_at: timestamptz
+  +used_at: timestamptz?
+  +created_at: timestamptz
+}
+
+class Notification {
+  +id: uuid
+  +user_id: uuid?
+  +title: text
+  +message: text
+  +type: text
+  +metadata: jsonb
+  +is_read: boolean
+  +is_starred: boolean
+  +created_at: timestamptz
+  +updated_at: timestamptz
+}
+
+class NotificationUserPrefs {
+  +user_id: uuid
+  +popup_enabled: boolean
+  +updated_at: timestamptz
+}
+
+class ActivityLog {
+  +id: uuid
+  +user_id: uuid?
+  +action: text
+  +target_type: text?
+  +target_id: text?
+  +metadata: jsonb
+  +created_at: timestamptz
+}
+
+class AIConversation {
+  +id: uuid
+  +user_id: uuid
+  +title: text
+  +last_message_at: timestamptz?
+  +created_at: timestamptz
+  +updated_at: timestamptz
+}
+
+class AIMessage {
+  +id: uuid
+  +conversation_id: uuid
+  +user_id: uuid
+  +role: text
+  +content: text
+  +created_at: timestamptz
+}
+
+class AIMessageFeedback {
+  +id: uuid
+  +message_id: uuid
+  +conversation_id: uuid
+  +user_id: uuid
+  +value: text
+  +created_at: timestamptz
+  +updated_at: timestamptz
+}
+
+class SystemReview {
+  +id: uuid
+  +user_id: uuid?
+  +name: text?
+  +email: text?
+  +rating: smallint
+  +message: text
+  +source: text
+  +status: text
+  +ip_hash: text?
+  +user_agent: text?
+  +created_at: timestamptz
+  +updated_at: timestamptz
+}
+
+%% =======================
+%% MongoDB (Dashboards)
+%% =======================
+class Dashboard {
+  +_id: ObjectId
+  +name: string
+  +type: string?
+  +description: string?
+  +status: string?
+  +widgets: any[]
+  +insights: any[]
+  +ui: object
+  +sessionId: string?
+  +userId: string
+  +createdBy: string?
+  +samplePreview: any?
+  +createdAt: Date
+  +updatedAt: Date
+}
+
+class AccessControl {
+  +accessMode: string
+}
+
+class RolePermission {
+  +role: string
+}
+
+class PermissionSet {
+  +view: boolean
+  +create: boolean
+  +edit: boolean
+  +delete: boolean
+  +manageAccess: boolean
+}
+
+class UserAssignment {
+  +id: string
+  +userId: string
+  +role: string
+  +fullName: string?
+  +email: string?
+}
+
+class DashboardTable {
+  +_id: ObjectId
+  +dashboardId: ObjectId
+  +key: string
+  +name: string
+  +description: string?
+  +sampleRows: object[]
+  +createdAt: Date
+  +updatedAt: Date
+}
+
+class Field {
+  +key: string
+  +type: string
+  +label: string?
+  +required: boolean?
+  +visibleInTable: boolean?
+  +options: string[]?
+  +referenceTable: string?
+  +displayField: string?
+  +allowEditReference: boolean?
+  +system: boolean?
+  +systemField: boolean?
+}
+
+class DashboardRecord {
+  +_id: ObjectId
+  +dashboardId: ObjectId
+  +tableKey: string
+  +record: object
+  +createdAt: Date
+  +updatedAt: Date
+}
+
+class DashboardRelationship {
+  +_id: ObjectId
+  +dashboardId: ObjectId
+  +fromTableKey: string
+  +fromFieldKey: string
+  +toTableKey: string
+  +toFieldKey: string
+  +type: string
+  +createdAt: Date
+  +updatedAt: Date
+}
+
+class DashboardWidgetOverride {
+  +_id: ObjectId
+  +dashboardId: string
+  +widgetKey: string
+  +hidden: boolean
+  +createdAt: Date
+  +updatedAt: Date
+}
+
+%% =======================
+%% Relationships (NO arrowheads)
+%% =======================
+
+%% PostgreSQL
+User "1" *-- "0..1" UserProfile : profile
+User "1" *-- "0..*" PasswordResetToken : resetTokens
+User "1" *-- "0..*" EmailVerificationToken : verifyTokens
+User "1" o-- "0..*" Notification : notifications
+User "1" *-- "0..1" NotificationUserPrefs : notifPrefs
+User "1" o-- "0..*" ActivityLog : activities
+User "1" *-- "0..*" AIConversation : conversations
+AIConversation "1" *-- "0..*" AIMessage : messages
+AIMessage "1" *-- "0..*" AIMessageFeedback : feedbacks
+User "1" o-- "0..*" SystemReview : reviews
+
+%% Mongo Dashboard domain
+User "1" o-- "0..*" Dashboard : dashboards
+
+Dashboard "1" *-- "0..1" AccessControl : accessControl
+AccessControl "1" *-- "0..*" RolePermission : rolePermissions
+RolePermission "1" *-- "1" PermissionSet : permissions
+AccessControl "1" *-- "0..*" UserAssignment : userAssignments
+
+Dashboard "1" o-- "0..*" DashboardTable : tables
+Dashboard "1" o-- "0..*" DashboardRecord : records
+Dashboard "1" o-- "0..*" DashboardRelationship : relationships
+Dashboard "1" o-- "0..*" DashboardWidgetOverride : widgetOverrides
+
+DashboardTable "1" *-- "0..*" Field : fields
+
+%% logical link only (no arrows)
+DashboardTable "1" .. "0..*" DashboardRecord : tableKey matches key
